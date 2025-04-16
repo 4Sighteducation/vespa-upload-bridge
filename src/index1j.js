@@ -586,47 +586,38 @@ function renderUploadCsvStep() {
     </div>
     
     <script>
-      // Add event listeners for direct download
+      // Add event listeners for direct download - simplified for Knack security environment
       document.getElementById('download-template').addEventListener('click', function() {
         try {
           console.log('[VESPA Upload] Template download button clicked');
           
           // Get the current upload type
           const type = uploadType || 'staff'; // Default to staff if not set
-          console.log('[VESPA Upload] Downloading template for:', type);
+          
+          // Use the correct endpoint from API (student-full instead of student)
+          const actualType = type === 'staff' ? 'staff' : 'student-full';
+          console.log('[VESPA Upload] Downloading template for type:', actualType);
           
           // Show loading state
           const downloadButton = document.getElementById('download-template');
           const originalText = downloadButton.textContent;
-          downloadButton.textContent = 'Downloading...';
+          downloadButton.textContent = 'Opening Template...';
           downloadButton.disabled = true;
           
-          // Determine template name
-          const templateName = type === 'staff' ? 'staff_upload_template' : 'student_upload_template';
-          
           // Set up the API endpoint URL
-          const templateUrl = API_BASE_URL + '/templates/' + type;
+          const templateUrl = API_BASE_URL + '/templates/' + actualType;
+          console.log('[VESPA Upload] Template URL:', templateUrl);
           
-          // Create a temporary link and trigger download
-          const tempLink = document.createElement('a');
-          tempLink.href = templateUrl;
-          tempLink.setAttribute('download', templateName + '.csv');
-          tempLink.setAttribute('target', '_blank');
-          document.body.appendChild(tempLink);
+          // Open in new tab (simpler approach that works better with Knack security)
+          window.open(templateUrl, '_blank');
           
-          // Trigger the download
-          tempLink.click();
-          
-          // Clean up
-          document.body.removeChild(tempLink);
-          
-          // Reset button after delay
+          // Reset button after short delay
           setTimeout(function() {
             downloadButton.textContent = originalText;
             downloadButton.disabled = false;
-          }, 2000);
+          }, 1500);
           
-          console.log('[VESPA Upload] Template download initiated for ' + templateName);
+          console.log('[VESPA Upload] Template download initiated via new tab');
           
         } catch (error) {
           console.error('[VESPA Upload] Error in template download:', error);
