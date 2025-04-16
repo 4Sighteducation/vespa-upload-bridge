@@ -29,13 +29,30 @@ let isProcessing = false;
 function initializeUploadBridge() {
   debugLog("VESPA Upload Bridge initializing...");
   
+  // IMPORTANT: Directly get the config from window object at the start
+  // and log it to see what's available
+  VESPA_UPLOAD_CONFIG = window.VESPA_UPLOAD_CONFIG;
+  debugLog("Configuration received:", VESPA_UPLOAD_CONFIG);
+  
   // Add CSS styles
   addStyles();
   
   // Add a visual indicator that the script is loaded
   addDebugIndicator();
   
-  // Start polling for the upload container
+  // If we already have config, initialize immediately
+  if (VESPA_UPLOAD_CONFIG) {
+    const uploadContainer = document.querySelector(VESPA_UPLOAD_CONFIG.elementSelector);
+    if (uploadContainer) {
+      debugLog("Upload container found immediately", { 
+        selector: VESPA_UPLOAD_CONFIG.elementSelector
+      });
+      initializeUploadInterface(uploadContainer);
+      return;
+    }
+  }
+  
+  // Otherwise start polling for the container
   startPolling();
 }
 
@@ -77,7 +94,7 @@ function addDebugIndicator() {
   indicator.addEventListener('click', function() {
     // Log debug info when clicked
     debugLog("Debug indicator clicked", {
-      'uploadContainer': document.querySelector(VESPA_UPLOAD_CONFIG.elementSelector) ? 'Found' : 'Not found',
+      'uploadContainer': VESPA_UPLOAD_CONFIG && document.querySelector(VESPA_UPLOAD_CONFIG.elementSelector) ? 'Found' : 'Not found',
       'config': VESPA_UPLOAD_CONFIG,
       'currentStep': currentStep,
       'uploadType': uploadType
@@ -94,34 +111,37 @@ function startPolling() {
   let checkCount = 0;
   
   const checkInterval = setInterval(function() {
-    // Check if config is available
+    // Always try to get the latest config in case it was set after initialization
     if (!VESPA_UPLOAD_CONFIG) {
-      debugLog("No configuration available yet");
-      checkCount++;
-      if (checkCount >= MAX_CHECKS) {
-        clearInterval(checkInterval);
-        console.error("[VESPA Upload] No configuration received after maximum attempts");
+      VESPA_UPLOAD_CONFIG = window.VESPA_UPLOAD_CONFIG;
+      if (VESPA_UPLOAD_CONFIG) {
+        debugLog("Configuration found during polling", VESPA_UPLOAD_CONFIG);
+      } else {
+        debugLog("No configuration available yet");
       }
-      return;
     }
     
-    // Check if the container exists
-    const uploadContainer = document.querySelector(VESPA_UPLOAD_CONFIG.elementSelector);
-    if (uploadContainer) {
-      // Element found, clear the interval
-      clearInterval(checkInterval);
-      debugLog("Upload container found", { 
-        selector: VESPA_UPLOAD_CONFIG.elementSelector
-      });
-      
-      // Initialize the upload interface
-      initializeUploadInterface(uploadContainer);
-    } else {
-      checkCount++;
-      if (checkCount >= MAX_CHECKS) {
+    // Check if we have config and if the container exists
+    if (VESPA_UPLOAD_CONFIG) {
+      const uploadContainer = document.querySelector(VESPA_UPLOAD_CONFIG.elementSelector);
+      if (uploadContainer) {
+        // Element found, clear the interval
         clearInterval(checkInterval);
-        console.error("[VESPA Upload] Could not find upload container after maximum attempts");
+        debugLog("Upload container found", { 
+          selector: VESPA_UPLOAD_CONFIG.elementSelector
+        });
+        
+        // Initialize the upload interface
+        initializeUploadInterface(uploadContainer);
+        return;
       }
+    }
+    
+    // Increment counter and check if we've reached max attempts
+    checkCount++;
+    if (checkCount >= MAX_CHECKS) {
+      clearInterval(checkInterval);
+      console.error("[VESPA Upload] No configuration received after maximum attempts");
     }
   }, CHECK_INTERVAL);
 }
@@ -131,6 +151,12 @@ function startPolling() {
  * @param {HTMLElement} container - The container element
  */
 function initializeUploadInterface(container) {
+  // Safety check for config
+  if (!VESPA_UPLOAD_CONFIG) {
+    console.error("[VESPA Upload] Cannot initialize interface without configuration");
+    return;
+  }
+  
   // Determine if the user is a super user (needs school selection)
   const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === 'Super User';
   
@@ -207,6 +233,11 @@ function prevStep() {
  * Go to the next step
  */
 function nextStep() {
+  if (!VESPA_UPLOAD_CONFIG) {
+    showError('Configuration not available. Please refresh the page and try again.');
+    return;
+  }
+  
   const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === 'Super User';
   const maxSteps = isSuperUser ? 6 : 5;
   
@@ -226,6 +257,11 @@ function nextStep() {
  * @returns {boolean} Whether the step is valid
  */
 function validateCurrentStep() {
+  if (!VESPA_UPLOAD_CONFIG) {
+    showError('Configuration not available. Please refresh the page and try again.');
+    return false;
+  }
+  
   const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === 'Super User';
   
   switch (currentStep) {
@@ -289,12 +325,16 @@ function showError(message) {
   `;
   
   const contentDiv = document.querySelector('.vespa-upload-content');
-  contentDiv.prepend(errorDiv);
-  
-  // Remove after 5 seconds
-  setTimeout(() => {
-    errorDiv.remove();
-  }, 5000);
+  if (contentDiv) {
+    contentDiv.prepend(errorDiv);
+    
+    // Remove after 5 seconds
+    setTimeout(() => {
+      errorDiv.remove();
+    }, 5000);
+  } else {
+    console.error("[VESPA Upload] Could not find .vespa-upload-content to show error:", message);
+  }
 }
 
 /**
@@ -302,6 +342,11 @@ function showError(message) {
  * @param {number} step - The step number to render
  */
 function renderStep(step) {
+  if (!VESPA_UPLOAD_CONFIG) {
+    console.error("[VESPA Upload] Cannot render step without configuration");
+    return;
+  }
+  
   // Update step indicators
   document.querySelectorAll('.vespa-step').forEach(stepElem => {
     stepElem.classList.remove('active', 'completed');
@@ -318,28 +363,35 @@ function renderStep(step) {
   const prevButton = document.getElementById('vespa-prev-button');
   const nextButton = document.getElementById('vespa-next-button');
   
-  prevButton.style.display = step > 1 ? 'block' : 'none';
+  if (prevButton) prevButton.style.display = step > 1 ? 'block' : 'none';
   
   const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === 'Super User';
   const maxSteps = isSuperUser ? 6 : 5;
   
-  if (step === maxSteps) {
-    nextButton.style.display = 'none';
-  } else {
-    nextButton.style.display = 'block';
-    
-    // Update button text based on step
-    if ((isSuperUser && step === 4) || (!isSuperUser && step === 3)) {
-      nextButton.textContent = 'Validate';
-    } else if ((isSuperUser && step === 5) || (!isSuperUser && step === 4)) {
-      nextButton.textContent = 'Process';
+  if (nextButton) {
+    if (step === maxSteps) {
+      nextButton.style.display = 'none';
     } else {
-      nextButton.textContent = 'Next';
+      nextButton.style.display = 'block';
+      
+      // Update button text based on step
+      if ((isSuperUser && step === 4) || (!isSuperUser && step === 3)) {
+        nextButton.textContent = 'Validate';
+      } else if ((isSuperUser && step === 5) || (!isSuperUser && step === 4)) {
+        nextButton.textContent = 'Process';
+      } else {
+        nextButton.textContent = 'Next';
+      }
     }
   }
   
   // Render step content
   const contentDiv = document.querySelector('.vespa-upload-content');
+  if (!contentDiv) {
+    console.error("[VESPA Upload] Could not find .vespa-upload-content to render step");
+    return;
+  }
+  
   contentDiv.innerHTML = '';
   
   // Determine actual step based on user role
@@ -622,6 +674,9 @@ function renderValidationStep() {
  * @returns {string} HTML for the step
  */
 function renderProcessingStep() {
+  // Default empty email value
+  const userEmail = VESPA_UPLOAD_CONFIG && VESPA_UPLOAD_CONFIG.userEmail ? VESPA_UPLOAD_CONFIG.userEmail : '';
+  
   return `
     <h2>Process Upload</h2>
     <p>Your data is ready to be processed. Click "Process" to continue.</p>
@@ -677,7 +732,7 @@ function renderProcessingStep() {
           
           <div class="vespa-input-group">
             <label for="notification-email">Send results to email:</label>
-            <input type="email" id="notification-email" value="${VESPA_UPLOAD_CONFIG.userEmail || ''}">
+            <input type="email" id="notification-email" value="${userEmail}">
           </div>
         </div>
       </div>
@@ -1173,3 +1228,4 @@ function addStyles() {
 
 // Expose initializer to global scope for the Multi-App Loader
 window.initializeUploadBridge = initializeUploadBridge;
+
