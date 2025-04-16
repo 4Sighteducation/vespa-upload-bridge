@@ -10,7 +10,7 @@
 let VESPA_UPLOAD_CONFIG = null;
 
 // Constants
-const API_BASE_URL = 'https://vespa-upload-api.herokuapp.com/api';
+const API_BASE_URL = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api';
 const DEBUG_MODE = true;
 const CHECK_INTERVAL = 500; // Check every 500ms
 const MAX_CHECKS = 20; // Give up after 10 seconds (20 checks)
@@ -22,6 +22,7 @@ let validationResults = null;
 let processingResults = null;
 let selectedSchool = null; // For super user mode
 let isProcessing = false;
+let activeModal = null; // Track the active modal
 
 /**
  * Main initialization function that will be called by the loader
@@ -587,8 +588,8 @@ function renderUploadCsvStep() {
     <script>
       // Add event listeners
       document.getElementById('download-template').addEventListener('click', function() {
-        // TODO: Implement template download
-        alert('Template download functionality will be implemented here');
+        // Show template modal
+        showTemplateModal();
       });
     </script>
   `;
@@ -1223,9 +1224,397 @@ function addStyles() {
       margin-bottom: 4px;
     }
   `;
+  styleElement.textContent += `
+    /* Modal styles */
+    .vespa-modal-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      animation: fadeIn 0.3s ease;
+    }
+    
+    .vespa-modal {
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+      width: 90%;
+      max-width: 800px;
+      max-height: 90vh;
+      overflow-y: auto;
+      animation: zoomIn 0.3s ease;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    @keyframes zoomIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    
+    .vespa-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    
+    .vespa-modal-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #2c3e50;
+      margin: 0;
+    }
+    
+    .vespa-modal-close {
+      background: none;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      color: #6c757d;
+      line-height: 1;
+    }
+    
+    .vespa-modal-body {
+      padding: 20px;
+    }
+    
+    .vespa-modal-footer {
+      padding: 12px 20px;
+      border-top: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+    
+    /* Template modal specific styles */
+    .vespa-templates-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    
+    .vespa-template-card {
+      flex: 1;
+      min-width: 300px;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 20px;
+      background-color: #fff;
+    }
+    
+    .vespa-template-card h3 {
+      margin-top: 0;
+      color: #2c3e50;
+      border-bottom: 1px solid #e0e0e0;
+      padding-bottom: 10px;
+    }
+    
+    .vespa-template-preview {
+      margin-bottom: 15px;
+      overflow-x: auto;
+    }
+    
+    .vespa-template-preview table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    
+    .vespa-template-preview th,
+    .vespa-template-preview td {
+      padding: 6px 8px;
+      border: 1px solid #e0e0e0;
+      text-align: left;
+    }
+    
+    .vespa-template-preview th {
+      background-color: #f8f9fa;
+      font-weight: 500;
+    }
+    
+    .vespa-template-info {
+      margin-bottom: 15px;
+    }
+    
+    .vespa-template-info ul {
+      padding-left: 20px;
+      margin: 10px 0;
+    }
+    
+    .vespa-template-info li {
+      margin-bottom: 5px;
+      font-size: 14px;
+    }
+  `;
+  
   document.head.appendChild(styleElement);
+}
+
+/**
+ * Show a modal with the specified content
+ * @param {string} title - The modal title
+ * @param {string} content - The modal content HTML
+ * @param {Function} onClose - Optional callback when modal is closed
+ */
+function showModal(title, content, onClose) {
+  // Close any existing modals
+  closeModal();
+  
+  // Create the modal elements
+  const backdrop = document.createElement('div');
+  backdrop.className = 'vespa-modal-backdrop';
+  
+  const modal = document.createElement('div');
+  modal.className = 'vespa-modal';
+  
+  modal.innerHTML = `
+    <div class="vespa-modal-header">
+      <h2 class="vespa-modal-title">${title}</h2>
+      <button class="vespa-modal-close">&times;</button>
+    </div>
+    <div class="vespa-modal-body">${content}</div>
+  `;
+  
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+  
+  // Add click handler to close button
+  modal.querySelector('.vespa-modal-close').addEventListener('click', () => {
+    closeModal();
+    if (onClose && typeof onClose === 'function') {
+      onClose();
+    }
+  });
+  
+  // Add click handler to backdrop (to close when clicking outside)
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) {
+      closeModal();
+      if (onClose && typeof onClose === 'function') {
+        onClose();
+      }
+    }
+  });
+  
+  // Add escape key handler
+  const escHandler = (e) => {
+    if (e.key === 'Escape') {
+      closeModal();
+      if (onClose && typeof onClose === 'function') {
+        onClose();
+      }
+    }
+  };
+  document.addEventListener('keydown', escHandler);
+  
+  // Store reference to the active modal
+  activeModal = {
+    element: backdrop,
+    escHandler: escHandler
+  };
+  
+  // Set focus to the modal for accessibility
+  modal.setAttribute('tabindex', '-1');
+  setTimeout(() => modal.focus(), 0);
+  
+  // Return the modal elements for potential further customization
+  return { backdrop, modal };
+}
+
+/**
+ * Close the currently active modal
+ */
+function closeModal() {
+  if (activeModal) {
+    document.body.removeChild(activeModal.element);
+    document.removeEventListener('keydown', activeModal.escHandler);
+    activeModal = null;
+  }
+}
+
+/**
+ * Show the CSV template modal
+ */
+function showTemplateModal() {
+  const modalContent = `
+    <div class="vespa-templates-container">
+      <div class="vespa-template-card">
+        <h3>Staff Upload Template</h3>
+        <div class="vespa-template-preview">
+          <table>
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>First Name</th>
+                <th>Last Name</th>
+                <th>Email Address</th>
+                <th>Staff Type</th>
+                <th>Year Group</th>
+                <th>Group</th>
+                <th>Faculty/Dept</th>
+                <th>Subject</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Mr</td>
+                <td>John</td>
+                <td>Smith</td>
+                <td>jsmith@school.edu</td>
+                <td>tut,sub</td>
+                <td>12</td>
+                <td>12A</td>
+                <td>Science</td>
+                <td>Physics</td>
+              </tr>
+              <tr>
+                <td>Mrs</td>
+                <td>Jane</td>
+                <td>Doe</td>
+                <td>jdoe@school.edu</td>
+                <td>hod,sub</td>
+                <td></td>
+                <td></td>
+                <td>English</td>
+                <td>English Lit</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="vespa-template-info">
+          <strong>Staff Type codes:</strong>
+          <ul>
+            <li><code>admin</code> - Staff Administrator</li>
+            <li><code>tut</code> - Tutor</li>
+            <li><code>sub</code> - Subject Teacher</li>
+            <li><code>hoy</code> - Head of Year</li>
+            <li><code>hod</code> - Head of Department</li>
+            <li><code>gen</code> - General Staff</li>
+          </ul>
+          <p>Multiple staff types can be assigned using comma-separated values.</p>
+        </div>
+        <button class="vespa-button primary" onclick="downloadTemplate('staff')">Download Staff Template</button>
+      </div>
+      
+      <div class="vespa-template-card">
+        <h3>Student Upload Template</h3>
+        <div class="vespa-template-preview">
+          <table>
+            <thead>
+              <tr>
+                <th>Firstname</th>
+                <th>Lastname</th>
+                <th>Student Email</th>
+                <th>Group</th>
+                <th>Year Gp</th>
+                <th>Level</th>
+                <th>Tutor</th>
+                <th>Subject1</th>
+                <th>GCSE Eng</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Alex</td>
+                <td>Johnson</td>
+                <td>ajohnson@school.edu</td>
+                <td>12B</td>
+                <td>12</td>
+                <td>Level 3</td>
+                <td>jsmith@school.edu</td>
+                <td>Mathematics</td>
+                <td>7</td>
+              </tr>
+              <tr>
+                <td>Sarah</td>
+                <td>Williams</td>
+                <td>swilliams@school.edu</td>
+                <td>12A</td>
+                <td>12</td>
+                <td>Level 3</td>
+                <td>jsmith@school.edu</td>
+                <td>Biology</td>
+                <td>8</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="vespa-template-info">
+          <strong>Important notes:</strong>
+          <ul>
+            <li>Level must be "Level 2" or "Level 3"</li>
+            <li>Tutor field must contain valid email address(es) of existing tutors</li>
+            <li>GCSE fields accept values from 1-9 for new grading or A*-G for old grading</li>
+            <li>Up to 5 subjects can be included (Subject1, Subject2, etc.)</li>
+          </ul>
+        </div>
+        <button class="vespa-button primary" onclick="downloadTemplate('student')">Download Student Template</button>
+      </div>
+    </div>
+  `;
+  
+  showModal('CSV Templates', modalContent);
+}
+
+/**
+ * Download a CSV template
+ * @param {string} type - 'staff' or 'student'
+ */
+function downloadTemplate(type) {
+  if (!type || !['staff', 'student'].includes(type)) {
+    showError('Invalid template type');
+    return;
+  }
+  
+  const templateUrl = `${API_BASE_URL}/templates/${type}`;
+  
+  // Show a loading indicator
+  const downloadButton = document.querySelector(`.vespa-template-card button[onclick="downloadTemplate('${type}')"]`);
+  let originalText = '';
+  
+  if (downloadButton) {
+    originalText = downloadButton.textContent;
+    downloadButton.textContent = 'Downloading...';
+    downloadButton.disabled = true;
+  }
+  
+  // Create a temporary link and click it to download the file
+  const tempLink = document.createElement('a');
+  tempLink.href = templateUrl;
+  tempLink.setAttribute('download', type === 'staff' ? 'staff_template.csv' : 'student_template.csv');
+  tempLink.setAttribute('target', '_blank');
+  document.body.appendChild(tempLink);
+  
+  // This approach uses a direct browser download
+  tempLink.click();
+  
+  // Clean up
+  document.body.removeChild(tempLink);
+  
+  // Reset the button after a delay
+  if (downloadButton) {
+    setTimeout(() => {
+      downloadButton.textContent = originalText;
+      downloadButton.disabled = false;
+    }, 2000);
+  }
+  
+  // Log the download
+  debugLog(`Template download initiated for ${type}`, { url: templateUrl });
 }
 
 // Expose initializer to global scope for the Multi-App Loader
 window.initializeUploadBridge = initializeUploadBridge;
+
 
