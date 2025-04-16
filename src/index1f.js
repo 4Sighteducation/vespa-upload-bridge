@@ -588,8 +588,21 @@ function renderUploadCsvStep() {
     <script>
       // Add event listeners
       document.getElementById('download-template').addEventListener('click', function() {
-        // Show template modal
-        showTemplateModal();
+        try {
+          console.log('[VESPA Upload] Template button clicked');
+          // Show template modal
+          if (typeof window.showTemplateModal === 'function') {
+            window.showTemplateModal();
+          } else if (typeof showTemplateModal === 'function') {
+            showTemplateModal();
+          } else {
+            console.error('[VESPA Upload] showTemplateModal function not found');
+            alert('Template download functionality is loading. Please try again in a moment.');
+          }
+        } catch (error) {
+          console.error('[VESPA Upload] Error in template button click handler:', error);
+          alert('There was an error accessing the templates. Please try again later.');
+        }
       });
     </script>
   `;
@@ -1614,8 +1627,16 @@ function downloadTemplate(type) {
   debugLog(`Template download initiated for ${type}`, { url: templateUrl });
 }
 
-// Expose initializer to global scope for the Multi-App Loader
+// Expose functions to global scope
 window.initializeUploadBridge = initializeUploadBridge;
+window.showTemplateModal = showTemplateModal;
+window.downloadTemplate = downloadTemplate;
+window.showModal = showModal;
+window.closeModal = closeModal;
+
+// Add an initialization complete flag
+window.VESPA_UPLOAD_BRIDGE_INITIALIZED = true;
+
 
 
 
