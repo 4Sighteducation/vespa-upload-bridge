@@ -10,10 +10,29 @@
 let VESPA_UPLOAD_CONFIG = null;
 
 // Constants
-const API_BASE_URL = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api';
+let API_BASE_URL = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api'; // Default fallback
 const DEBUG_MODE = true;
 const CHECK_INTERVAL = 500; // Check every 500ms
 const MAX_CHECKS = 20; // Give up after 10 seconds (20 checks)
+
+// Function to get the API URL - tries multiple sources
+function determineApiUrl() {
+  // First priority: Use the URL from VESPA_UPLOAD_CONFIG if available
+  if (VESPA_UPLOAD_CONFIG && VESPA_UPLOAD_CONFIG.apiUrl) {
+    debugLog("Using API URL from config", VESPA_UPLOAD_CONFIG.apiUrl);
+    return VESPA_UPLOAD_CONFIG.apiUrl;
+  }
+  
+  // Second priority: Use the window object if available
+  if (window.VESPA_UPLOAD_CONFIG && window.VESPA_UPLOAD_CONFIG.apiUrl) {
+    debugLog("Using API URL from window config", window.VESPA_UPLOAD_CONFIG.apiUrl);
+    return window.VESPA_UPLOAD_CONFIG.apiUrl;
+  }
+  
+  // Last resort: Use the hardcoded URL
+  debugLog("Using default API URL", API_BASE_URL);
+  return API_BASE_URL;
+}
 
 // State management
 let currentStep = 1;
@@ -34,6 +53,25 @@ function initializeUploadBridge() {
   // and log it to see what's available
   VESPA_UPLOAD_CONFIG = window.VESPA_UPLOAD_CONFIG;
   debugLog("Configuration received:", VESPA_UPLOAD_CONFIG);
+  
+  // Set the API URL based on config or fallback
+  API_BASE_URL = determineApiUrl();
+  debugLog("Using API URL:", API_BASE_URL);
+  
+  // Test API connectivity immediately to help debug
+  fetch(API_BASE_URL)
+    .then(response => {
+      if (response.ok) {
+        return response.json();
+      }
+      throw new Error(`API responded with status: ${response.status}`);
+    })
+    .then(data => {
+      debugLog("API connection successful:", data);
+    })
+    .catch(error => {
+      console.error("[VESPA Upload] API connection failed:", error);
+    });
   
   // Add CSS styles
   addStyles();
@@ -72,7 +110,7 @@ function debugLog(title, data) {
 }
 
 /**
- * Add a small debug indicator to the page
+ * Add an enhanced debug indicator to the page
  */
 function addDebugIndicator() {
   const indicator = document.createElement('div');
@@ -90,17 +128,179 @@ function addDebugIndicator() {
     z-index: 9999;
     opacity: 0.8;
     cursor: pointer;
+    display: flex;
+    align-items: center;
   `;
-  indicator.textContent = 'Upload Bridge Loaded';
+  
+  // Add a dot status indicator
+  const statusDot = document.createElement('span');
+  statusDot.style.cssText = `
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #4caf50;
+    margin-right: 6px;
+    display: inline-block;
+  `;
+  indicator.appendChild(statusDot);
+  
+  // Add text
+  const text = document.createElement('span');
+  text.textContent = 'Upload Bridge Loaded';
+  indicator.appendChild(text);
+  
+  // Enhanced click behavior - now shows a detailed debug panel
   indicator.addEventListener('click', function() {
-    // Log debug info when clicked
-    debugLog("Debug indicator clicked", {
+    // Check if debug panel already exists
+    let debugPanel = document.getElementById('vespa-debug-panel');
+    
+    if (debugPanel) {
+      // If panel exists, toggle visibility
+      debugPanel.style.display = debugPanel.style.display === 'none' ? 'block' : 'none';
+    } else {
+      // Create debug panel
+      debugPanel = document.createElement('div');
+      debugPanel.id = 'vespa-debug-panel';
+      debugPanel.style.cssText = `
+        position: fixed;
+        bottom: 50px;
+        right: 10px;
+        background-color: #fff;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        padding: 15px;
+        width: 350px;
+        max-height: 500px;
+        overflow-y: auto;
+        z-index: 9998;
+        font-family: monospace;
+        font-size: 12px;
+      `;
+      
+      // Populate debug info
+      const apiStatus = document.createElement('div');
+      apiStatus.innerHTML = `<strong>API URL:</strong> ${API_BASE_URL}`;
+      apiStatus.style.marginBottom = '10px';
+      debugPanel.appendChild(apiStatus);
+      
+      // Add API test button
+      const testApiButton = document.createElement('button');
+      testApiButton.textContent = 'Test API Connection';
+      testApiButton.style.cssText = `
+        background: #f0f0f0;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 5px 10px;
+        margin-bottom: 10px;
+        cursor: pointer;
+        font-size: 12px;
+      `;
+      testApiButton.addEventListener('click', function() {
+        const apiStatusResult = document.getElementById('api-status-result');
+        apiStatusResult.textContent = 'Testing connection...';
+        
+        fetch(API_BASE_URL)
+          .then(response => {
+            if (response.ok) {
+              return response.json();
+            }
+            throw new Error(`API responded with status: ${response.status}`);
+          })
+          .then(data => {
+            apiStatusResult.innerHTML = `
+              <span style="color:#4caf50">✓ API is online</span><br>
+              <pre>${JSON.stringify(data, null, 2)}</pre>
+            `;
+          })
+          .catch(error => {
+            apiStatusResult.innerHTML = `
+              <span style="color:#f44336">✗ API connection failed</span><br>
+              <pre style="color:#f44336">${error.message}</pre>
+            `;
+          });
+      });
+      debugPanel.appendChild(testApiButton);
+      
+      // Add API status result container
+      const apiStatusResult = document.createElement('div');
+      apiStatusResult.id = 'api-status-result';
+      apiStatusResult.style.cssText = `
+        background: #f8f9fa;
+        border-radius: 4px;
+        padding: 10px;
+        margin-bottom: 10px;
+        font-size: 11px;
+      `;
+      debugPanel.appendChild(apiStatusResult);
+      
+      // Configuration details
+      const configDetails = document.createElement('div');
+      configDetails.innerHTML = `<strong>Configuration:</strong>`;
+      
+      if (VESPA_UPLOAD_CONFIG) {
+        const configList = document.createElement('ul');
+        configList.style.paddingLeft = '20px';
+        configList.style.margin = '5px 0';
+        
+        for (const key in VESPA_UPLOAD_CONFIG) {
+          const item = document.createElement('li');
+          item.textContent = `${key}: ${JSON.stringify(VESPA_UPLOAD_CONFIG[key])}`;
+          configList.appendChild(item);
+        }
+        
+        configDetails.appendChild(configList);
+      } else {
+        configDetails.innerHTML += `<div style="color:#f44336">No configuration available</div>`;
+      }
+      
+      debugPanel.appendChild(configDetails);
+      
+      // State information
+      const stateInfo = document.createElement('div');
+      stateInfo.innerHTML = `
+        <strong>Current State:</strong>
+        <ul style="padding-left: 20px; margin: 5px 0">
+          <li>Step: ${currentStep}</li>
+          <li>Upload Type: ${uploadType || 'Not selected'}</li>
+          <li>Selected School: ${selectedSchool || 'N/A'}</li>
+          <li>Is Processing: ${isProcessing}</li>
+        </ul>
+      `;
+      debugPanel.appendChild(stateInfo);
+      
+      // Add close button
+      const closeButton = document.createElement('button');
+      closeButton.textContent = 'Close';
+      closeButton.style.cssText = `
+        background: #f8f9fa;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 5px 10px;
+        margin-top: 10px;
+        cursor: pointer;
+        font-size: 12px;
+        float: right;
+      `;
+      closeButton.addEventListener('click', function(e) {
+        e.stopPropagation();
+        debugPanel.style.display = 'none';
+      });
+      debugPanel.appendChild(closeButton);
+      
+      document.body.appendChild(debugPanel);
+    }
+    
+    // Log to console as well
+    debugLog("Debug panel opened", {
       'uploadContainer': VESPA_UPLOAD_CONFIG && document.querySelector(VESPA_UPLOAD_CONFIG.elementSelector) ? 'Found' : 'Not found',
       'config': VESPA_UPLOAD_CONFIG,
       'currentStep': currentStep,
-      'uploadType': uploadType
+      'uploadType': uploadType,
+      'API_BASE_URL': API_BASE_URL
     });
   });
+  
   document.body.appendChild(indicator);
 }
 
@@ -586,9 +786,26 @@ function renderUploadCsvStep() {
     </div>
     
     <script>
-      // Add event listeners for direct download - simplified for Knack security environment
-      document.getElementById('download-template').addEventListener('click', function() {
+      // Enhanced template download function with better error handling and visible feedback
+      function downloadTemplateFile() {
+        // Create status message element if it doesn't exist
+        let statusMessage = document.getElementById('download-status-message');
+        if (!statusMessage) {
+          statusMessage = document.createElement('div');
+          statusMessage.id = 'download-status-message';
+          statusMessage.style.marginTop = '10px';
+          statusMessage.style.padding = '8px';
+          statusMessage.style.borderRadius = '4px';
+          statusMessage.style.textAlign = 'center';
+          document.querySelector('.vespa-template-download').appendChild(statusMessage);
+        }
+        
         try {
+          // Show visual feedback about the action
+          statusMessage.textContent = 'Preparing download...';
+          statusMessage.style.backgroundColor = '#e0f7fa';
+          statusMessage.style.color = '#0288d1';
+          
           console.log('[VESPA Upload] Template download button clicked');
           
           // Get the current upload type
@@ -608,20 +825,57 @@ function renderUploadCsvStep() {
           const templateUrl = API_BASE_URL + '/templates/' + actualType;
           console.log('[VESPA Upload] Template URL:', templateUrl);
           
-          // Open in new tab (simpler approach that works better with Knack security)
-          window.open(templateUrl, '_blank');
+          // Update status
+          statusMessage.textContent = 'Connecting to API...';
           
-          // Reset button after short delay
-          setTimeout(function() {
-            downloadButton.textContent = originalText;
-            downloadButton.disabled = false;
-          }, 1500);
-          
-          console.log('[VESPA Upload] Template download initiated via new tab');
+          // Try multiple methods for download - first try fetch to check if resource exists
+          fetch(templateUrl, { method: 'HEAD' })
+            .then(response => {
+              if (response.ok) {
+                // Update status with success message
+                statusMessage.textContent = 'Template found! Opening download...';
+                statusMessage.style.backgroundColor = '#e8f5e9';
+                statusMessage.style.color = '#2e7d32';
+                
+                // Method 1: Open in new tab
+                window.open(templateUrl, '_blank');
+                
+                // Also provide direct link as fallback
+                setTimeout(() => {
+                  statusMessage.innerHTML = `
+                    <span style="color:#2e7d32">✓ Template ready!</span> 
+                    If download doesn't start automatically, 
+                    <a href="${templateUrl}" target="_blank" style="font-weight:bold">click here</a>
+                  `;
+                }, 1000);
+                
+                console.log('[VESPA Upload] Template download initiated via new tab');
+              } else {
+                // API error
+                throw new Error('API responded with status: ' + response.status);
+              }
+            })
+            .catch(error => {
+              console.error('[VESPA Upload] Network error:', error);
+              statusMessage.textContent = 'Error: Could not connect to API. Check console for details.';
+              statusMessage.style.backgroundColor = '#ffebee';
+              statusMessage.style.color = '#c62828';
+            })
+            .finally(() => {
+              // Reset button after a delay
+              setTimeout(function() {
+                downloadButton.textContent = originalText;
+                downloadButton.disabled = false;
+              }, 1500);
+            });
           
         } catch (error) {
           console.error('[VESPA Upload] Error in template download:', error);
-          alert('There was an error downloading the template. Please try again later.');
+          
+          // Visual error message
+          statusMessage.textContent = 'Error: ' + error.message;
+          statusMessage.style.backgroundColor = '#ffebee';
+          statusMessage.style.color = '#c62828';
           
           // Reset button if error
           const downloadButton = document.getElementById('download-template');
@@ -629,6 +883,33 @@ function renderUploadCsvStep() {
             downloadButton.textContent = 'Download ' + (uploadType === 'staff' ? 'Staff' : 'Student') + ' Template';
             downloadButton.disabled = false;
           }
+        }
+      }
+      
+      // Add event listener for download button
+      document.getElementById('download-template').addEventListener('click', downloadTemplateFile);
+      
+      // Add event listener for file input change to handle upload
+      document.getElementById('csv-file').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+          const fileNameElement = document.createElement('div');
+          fileNameElement.className = 'vespa-file-selected';
+          fileNameElement.innerHTML = `<strong>Selected file:</strong> ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+          fileNameElement.style.marginTop = '10px';
+          fileNameElement.style.padding = '8px';
+          fileNameElement.style.backgroundColor = '#f0f7ff';
+          fileNameElement.style.borderRadius = '4px';
+          
+          // Replace existing notification or add new one
+          const existingNotification = document.querySelector('.vespa-file-selected');
+          if (existingNotification) {
+            existingNotification.parentNode.replaceChild(fileNameElement, existingNotification);
+          } else {
+            document.querySelector('.vespa-file-input').after(fileNameElement);
+          }
+          
+          console.log('[VESPA Upload] File selected:', file.name, file.size);
         }
       });
     </script>
@@ -1608,6 +1889,61 @@ function showTemplateModal() {
 }
 
 /**
+ * Download a file directly from a URL using fetch API
+ * This is more reliable than window.open() which can be blocked by popup blockers
+ * @param {string} url - The URL to download the file from
+ * @param {string} filename - The filename to save the file as
+ * @param {function} onSuccess - Callback function on successful download
+ * @param {function} onError - Callback function on error
+ */
+function downloadFileDirectly(url, filename, onSuccess, onError) {
+  // Show console info about download attempt
+  debugLog('Attempting direct file download', { url, filename });
+  
+  // Using fetch API to get the file as a blob
+  fetch(url)
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return response.blob();
+    })
+    .then(blob => {
+      // Create an object URL for the blob
+      const objectUrl = URL.createObjectURL(blob);
+      
+      // Create a link element
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = filename;
+      link.style.display = 'none';
+      
+      // Add link to the document body and click it
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      document.body.removeChild(link);
+      URL.revokeObjectURL(objectUrl);
+      
+      // Call success callback
+      if (onSuccess && typeof onSuccess === 'function') {
+        onSuccess(blob);
+      }
+      
+      debugLog('File download success', { filename });
+    })
+    .catch(error => {
+      console.error('Download failed:', error);
+      
+      // Call error callback
+      if (onError && typeof onError === 'function') {
+        onError(error);
+      }
+    });
+}
+
+/**
  * Download a CSV template
  * @param {string} type - 'staff' or 'student'
  */
@@ -1617,11 +1953,20 @@ function downloadTemplate(type) {
     return;
   }
   
+  // Construct template URL and filename
   const templateUrl = `${API_BASE_URL}/templates/${type}`;
+  const filename = type === 'staff' ? 'staff_template.csv' : 'student_template.csv';
   
-  // Show a loading indicator
-  const downloadButton = document.querySelector(`.vespa-template-card button[onclick="downloadTemplate('${type}')"]`);
-  let originalText = '';
+  // Update UI - show loading state
+  let downloadButton, originalText = '';
+  
+  if (document.querySelector(`.vespa-template-card button[onclick="downloadTemplate('${type}')"]`)) {
+    // Modal version
+    downloadButton = document.querySelector(`.vespa-template-card button[onclick="downloadTemplate('${type}')"]`);
+  } else {
+    // Regular version
+    downloadButton = document.getElementById('download-template');
+  }
   
   if (downloadButton) {
     originalText = downloadButton.textContent;
@@ -1629,29 +1974,84 @@ function downloadTemplate(type) {
     downloadButton.disabled = true;
   }
   
-  // Create a temporary link and click it to download the file
-  const tempLink = document.createElement('a');
-  tempLink.href = templateUrl;
-  tempLink.setAttribute('download', type === 'staff' ? 'staff_template.csv' : 'student_template.csv');
-  tempLink.setAttribute('target', '_blank');
-  document.body.appendChild(tempLink);
-  
-  // This approach uses a direct browser download
-  tempLink.click();
-  
-  // Clean up
-  document.body.removeChild(tempLink);
-  
-  // Reset the button after a delay
-  if (downloadButton) {
-    setTimeout(() => {
-      downloadButton.textContent = originalText;
-      downloadButton.disabled = false;
-    }, 2000);
-  }
-  
-  // Log the download
+  // Log the download attempt
   debugLog(`Template download initiated for ${type}`, { url: templateUrl });
+  
+  // Try to download directly
+  downloadFileDirectly(
+    templateUrl,
+    filename,
+    // Success callback
+    () => {
+      // Reset button
+      if (downloadButton) {
+        downloadButton.textContent = originalText;
+        downloadButton.disabled = false;
+      }
+      
+      // Show success message
+      showSuccess(`${type} template downloaded successfully!`);
+    },
+    // Error callback
+    (error) => {
+      console.error(`[VESPA Upload] Template download failed:`, error);
+      
+      // Reset button
+      if (downloadButton) {
+        downloadButton.textContent = originalText;
+        downloadButton.disabled = false;
+      }
+      
+      // Show fallback options
+      showError(`
+        Could not download template automatically. 
+        <a href="${templateUrl}" target="_blank" style="text-decoration: underline; color: blue;">
+          Click here to try downloading manually
+        </a>
+      `);
+    }
+  );
+}
+
+/**
+ * Show a success message
+ * @param {string} message - The success message
+ */
+function showSuccess(message) {
+  const successDiv = document.createElement('div');
+  successDiv.className = 'vespa-success';
+  successDiv.innerHTML = `
+    <div class="vespa-success-icon">✅</div>
+    <div class="vespa-success-message">${message}</div>
+  `;
+  
+  // Style the success message
+  successDiv.style.cssText = `
+    background: #d4edda;
+    border-left: 4px solid #28a745;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+  `;
+  
+  successDiv.querySelector('.vespa-success-icon').style.cssText = `
+    margin-right: 12px;
+    font-size: 20px;
+  `;
+  
+  const contentDiv = document.querySelector('.vespa-upload-content');
+  if (contentDiv) {
+    contentDiv.prepend(successDiv);
+    
+    // Remove after 5 seconds
+    setTimeout(() => {
+      successDiv.remove();
+    }, 5000);
+  } else {
+    // If we can't find the content div, try to show an alert instead
+    alert(message);
+  }
 }
 
 // Expose functions to global scope
@@ -1663,6 +2063,4 @@ window.closeModal = closeModal;
 
 // Add an initialization complete flag
 window.VESPA_UPLOAD_BRIDGE_INITIALIZED = true;
-
-
 
