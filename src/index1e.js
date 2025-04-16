@@ -1618,3 +1618,4 @@ function downloadTemplate(type) {
 window.initializeUploadBridge = initializeUploadBridge;
 
 
+
