@@ -586,58 +586,22 @@ function renderUploadCsvStep() {
     </div>
     
     <script>
-      // Add event listeners for direct download
+      // Add event listeners
       document.getElementById('download-template').addEventListener('click', function() {
         try {
-          console.log('[VESPA Upload] Template download button clicked');
-          
-          // Get the current upload type
-          const type = uploadType || 'staff'; // Default to staff if not set
-          console.log('[VESPA Upload] Downloading template for:', type);
-          
-          // Show loading state
-          const downloadButton = document.getElementById('download-template');
-          const originalText = downloadButton.textContent;
-          downloadButton.textContent = 'Downloading...';
-          downloadButton.disabled = true;
-          
-          // Determine template name
-          const templateName = type === 'staff' ? 'staff_upload_template' : 'student_upload_template';
-          
-          // Set up the API endpoint URL
-          const templateUrl = API_BASE_URL + '/templates/' + type;
-          
-          // Create a temporary link and trigger download
-          const tempLink = document.createElement('a');
-          tempLink.href = templateUrl;
-          tempLink.setAttribute('download', templateName + '.csv');
-          tempLink.setAttribute('target', '_blank');
-          document.body.appendChild(tempLink);
-          
-          // Trigger the download
-          tempLink.click();
-          
-          // Clean up
-          document.body.removeChild(tempLink);
-          
-          // Reset button after delay
-          setTimeout(function() {
-            downloadButton.textContent = originalText;
-            downloadButton.disabled = false;
-          }, 2000);
-          
-          console.log('[VESPA Upload] Template download initiated for ' + templateName);
-          
-        } catch (error) {
-          console.error('[VESPA Upload] Error in template download:', error);
-          alert('There was an error downloading the template. Please try again later.');
-          
-          // Reset button if error
-          const downloadButton = document.getElementById('download-template');
-          if (downloadButton) {
-            downloadButton.textContent = 'Download ' + (uploadType === 'staff' ? 'Staff' : 'Student') + ' Template';
-            downloadButton.disabled = false;
+          console.log('[VESPA Upload] Template button clicked');
+          // Show template modal
+          if (typeof window.showTemplateModal === 'function') {
+            window.showTemplateModal();
+          } else if (typeof showTemplateModal === 'function') {
+            showTemplateModal();
+          } else {
+            console.error('[VESPA Upload] showTemplateModal function not found');
+            alert('Template download functionality is loading. Please try again in a moment.');
           }
+        } catch (error) {
+          console.error('[VESPA Upload] Error in template button click handler:', error);
+          alert('There was an error accessing the templates. Please try again later.');
         }
       });
     </script>
@@ -1672,7 +1636,6 @@ window.closeModal = closeModal;
 
 // Add an initialization complete flag
 window.VESPA_UPLOAD_BRIDGE_INITIALIZED = true;
-
 
 
 
