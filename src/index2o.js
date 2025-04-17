@@ -23,6 +23,7 @@ let selectedSchool = null; // For super user mode
 let isProcessing = false;
 let activeModal = null; // Track the active modal
 let selectedFile = null; // Store the selected file between steps
+let userContext = null;  // NEW: Store user context data
 
 /**
  * Debug logging helper
@@ -304,6 +305,49 @@ function validateCurrentStep() {
 }
 
 /**
+ * Fetch user context information from Knack if available
+ * @returns {Object} User context information
+ */
+async function fetchUserContext() {
+  if (!VESPA_UPLOAD_CONFIG || !Knack) {
+    return null;
+  }
+
+  try {
+    // Extract user information from Knack global object
+    let context = {
+      userId: null,
+      userName: null,
+      userEmail: null,
+      userRole: VESPA_UPLOAD_CONFIG.userRole || null,
+      schoolId: null,
+      customerId: null
+    };
+
+    // Get current user ID from Knack if available
+    if (Knack && Knack.getUserAttributes) {
+      const userAttrs = Knack.getUserAttributes();
+      if (userAttrs) {
+        context.userId = userAttrs.id;
+        context.userName = userAttrs.name;
+        context.userEmail = userAttrs.email;
+        
+        // Try to get the customer and school ID from custom fields if available
+        context.schoolId = userAttrs.values?.field_126 || null;
+        context.customerId = userAttrs.values?.field_122 || null;
+      }
+    }
+
+    debugLog("User context fetched", context);
+    return context;
+  } catch (error) {
+    debugLog("Error fetching user context", error, 'error');
+    return null;
+  }
+}
+
+
+/**
  * VESPA Upload Bridge - UI Core
  * 
  * This file contains core UI functions and initialization code
@@ -329,6 +373,11 @@ function initializeUploadBridge() {
   
   // Set the API URL based on config or fallback
   API_BASE_URL = determineApiUrl();
+  // Fetch user context information
+fetchUserContext().then(context => {
+  userContext = context;
+  debugLog("User context set:", userContext);
+});
   debugLog("Using API URL:", API_BASE_URL);
   
   // Test API connectivity immediately and show detailed response
@@ -632,10 +681,28 @@ function addDebugIndicator() {
         configDetails.appendChild(configList);
       } else {
         configDetails.innerHTML += `<div style="color:#f44336">No configuration available</div>`;
-      }
+    }
       
       debugPanel.appendChild(configDetails);
       
+      // User context information
+      if (userContext) {
+      const contextInfo = document.createElement('div');
+      contextInfo.innerHTML = `<strong>User Context:</strong>`;
+      const contextList = document.createElement('ul');
+      contextList.style.paddingLeft = '20px';
+      contextList.style.margin = '5px 0';
+  
+      for (const key in userContext) {
+      const item = document.createElement('li');
+      item.textContent = `${key}: ${userContext[key] || 'N/A'}`;
+      contextList.appendChild(item);
+    }
+  
+  contextInfo.appendChild(contextList);
+  debugPanel.appendChild(contextInfo);
+}
+
       // State information
       const stateInfo = document.createElement('div');
       stateInfo.innerHTML = `
@@ -2072,34 +2139,21 @@ function downloadTemplateFile() {
     // Set processing flag
     isProcessing = true;
     
-  // Prepare the request data
-  const requestData = {
-    csvData: validationResults.csvData,
-    options: {
-      sendNotifications: sendNotifications,
-      runCalculators: runCalculators,
-      notificationEmail: notificationEmail
-    },
-    userContext: {
-      userEmail: VESPA_UPLOAD_CONFIG?.userEmail || '',
-      userRole: VESPA_UPLOAD_CONFIG?.userRole || '',
-      userName: VESPA_UPLOAD_CONFIG?.userName || '',
-      schoolId: VESPA_UPLOAD_CONFIG?.schoolId || '',
-      customerId: VESPA_UPLOAD_CONFIG?.customerId || ''
-    }
-  };
-  
-  // For super users only, add the selected school admin email if available
-  if (VESPA_UPLOAD_CONFIG?.userRole === 'Super User' && selectedSchool) {
-    const schoolSelect = document.getElementById('school-select');
-    if (schoolSelect) {
-      const selectedOption = schoolSelect.options[schoolSelect.selectedIndex];
-      if (selectedOption && selectedOption.dataset.email) {
-        requestData.userContext.overrideAdminEmail = selectedOption.dataset.email;
-        console.log(`[VESPA Upload] Using override admin email: ${selectedOption.dataset.email}`);
+    // Prepare the request data
+    const requestData = {
+      csvData: validationResults.csvData,
+      options: {
+        sendNotifications: sendNotifications,
+        runCalculators: runCalculators,
+        notificationEmail: notificationEmail
+      },
+      // Add user context to identify the school/customer
+      context: {
+        userId: userContext?.userId || null,
+        schoolId: selectedSchool?.schoolId || userContext?.schoolId || null,
+        customerId: selectedSchool?.customerId || userContext?.customerId || null
       }
-    }
-  }
+    };
     
     // Determine the correct endpoint
 const endpoint = uploadType === 'staff' ? 'staff' : 'students';
@@ -3285,4 +3339,5 @@ function bindStepEvents() {
   
   // Log initialization completion
   debugLog("VESPA Upload Bridge script loaded and ready")
+
 
