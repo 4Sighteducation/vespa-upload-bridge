@@ -27,14 +27,34 @@ let activeModal = null; // Track the active modal
  * Debug logging helper
  * @param {string} title - Log title
  * @param {any} data - Optional data to log
+ * @param {string} level - Log level (info, warn, error, success)
  */
-function debugLog(title, data) {
+function debugLog(title, data, level = 'info') {
   if (!DEBUG_MODE) return;
   
-  console.log(`%c[VESPA Upload] ${title}`, 'color: #007bff; font-weight: bold;');
+  const timestamp = new Date().toISOString().split('T')[1].split('.')[0]; // HH:MM:SS
+  const colors = {
+    info: 'color: #007bff; font-weight: bold',
+    warn: 'color: #ff9800; font-weight: bold',
+    error: 'color: #f44336; font-weight: bold',
+    success: 'color: #4caf50; font-weight: bold'
+  };
+  
+  console.log(`%c[VESPA Upload ${timestamp}] ${title}`, colors[level]);
   if (data !== undefined) {
     console.log(data);
   }
+}
+
+/**
+ * Helper function to log API calls
+ * @param {string} url - The API URL
+ * @param {string} method - The HTTP method
+ * @param {any} data - Request data (if any)
+ */
+function logApiCall(url, method, data) {
+  debugLog(`API Call: ${method} ${url}`, data);
+  return { url, method, data };
 }
 
 /**
@@ -293,30 +313,41 @@ function validateCurrentStep() {
  * Main initialization function that will be called by the loader
  */
 function initializeUploadBridge() {
-  debugLog("VESPA Upload Bridge initializing...");
+  debugLog("VESPA Upload Bridge initializing...", null, 'info');
   
-  // IMPORTANT: Directly get the config from window object at the start
-  // and log it to see what's available
+  // IMPORTANT: Debug user role immediately
   VESPA_UPLOAD_CONFIG = window.VESPA_UPLOAD_CONFIG;
-  debugLog("Configuration received:", VESPA_UPLOAD_CONFIG);
+  
+  if (VESPA_UPLOAD_CONFIG) {
+    debugLog("Configuration received:", VESPA_UPLOAD_CONFIG);
+    debugLog(`User role detected: ${VESPA_UPLOAD_CONFIG.userRole}`, null, 'info');
+    debugLog(`Is Super User: ${VESPA_UPLOAD_CONFIG.userRole === 'Super User'}`, null, 'info');
+  } else {
+    debugLog("No configuration available yet!", null, 'warn');
+  }
   
   // Set the API URL based on config or fallback
   API_BASE_URL = determineApiUrl();
   debugLog("Using API URL:", API_BASE_URL);
   
-  // Test API connectivity immediately to help debug
+  // Test API connectivity immediately and show detailed response
   fetch(API_BASE_URL)
     .then(response => {
+      debugLog(`API test connection status: ${response.status} ${response.statusText}`);
       if (response.ok) {
         return response.json();
       }
       throw new Error(`API responded with status: ${response.status}`);
     })
     .then(data => {
-      debugLog("API connection successful:", data);
+      debugLog("API connection successful:", data, 'success');
+      // Display API endpoints for debugging
+      if (data && data.endpoints) {
+        debugLog("Available API endpoints:", data.endpoints);
+      }
     })
     .catch(error => {
-      console.error("[VESPA Upload] API connection failed:", error);
+      debugLog("API connection failed:", error, 'error');
     });
   
   // Add CSS styles
@@ -659,9 +690,17 @@ function addDebugIndicator() {
 function renderStep(step) {
   if (!VESPA_UPLOAD_CONFIG) {
     console.error("[VESPA Upload] Cannot render step without configuration");
+    debugLog("Cannot render step without configuration", null, 'error');
     return;
   }
-  
+// Debug step rendering (PART 6 - Add this block right here)
+const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === 'Super User';
+debugLog(`Rendering step ${step}, User is SuperUser: ${isSuperUser}`, {
+  currentStep: step,
+  uploadType: uploadType,
+  isSuperUser: isSuperUser
+});
+
   // Update step indicators
   document.querySelectorAll('.vespa-step').forEach(stepElem => {
     stepElem.classList.remove('active', 'completed');
@@ -672,15 +711,19 @@ function renderStep(step) {
     } else if (stepNum < step) {
       stepElem.classList.add('completed');
     }
+
   });
-  
+
+  setTimeout(() => {
+    debugLog("Binding events after render");
+    bindStepEvents();
+  }, 50);
   // Update buttons
   const prevButton = document.getElementById('vespa-prev-button');
   const nextButton = document.getElementById('vespa-next-button');
   
   if (prevButton) prevButton.style.display = step > 1 ? 'block' : 'none';
   
-  const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === 'Super User';
   const maxSteps = isSuperUser ? 6 : 5;
   
   if (nextButton) {
@@ -1219,82 +1262,102 @@ function renderSelectTypeStep() {
  * Download a template file
  * This function has been fixed to use the correct endpoint
  */
+/**
+ * Download a template file
+ * This function has been fixed to use the correct endpoint
+ */
 function downloadTemplateFile() {
-    console.log('[VESPA Upload] Template download initiated');
+  debugLog("Template download initiated", null, 'info');
+  
+  try {
+    // Show status message for feedback
+    let statusMessage = document.getElementById('download-status-message');
+    if (!statusMessage) {
+      statusMessage = document.createElement('div');
+      statusMessage.id = 'download-status-message';
+      statusMessage.style.cssText = `
+        margin-top: 10px;
+        padding: 8px;
+        border-radius: 4px;
+        text-align: center;
+        background-color: #e0f7fa;
+        color: #0288d1;
+      `;
+      document.querySelector('.vespa-template-download').appendChild(statusMessage);
+    }
     
-    try {
-      // Show status message for feedback
-      let statusMessage = document.getElementById('download-status-message');
-      if (!statusMessage) {
-        statusMessage = document.createElement('div');
-        statusMessage.id = 'download-status-message';
-        statusMessage.style.cssText = `
-          margin-top: 10px;
-          padding: 8px;
-          border-radius: 4px;
-          text-align: center;
-          background-color: #e0f7fa;
-          color: #0288d1;
-        `;
-        document.querySelector('.vespa-template-download').appendChild(statusMessage);
-      }
-      
-      statusMessage.style.display = 'block';
-      statusMessage.textContent = 'Preparing download...';
-      
-      // Get the current upload type with fallback
-      const type = uploadType || 'staff';
-      
-      // FIXED: Use the correct endpoint (student instead of student-full)
-      const templateType = type === 'staff' ? 'staff' : 'student';
-      console.log('[VESPA Upload] Using correct template type:', templateType);
-      
-      // Update UI during download
-      const downloadButton = document.getElementById('download-template');
-      let originalText = '';
-      if (downloadButton) {
-        originalText = downloadButton.textContent;
-        downloadButton.textContent = 'Opening Template...';
-        downloadButton.disabled = true;
-      }
-      
-      // Set up the API endpoint URL
-      const templateUrl = `${API_BASE_URL}/templates/${templateType}`;
-      console.log('[VESPA Upload] Template URL:', templateUrl);
-      
-      statusMessage.textContent = 'Opening download...';
-      
-      // Direct approach: Open in new tab (most reliable cross-browser)
-      window.open(templateUrl, '_blank');
-      
-      // Show success message
-      setTimeout(() => {
-        statusMessage.innerHTML = `
-          <span style="color:#2e7d32">✓ Template ready!</span> 
-          If download doesn't start automatically, 
-          <a href="${templateUrl}" target="_blank" style="font-weight:bold">click here</a>
-        `;
-        statusMessage.style.backgroundColor = '#e8f5e9';
-        
-        // Reset button
-        if (downloadButton) {
-          downloadButton.textContent = originalText;
-          downloadButton.disabled = false;
-        }
-      }, 1000);
-      
-    } catch (error) {
-      console.error('[VESPA Upload] Error in template download:', error);
-      showError(`Template download failed: ${error.message}`);
-      
-      // Reset button if error
-      const downloadButton = document.getElementById('download-template');
-      if (downloadButton) {
-        downloadButton.textContent = `Download ${uploadType === 'staff' ? 'Staff' : 'Student'} Template`;
-        downloadButton.disabled = false;
+    statusMessage.style.display = 'block';
+    statusMessage.textContent = 'Preparing download...';
+    
+    // Get the current upload type with fallback
+    const type = uploadType || 'staff';
+    
+    // Use the correct template type
+    const templateType = type === 'staff' ? 'staff' : 'student';
+    debugLog(`Using template type: ${templateType}`);
+    
+    // Update UI during download
+    const downloadButton = document.getElementById('download-template');
+    let originalText = '';
+    if (downloadButton) {
+      originalText = downloadButton.textContent;
+      downloadButton.textContent = 'Opening Template...';
+      downloadButton.disabled = true;
+    }
+    
+    // EXPLICIT URL CONSTRUCTION - avoid string concatenation issues
+    // Make sure we have /api/ in the path
+    let baseUrl = API_BASE_URL;
+    debugLog(`Starting with base URL: ${baseUrl}`);
+    
+    if (!baseUrl.endsWith('/')) baseUrl += '/';
+    if (!baseUrl.includes('/api/')) {
+      // If it doesn't have /api/ but has /api at the end, add the trailing slash
+      if (baseUrl.endsWith('/api')) {
+        baseUrl += '/';
+      } 
+      // If it doesn't have /api at all, add it
+      else if (!baseUrl.endsWith('/api/')) {
+        baseUrl = baseUrl.replace(/\/+$/, '') + '/api/';
       }
     }
+    
+    const templateUrl = `${baseUrl}templates/${templateType}`;
+    debugLog(`Template URL constructed: ${templateUrl}`, null, 'info');
+    
+    statusMessage.textContent = 'Opening download...';
+    
+    // Direct approach: Open in new tab (most reliable cross-browser)
+    window.open(templateUrl, '_blank');
+    
+    // Show success message
+    setTimeout(() => {
+      statusMessage.innerHTML = `
+        <span style="color:#2e7d32">✓ Template ready!</span> 
+        If download doesn't start automatically, 
+        <a href="${templateUrl}" target="_blank" style="font-weight:bold">click here</a>
+      `;
+      statusMessage.style.backgroundColor = '#e8f5e9';
+      
+      // Reset button
+      if (downloadButton) {
+        downloadButton.textContent = originalText;
+        downloadButton.disabled = false;
+      }
+    }, 1000);
+    
+  } catch (error) {
+    debugLog("Error in template download", error, 'error');
+    showError(`Template download failed: ${error.message}`);
+    
+    // Reset button if error
+    const downloadButton = document.getElementById('download-template');
+    if (downloadButton) {
+      downloadButton.textContent = `Download ${uploadType === 'staff' ? 'Staff' : 'Student'} Template`;
+      downloadButton.disabled = false;
+    }
   }
+}
   
   /**
    * Update the validation status UI
@@ -1368,64 +1431,115 @@ function downloadTemplateFile() {
    * Validate the CSV data
    * This function replaces the previous validation approach that had issues
    */
-  function validateCsvData() {
-    console.log('[VESPA Upload] Starting CSV validation');
-    
-    // Get the file input element
-    const fileInput = document.getElementById('csv-file');
-    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
-      showError('Please select a CSV file first');
-      return;
-    }
-    
-    const file = fileInput.files[0];
-    
-    // Update UI to show validation in progress
-    updateValidationStatus('Validating data...', 'processing');
-    
-    // Prepare the file for upload
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    // Determine the correct endpoint based on upload type
-    const endpoint = uploadType === 'staff' ? 'staff' : 'students';
-    const validationUrl = `${API_BASE_URL}/${endpoint}/validate`;
-    
-    console.log('[VESPA Upload] Validation URL:', validationUrl);
-    
-    // Make the API request
-    fetch(validationUrl, {
-      method: 'POST',
-      body: formData
-    })
-    .then(handleApiResponse)
-    .then(result => {
-      console.log('[VESPA Upload] Validation result:', result);
-      
-      // Store the validation results in the global variable
-      validationResults = result;
-      
-      // Display the results in the UI
-      displayValidationResults(result);
-      
-      // Update the validation status
-      const statusType = result.isValid ? 'success' : 'error';
-      const statusMessage = result.isValid ? 
-        'Validation successful' : 
-        `Validation completed with ${result.errors?.length || 0} errors`;
-      updateValidationStatus(statusMessage, statusType);
-    })
-    .catch(error => {
-      console.error('[VESPA Upload] Validation error:', error);
-      
-      // Show error message
-      updateValidationStatus(`Validation failed: ${error.message}`, 'error');
-      showError(`CSV validation failed: ${error.message}`);
-      
-      // Reset validation results
-      validationResults = null;
-    });
+  /**
+ * Validate the CSV data
+ * This function replaces the previous validation approach that had issues
+ */
+function validateCsvData() {
+  debugLog("Starting CSV validation", null, 'info');
+  
+  // Get the file input element
+  const fileInput = document.getElementById('csv-file');
+  if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+    debugLog("No file selected", null, 'error');
+    showError('Please select a CSV file first');
+    return;
   }
+  
+  const file = fileInput.files[0];
+  debugLog(`Selected file: ${file.name} (${file.size} bytes)`);
+  
+  // Update UI to show validation in progress
+  updateValidationStatus('Validating data...', 'processing');
+  
+  // Prepare the file for upload
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  // Determine the correct endpoint based on upload type
+  const endpoint = uploadType === 'staff' ? 'staff' : 'students';
+  
+  // EXPLICIT URL CONSTRUCTION
+  let baseUrl = API_BASE_URL;
+  debugLog(`Starting with base URL: ${baseUrl}`);
+  
+  if (!baseUrl.endsWith('/')) baseUrl += '/';
+  if (!baseUrl.includes('/api/')) {
+    // If it doesn't have /api/ but has /api at the end, add the trailing slash
+    if (baseUrl.endsWith('/api')) {
+      baseUrl += '/';
+    } 
+    // If it doesn't have /api at all, add it
+    else if (!baseUrl.endsWith('/api/')) {
+      baseUrl = baseUrl.replace(/\/+$/, '') + '/api/';
+    }
+  }
+  
+  const validationUrl = `${baseUrl}${endpoint}/validate`;
+  debugLog(`Validation URL constructed: ${validationUrl}`, null, 'info');
+  
+  // Make the API request with detailed logging
+  debugLog(`Sending validation request for ${file.name}`);
+  
+  // Log request details before sending
+  debugLog("Request details:", {
+    method: 'POST',
+    url: validationUrl,
+    fileSize: file.size,
+    fileName: file.name,
+    fileType: file.type
+  });
+  
+  fetch(validationUrl, {
+    method: 'POST',
+    body: formData
+  })
+  .then(response => {
+    debugLog(`Validation response status: ${response.status} ${response.statusText}`);
+    // Always try to get response body for better error details
+    return response.json().then(data => {
+      if (!response.ok) {
+        // If we have error details in the response, use them
+        const errorMessage = data?.message || data?.error || `API error: ${response.status}`;
+        throw new Error(errorMessage);
+      }
+      return data;
+    }).catch(err => {
+      if (!response.ok) {
+        // If we couldn't parse JSON but response is not OK
+        throw new Error(`API responded with status: ${response.status}`);
+      }
+      // If we couldn't parse JSON but response is OK (should not happen)
+      throw new Error(`Could not parse response: ${err.message}`);
+    });
+  })
+  .then(result => {
+    debugLog("Validation result received:", result, 'success');
+    
+    // Store the validation results in the global variable
+    validationResults = result;
+    
+    // Display the results in the UI
+    displayValidationResults(result);
+    
+    // Update the validation status
+    const statusType = result.isValid ? 'success' : 'error';
+    const statusMessage = result.isValid ? 
+      'Validation successful' : 
+      `Validation completed with ${result.errors?.length || 0} errors`;
+    updateValidationStatus(statusMessage, statusType);
+  })
+  .catch(error => {
+    debugLog("Validation error:", error, 'error');
+    
+    // Show error message
+    updateValidationStatus(`Validation failed: ${error.message}`, 'error');
+    showError(`CSV validation failed: ${error.message}`);
+    
+    // Reset validation results
+    validationResults = null;
+  });
+}
   
   /**
    * Display validation results in the UI
@@ -1857,130 +1971,156 @@ function prevStep() {
   }
   
   /**
-   * Bind events for each step after rendering
-   * This ensures event handlers are properly attached
-   */
-  function bindStepEvents() {
-    // Determine which step we're on
-    const isSuperUser = VESPA_UPLOAD_CONFIG?.userRole === 'Super User';
-    const contentStep = !isSuperUser && currentStep > 1 ? currentStep + 1 : currentStep;
-    
-    switch (contentStep) {
-      case 1: // Select upload type
-        // No special event binding needed
-        break;
-        
-      case 2: // Select school
-        const searchButton = document.getElementById('search-button');
-        const schoolSelect = document.getElementById('school-select');
-        
-        if (searchButton) {
-          searchButton.addEventListener('click', () => {
-            const searchTerm = document.getElementById('school-search')?.value || '';
-            searchSchools(searchTerm);
-          });
-        }
-        
-        if (schoolSelect) {
-          schoolSelect.addEventListener('change', () => {
-            const selected = schoolSelect.options[schoolSelect.selectedIndex];
-            if (selected.value) {
-              document.getElementById('school-details').style.display = 'block';
-              document.getElementById('school-name').textContent = selected.text;
-              document.getElementById('admin-email').textContent = selected.dataset.email || 'N/A';
-              document.getElementById('account-type').textContent = selected.dataset.type || 'N/A';
-            } else {
-              document.getElementById('school-details').style.display = 'none';
-            }
-          });
-        }
-        break;
-        
-      case 3: // Upload CSV
-        const downloadBtn = document.getElementById('download-template');
-        const fileInput = document.getElementById('csv-file');
-        
-        if (downloadBtn) {
-          downloadBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            downloadTemplateFile();
-          });
-        }
-        
-        if (fileInput) {
-          fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-              const fileNameElement = document.createElement('div');
-              fileNameElement.className = 'vespa-file-selected';
-              fileNameElement.innerHTML = '<strong>Selected file:</strong> ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
-              fileNameElement.style.marginTop = '10px';
-              fileNameElement.style.padding = '8px';
-              fileNameElement.style.backgroundColor = '#f0f7ff';
-              fileNameElement.style.borderRadius = '4px';
-              
-              // Replace existing notification or add new one
-              const existingNotification = document.querySelector('.vespa-file-selected');
-              if (existingNotification) {
-                existingNotification.parentNode.replaceChild(fileNameElement, existingNotification);
-              } else {
-                document.querySelector('.vespa-file-input').after(fileNameElement);
-              }
-              
-              console.log('[VESPA Upload] File selected:', file.name, file.size);
-            }
-          });
-        }
-        break;
-        
-      case 4: // Validate Data
-        const validateButton = document.getElementById('validate-button');
-        if (validateButton) {
-          validateButton.addEventListener('click', (e) => {
-            e.preventDefault();
-            validateCsvData();
-          });
-        }
-        break;
-        
-      case 5: // Process Upload
-        const processButton = document.getElementById('process-button');
-        if (processButton) {
-          processButton.addEventListener('click', (e) => {
-            e.preventDefault();
-            processUploadData();
-          });
-        }
-        break;
-        
-      case 6: // Results
-        const downloadResultsBtn = document.getElementById('download-results');
-        const newUploadBtn = document.getElementById('start-new-upload');
-        
-        if (downloadResultsBtn) {
-          downloadResultsBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            downloadResults();
-          });
-        }
-        
-        if (newUploadBtn) {
-          newUploadBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            // Reset the wizard and go back to step 1
-            currentStep = 1;
-            uploadType = null;
-            validationResults = null;
-            processingResults = null;
-            selectedSchool = null;
-            isProcessing = false;
-            
-            renderStep(1);
-          });
-        }
-        break;
-    }
+ * Bind events for each step after rendering
+ * This ensures event handlers are properly attached
+ */
+function bindStepEvents() {
+  debugLog("Binding events for step " + currentStep);
+  
+  // Use event delegation for dynamic elements
+  const contentDiv = document.querySelector('.vespa-upload-content');
+  if (!contentDiv) {
+    debugLog("Could not find content div for event binding", null, 'error');
+    return;
   }
+  
+  // Determine which step we're on
+  const isSuperUser = VESPA_UPLOAD_CONFIG?.userRole === 'Super User';
+  const contentStep = !isSuperUser && currentStep > 1 ? currentStep + 1 : currentStep;
+  
+  debugLog(`Binding events for content step ${contentStep}, isSuperUser: ${isSuperUser}`);
+  
+  switch (contentStep) {
+    case 1: // Select upload type
+      // No special event binding needed
+      debugLog("Step 1: No special bindings required");
+      break;
+      
+    case 2: // Select school
+      const searchButton = document.getElementById('search-button');
+      const schoolSelect = document.getElementById('school-select');
+      
+      if (searchButton) {
+        debugLog("Found search button, attaching event");
+        searchButton.addEventListener('click', () => {
+          const searchTerm = document.getElementById('school-search')?.value || '';
+          debugLog(`Search button clicked with term: ${searchTerm}`);
+          searchSchools(searchTerm);
+        });
+      }
+      
+      if (schoolSelect) {
+        debugLog("Found school select, attaching event");
+        schoolSelect.addEventListener('change', () => {
+          const selected = schoolSelect.options[schoolSelect.selectedIndex];
+          debugLog(`School selected: ${selected.text}`);
+          if (selected.value) {
+            document.getElementById('school-details').style.display = 'block';
+            document.getElementById('school-name').textContent = selected.text;
+            document.getElementById('admin-email').textContent = selected.dataset.email || 'N/A';
+            document.getElementById('account-type').textContent = selected.dataset.type || 'N/A';
+          } else {
+            document.getElementById('school-details').style.display = 'none';
+          }
+        });
+      }
+      break;
+      
+    case 3: // Upload CSV
+      const downloadBtn = document.getElementById('download-template');
+      const fileInput = document.getElementById('csv-file');
+      
+      if (downloadBtn) {
+        debugLog("Found download button, attaching event");
+        downloadBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          debugLog("Download template button clicked");
+          downloadTemplateFile();
+        });
+      }
+      
+      if (fileInput) {
+        debugLog("Found file input, attaching event");
+        fileInput.addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          if (file) {
+            debugLog(`File selected: ${file.name} (${file.size} bytes)`);
+            const fileNameElement = document.createElement('div');
+            fileNameElement.className = 'vespa-file-selected';
+            fileNameElement.innerHTML = '<strong>Selected file:</strong> ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+            fileNameElement.style.marginTop = '10px';
+            fileNameElement.style.padding = '8px';
+            fileNameElement.style.backgroundColor = '#f0f7ff';
+            fileNameElement.style.borderRadius = '4px';
+            
+            // Replace existing notification or add new one
+            const existingNotification = document.querySelector('.vespa-file-selected');
+            if (existingNotification) {
+              existingNotification.parentNode.replaceChild(fileNameElement, existingNotification);
+            } else {
+              document.querySelector('.vespa-file-input').after(fileNameElement);
+            }
+          }
+        });
+      }
+      break;
+      
+    case 4: // Validate Data
+      const validateButton = document.getElementById('validate-button');
+      if (validateButton) {
+        debugLog("Found validate button, attaching event");
+        validateButton.addEventListener('click', (e) => {
+          e.preventDefault();
+          debugLog("Validate button clicked");
+          validateCsvData();
+        });
+      }
+      break;
+      
+    case 5: // Process Upload
+      const processButton = document.getElementById('process-button');
+      if (processButton) {
+        debugLog("Found process button, attaching event");
+        processButton.addEventListener('click', (e) => {
+          e.preventDefault();
+          debugLog("Process button clicked");
+          processUploadData();
+        });
+      }
+      break;
+      
+    case 6: // Results
+      const downloadResultsBtn = document.getElementById('download-results');
+      const newUploadBtn = document.getElementById('start-new-upload');
+      
+      if (downloadResultsBtn) {
+        debugLog("Found download results button, attaching event");
+        downloadResultsBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          downloadResults();
+        });
+      }
+      
+      if (newUploadBtn) {
+        debugLog("Found new upload button, attaching event");
+        newUploadBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          // Reset the wizard and go back to step 1
+          currentStep = 1;
+          uploadType = null;
+          validationResults = null;
+          processingResults = null;
+          selectedSchool = null;
+          isProcessing = false;
+          
+          renderStep(1);
+        });
+      }
+      break;
+  }
+  
+  debugLog("Event binding complete for step " + contentStep);
+}
   
   /**
    * Search for schools
@@ -2710,7 +2850,7 @@ function prevStep() {
   // This is critical for the system to be able to call our functions
   window.initializeUploadBridge = initializeUploadBridge;
   window.showTemplateModal = showTemplateModal;
-  window.downloadTemplate = downloadTemplate;
+  window.downloadTemplate = downloadTemplateFile;
   window.showModal = showModal;
   window.closeModal = closeModal;
   
@@ -2720,3 +2860,4 @@ function prevStep() {
   // Log initialization completion
   debugLog("VESPA Upload Bridge script loaded and ready")
       
+
