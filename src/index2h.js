@@ -1462,13 +1462,73 @@ function downloadTemplateFile() {
             
             // Map each cell to its header
             headers.forEach((header, index) => {
-              rowObj[header] = index < row.length ? row[index].trim() : '';
+              let value = index < row.length ? row[index].trim() : '';
+              
+              // Special handling for Staff Type field - automatically convert spaces to commas
+              if (header === 'Staff Type' && value && uploadType === 'staff') {
+                // Replace spaces between staff type codes with commas if they're not already comma-separated
+                if (value.includes(' ') && !value.includes(',')) {
+                  // Check if it matches valid staff types with spaces
+                  const staffTypePattern = /\b(admin|tut|sub|hoy|hod|gen)\b\s+\b(admin|tut|sub|hoy|hod|gen)\b/;
+                  if (staffTypePattern.test(value)) {
+                    const originalValue = value;
+                    value = value.replace(/\s+/g, ',');
+                    debugLog(`Row ${i}: Fixed Staff Type format from "${originalValue}" to "${value}"`, null, 'info');
+                  }
+                }
+              }
+              
+              rowObj[header] = value;
             });
             
             data.push(rowObj);
           }
           
+          // Enhanced debugging - log each row in detail
           debugLog(`CSV parsed successfully: ${data.length} data rows found`, null, 'success');
+          
+          // Log detailed information about each row for debugging
+          data.forEach((row, i) => {
+            const rowNumber = i + 1;
+            debugLog(`Detail for Row ${rowNumber}:`, row, 'info');
+            
+            // Special validation for staff uploads
+            if (uploadType === 'staff') {
+              // Check for common issues
+              const issues = [];
+              
+              // Required fields for staff
+              ['First Name', 'Last Name', 'Email Address', 'Staff Type'].forEach(field => {
+                if (!row[field] || row[field].trim() === '') {
+                  issues.push(`Missing required field: ${field}`);
+                }
+              });
+              
+              // Email format check
+              if (row['Email Address'] && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row['Email Address'])) {
+                issues.push('Invalid email format');
+              }
+              
+              // Staff Type format check
+              if (row['Staff Type']) {
+                const validTypes = ['admin', 'tut', 'sub', 'hoy', 'hod', 'gen'];
+                const types = row['Staff Type'].split(',').map(t => t.trim());
+                
+                types.forEach(type => {
+                  if (!validTypes.includes(type)) {
+                    issues.push(`Invalid staff type: "${type}"`);
+                  }
+                });
+              }
+              
+              if (issues.length > 0) {
+                debugLog(`⚠️ Issues in Row ${rowNumber}:`, issues, 'warn');
+              } else {
+                debugLog(`✅ Row ${rowNumber} looks valid`, null, 'success');
+              }
+            }
+          });
+          
           resolve(data);
         } catch (error) {
           debugLog(`CSV parsing error: ${error.message}`, error, 'error');
@@ -1484,6 +1544,112 @@ function downloadTemplateFile() {
       // Read the file as text
       reader.readAsText(file);
     });
+  }
+
+  /**
+   * Local validation of CSV data to catch common errors before sending to API
+   * @param {Array} csvData - Parsed CSV data
+   * @returns {Object} Validation results object
+   */
+  function validateLocally(csvData) {
+    const results = {
+      isValid: true,
+      errors: [],
+      total: csvData.length
+    };
+    
+    // Only continue if we have data
+    if (!csvData || !csvData.length) {
+      results.isValid = false;
+      results.errors.push({
+        row: 'N/A',
+        type: 'CSV Error',
+        message: 'CSV file is empty or has no valid data rows'
+      });
+      return results;
+    }
+    
+    debugLog(`Validating ${csvData.length} rows locally`, null, 'info');
+    
+    // Check required fields based on upload type
+    csvData.forEach((row, index) => {
+      const rowNum = index + 1;
+      
+      if (uploadType === 'staff') {
+        // Required fields for staff
+        const requiredFields = ['Title', 'First Name', 'Last Name', 'Email Address', 'Staff Type'];
+        
+        requiredFields.forEach(field => {
+          if (!row[field] || row[field].trim() === '') {
+            results.isValid = false;
+            results.errors.push({
+              row: rowNum,
+              type: 'Missing Field',
+              field: field,
+              message: `Row ${rowNum}: Required field "${field}" is missing or empty`
+            });
+          }
+        });
+        
+        // Email format check
+        if (row['Email Address'] && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row['Email Address'])) {
+          results.isValid = false;
+          results.errors.push({
+            row: rowNum,
+            type: 'Format Error',
+            field: 'Email Address',
+            message: `Row ${rowNum}: Email format is invalid (${row['Email Address']})`
+          });
+        }
+        
+        // Staff Type format check
+        if (row['Staff Type']) {
+          const validTypes = ['admin', 'tut', 'sub', 'hoy', 'hod', 'gen'];
+          const types = row['Staff Type'].split(',').map(t => t.trim());
+          
+          types.forEach(type => {
+            if (!validTypes.includes(type)) {
+              results.isValid = false;
+              results.errors.push({
+                row: rowNum,
+                type: 'Invalid Value',
+                field: 'Staff Type',
+                message: `Row ${rowNum}: Invalid staff type code "${type}" - must be one of: admin, tut, sub, hoy, hod, gen`
+              });
+            }
+          });
+        }
+      } else if (uploadType === 'student') {
+        // Required fields for students
+        const requiredFields = ['Lastname', 'Student Email', 'Group', 'Year Gp', 'Level', 'Tutor'];
+        
+        requiredFields.forEach(field => {
+          if (!row[field] || row[field].trim() === '') {
+            results.isValid = false;
+            results.errors.push({
+              row: rowNum,
+              type: 'Missing Field',
+              field: field,
+              message: `Row ${rowNum}: Required field "${field}" is missing or empty`
+            });
+          }
+        });
+        
+        // Level value check
+        if (row['Level'] && !['Level 2', 'Level 3'].includes(row['Level'])) {
+          results.isValid = false;
+          results.errors.push({
+            row: rowNum,
+            type: 'Invalid Value',
+            field: 'Level',
+            message: `Row ${rowNum}: Level must be "Level 2" or "Level 3", got "${row['Level']}"`
+          });
+        }
+      }
+    });
+    
+    // Return the validation results
+    return results;
   }
 
   /**
@@ -1518,37 +1684,83 @@ function downloadTemplateFile() {
     // Parse the CSV file
     parseCSVFile(file)
       .then(csvData => {
+        // First validate locally to catch common errors
+        const localValidation = validateLocally(csvData);
+        
+        // If we have local validation errors, show those without making API call
+        if (!localValidation.isValid) {
+          debugLog(`Local validation found ${localValidation.errors.length} errors`, localValidation.errors, 'warn');
+          
+          // Store the validation results
+          validationResults = {
+            ...localValidation,
+            csvData: csvData,
+            source: 'local'
+          };
+          
+          // Display results in UI
+          displayValidationResults(validationResults);
+          
+          // Update status
+          updateValidationStatus(`Validation completed with ${localValidation.errors.length} errors`, 'error');
+          
+          // Show a message that we're using local validation
+          showError(`Found ${localValidation.errors.length} validation issues. Fix these before sending to API.`);
+          
+          return Promise.reject(new Error('Local validation failed'));
+        }
+        
+        // No local errors - proceed with API validation
+        debugLog("Local validation passed, proceeding with API validation");
+        
         // Determine the correct endpoint based on upload type
         const endpoint = uploadType === 'staff' ? 'staff' : 'students';
         
-        // EXPLICIT URL CONSTRUCTION
+        // EXPLICIT URL CONSTRUCTION - now with more logging and safety
         let baseUrl = API_BASE_URL;
-        debugLog(`Starting with base URL: ${baseUrl}`);
+        debugLog(`API Base URL (original): "${baseUrl}"`, null, 'info');
         
-        if (!baseUrl.endsWith('/')) baseUrl += '/';
+        if (!baseUrl.endsWith('/')) {
+          baseUrl += '/';
+          debugLog(`Added trailing slash: "${baseUrl}"`, null, 'info');
+        }
+        
         if (!baseUrl.includes('/api/')) {
           // If it doesn't have /api/ but has /api at the end, add the trailing slash
           if (baseUrl.endsWith('/api')) {
             baseUrl += '/';
+            debugLog(`Added trailing slash after /api: "${baseUrl}"`, null, 'info');
           } 
           // If it doesn't have /api at all, add it
           else if (!baseUrl.endsWith('/api/')) {
+            const originalUrl = baseUrl;
             baseUrl = baseUrl.replace(/\/+$/, '') + '/api/';
+            debugLog(`Added /api/ path: "${originalUrl}" -> "${baseUrl}"`, null, 'info');
           }
         }
         
         const validationUrl = `${baseUrl}${endpoint}/validate`;
-        debugLog(`Validation URL constructed: ${validationUrl}`, null, 'info');
+        debugLog(`Final validation URL: "${validationUrl}"`, null, 'info');
         
-        // Make the API request with detailed logging
-        debugLog(`Sending validation request with ${csvData.length} rows of parsed CSV data`);
+        // Create a formatted log of all CSV data being sent
+        let logOutput = '=== CSV DATA BEING SENT TO API ===\n';
+        csvData.forEach((row, idx) => {
+          logOutput += `Row ${idx+1}: ${JSON.stringify(row)}\n`;
+        });
+        logOutput += '==============================';
+        console.log(logOutput);
         
-        // Log some sample data for debugging
-        if (csvData.length > 0) {
-          debugLog("First row sample:", csvData[0]);
-        }
+        // Send the parsed CSV data as JSON with detailed request logging
+        debugLog(`Sending API validation request to ${validationUrl}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          bodyLength: JSON.stringify({ csvData }).length,
+          rowCount: csvData.length
+        }, 'info');
         
-        // Send the parsed CSV data as JSON
         return fetch(validationUrl, {
           method: 'POST',
           headers: {
@@ -1714,20 +1926,64 @@ function downloadTemplateFile() {
     errorsContainer.innerHTML = '';
     
     if (errors && errors.length > 0) {
-      errors.forEach(error => {
+      // Log the raw error data for debugging
+      debugLog("Raw validation errors:", errors, 'warn');
+      
+      errors.forEach((error, index) => {
         const errorDiv = document.createElement('div');
         errorDiv.className = 'vespa-error-item';
         
+        // Try to extract data from various error formats
+        // Sometimes we get raw strings, sometimes objects
+        let errorType = 'Validation Error';
+        let errorRow = '';
+        let errorField = '';
+        let errorMessage = '';
+        let errorData = '';
+        
+        if (typeof error === 'string') {
+          // Handle string errors
+          errorMessage = error;
+        } else {
+          // Handle object errors with different possible structures
+          errorRow = error.row || '';
+          errorType = error.type || 'Validation Error';
+          errorField = error.field || '';
+          errorMessage = error.message || error.error || 'Unknown error';
+          
+          // If we have data that failed validation, show it
+          if (error.data) {
+            errorData = typeof error.data === 'object' ? 
+              JSON.stringify(error.data) : error.data;
+          }
+        }
+        
+        // Special handling for 'unknown error' to give more context
+        if (errorMessage === 'Unknown error' || !errorMessage) {
+          errorMessage = `Unspecified validation error. This might be related to:
+            <ul>
+              <li>Staff Type format - must use commas between multiple types (e.g., "tut,sub" not "tut sub")</li>
+              <li>Email format - must be a valid email address</li>
+              <li>Missing required fields - First Name, Last Name, Email Address, Staff Type are required</li>
+            </ul>
+            Row ${index + 1} in the preview table may contain the issue.`;
+        }
+        
         let errorContent = `
-          <div class="vespa-error-title">Row ${error.row || 'Unknown'}: ${error.type || 'Validation Error'}</div>
+          <div class="vespa-error-title">Row ${errorRow || index + 1}: ${errorType}</div>
           <div class="vespa-error-details">
         `;
         
-        if (error.field) {
-          errorContent += `<div class="vespa-error-field">Field: ${error.field}</div>`;
+        if (errorField) {
+          errorContent += `<div class="vespa-error-field">Field: ${errorField}</div>`;
         }
         
-        errorContent += `<div class="vespa-error-message">${error.message || error.error || 'Unknown error'}</div>`;
+        errorContent += `<div class="vespa-error-message">${errorMessage}</div>`;
+        
+        if (errorData) {
+          errorContent += `<div class="vespa-error-data">Data: ${errorData}</div>`;
+        }
+        
         errorContent += '</div>';
         
         errorDiv.innerHTML = errorContent;
@@ -2925,6 +3181,4 @@ function bindStepEvents() {
   
   // Log initialization completion
   debugLog("VESPA Upload Bridge script loaded and ready")
-
-      
 
