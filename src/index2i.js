@@ -1467,12 +1467,24 @@ function downloadTemplateFile() {
               // Special handling for Staff Type field - automatically convert spaces to commas
               if (header === 'Staff Type' && value && uploadType === 'staff') {
                 // Replace spaces between staff type codes with commas if they're not already comma-separated
-                if (value.includes(' ') && !value.includes(',')) {
-                  // Check if it matches valid staff types with spaces
-                  const staffTypePattern = /\b(admin|tut|sub|hoy|hod|gen)\b\s+\b(admin|tut|sub|hoy|hod|gen)\b/;
-                  if (staffTypePattern.test(value)) {
+                if (value.includes(' ')) {
+                  // More aggressive space to comma conversion for staff types
+                  const validTypes = ['admin', 'tut', 'sub', 'hoy', 'hod', 'gen'];
+                  
+                  // First try to split by spaces and check if each part is a valid type
+                  const parts = value.split(/\s+/);
+                  let allPartsValid = true;
+                  
+                  for (const part of parts) {
+                    if (!validTypes.includes(part)) {
+                      allPartsValid = false;
+                      break;
+                    }
+                  }
+                  
+                  if (allPartsValid) {
                     const originalValue = value;
-                    value = value.replace(/\s+/g, ',');
+                    value = parts.join(',');
                     debugLog(`Row ${i}: Fixed Staff Type format from "${originalValue}" to "${value}"`, null, 'info');
                   }
                 }
@@ -2397,6 +2409,25 @@ function bindStepEvents() {
           validateCsvData();
         });
       }
+      
+      // Add event handler for the "Validate" button in the actions area (bottom right)
+      const nextStepValidateButton = document.getElementById('vespa-next-button');
+      if (nextStepValidateButton && nextStepValidateButton.textContent === 'Validate') {
+        debugLog("Found next step validate button, attaching event");
+        nextStepValidateButton.addEventListener('click', (e) => {
+          e.preventDefault();
+          debugLog("Next step validate button clicked");
+          // If validation was successful, allow moving to the next step
+          if (validationResults && validationResults.isValid) {
+            debugLog("Validation was successful, proceeding to next step");
+            currentStep++;
+            renderStep(currentStep);
+          } else {
+            // If not validated yet or validation failed, run validation
+            validateCsvData();
+          }
+        });
+      }
       break;
       
     case 5: // Process Upload
@@ -3181,4 +3212,5 @@ function bindStepEvents() {
   
   // Log initialization completion
   debugLog("VESPA Upload Bridge script loaded and ready")
+
 
