@@ -22,6 +22,7 @@ let processingResults = null;
 let selectedSchool = null; // For super user mode
 let isProcessing = false;
 let activeModal = null; // Track the active modal
+let selectedFile = null; // Store the selected file between steps
 
 /**
  * Debug logging helper
@@ -782,6 +783,7 @@ debugLog(`Rendering step ${step}, User is SuperUser: ${isSuperUser}`, {
           fileInput.addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
+                selectedFile = file;  // <- Add this line
               const fileNameElement = document.createElement('div');
               fileNameElement.className = 'vespa-file-selected';
               fileNameElement.innerHTML = '<strong>Selected file:</strong> ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
@@ -1438,16 +1440,24 @@ function downloadTemplateFile() {
 function validateCsvData() {
   debugLog("Starting CSV validation", null, 'info');
   
-  // Get the file input element
-  const fileInput = document.getElementById('csv-file');
-  if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
-    debugLog("No file selected", null, 'error');
-    showError('Please select a CSV file first');
-    return;
-  }
+  let file = null;
   
-  const file = fileInput.files[0];
-  debugLog(`Selected file: ${file.name} (${file.size} bytes)`);
+  // First try to use the stored selectedFile
+  if (selectedFile) {
+    file = selectedFile;
+    debugLog(`Using previously stored file: ${file.name} (${file.size} bytes)`);
+  } 
+  // If no stored file, try to get it from the current file input
+  else {
+    const fileInput = document.getElementById('csv-file');
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+      debugLog("No file selected", null, 'error');
+      showError('Please select a CSV file first');
+      return;
+    }
+    file = fileInput.files[0];
+    debugLog(`Selected file from input: ${file.name} (${file.size} bytes)`);
+  }
   
   // Update UI to show validation in progress
   updateValidationStatus('Validating data...', 'processing');
@@ -2044,7 +2054,9 @@ function bindStepEvents() {
         fileInput.addEventListener('change', (e) => {
           const file = e.target.files[0];
           if (file) {
-            debugLog(`File selected: ${file.name} (${file.size} bytes)`);
+            // Store the file in the global variable
+            selectedFile = file;
+            debugLog(`File selected and stored globally: ${file.name} (${file.size} bytes)`);
             const fileNameElement = document.createElement('div');
             fileNameElement.className = 'vespa-file-selected';
             fileNameElement.innerHTML = '<strong>Selected file:</strong> ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
