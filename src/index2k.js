@@ -1185,10 +1185,11 @@ function renderSelectTypeStep() {
     }
     
     // Determine status class based on processing results
-    const statusClass = processingResults && processingResults.errors && processingResults.errors.length > 0 ? 'warning' : 'success';
-    const statusIcon = statusClass === 'success' ? '✅' : '⚠️';
-    const statusText = statusClass === 'success' ? 'Upload Completed Successfully' : 'Upload Completed with Warnings';
-    
+const statusClass = !processingResults ? 'error' : 
+(processingResults.errors && processingResults.errors.length > 0) ? 'warning' : 'success';
+const statusIcon = statusClass === 'success' ? '✅' : '⚠️';
+const statusText = !processingResults ? 'Upload Failed' :
+statusClass === 'success' ? 'Upload Completed Successfully' : 'Upload Completed with Warnings';
     // Only show these fields if we have actual results
     const totalRecords = processingResults ? processingResults.total || 0 : 0;
     const successCount = processingResults ? processingResults.successful || 0 : 0;
@@ -2082,8 +2083,33 @@ function downloadTemplateFile() {
     };
     
     // Determine the correct endpoint
-    const endpoint = uploadType === 'staff' ? 'staff' : 'students';
-    const processUrl = `${API_BASE_URL}/${endpoint}/process`;
+const endpoint = uploadType === 'staff' ? 'staff' : 'students';
+
+// EXPLICIT URL CONSTRUCTION - ensure /api/ is in the path
+let baseUrl = API_BASE_URL;
+console.log('[VESPA Upload] API Base URL (original):', baseUrl);
+
+if (!baseUrl.endsWith('/')) {
+  baseUrl += '/';
+  console.log('[VESPA Upload] Added trailing slash:', baseUrl);
+}
+
+if (!baseUrl.includes('/api/')) {
+  // If it doesn't have /api/ but has /api at the end, add the trailing slash
+  if (baseUrl.endsWith('/api')) {
+    baseUrl += '/';
+    console.log('[VESPA Upload] Added trailing slash after /api:', baseUrl);
+  } 
+  // If it doesn't have /api at all, add it
+  else if (!baseUrl.endsWith('/api/')) {
+    const originalUrl = baseUrl;
+    baseUrl = baseUrl.replace(/\/+$/, '') + '/api/';
+    console.log(`[VESPA Upload] Added /api/ path: ${originalUrl} -> ${baseUrl}`);
+  }
+}
+
+const processUrl = `${baseUrl}${endpoint}/process`;
+console.log('[VESPA Upload] Final process URL:', processUrl);
     
     console.log('[VESPA Upload] Process URL:', processUrl);
     console.log('[VESPA Upload] Process options:', requestData.options);
@@ -2141,6 +2167,10 @@ function downloadTemplateFile() {
         processButton.disabled = false;
         processButton.textContent = 'Try Again';
       }
+// IMPORTANT: Don't proceed to next step if there's an error
+return; // Make sure we don't advance to the next step on error
+
+
     });
   }
   
