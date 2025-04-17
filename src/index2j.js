@@ -1836,38 +1836,62 @@ function downloadTemplateFile() {
   function displayValidationResults(results) {
     if (!results) return;
     
-    // Show the validation results section
-    const resultsDiv = document.querySelector('.vespa-validation-results');
-    if (resultsDiv) {
-      resultsDiv.style.display = 'block';
+    try {
+      debugLog("Displaying validation results:", results, 'info');
+      
+      // Show the validation results section
+      const resultsDiv = document.querySelector('.vespa-validation-results');
+      if (resultsDiv) {
+        resultsDiv.style.display = 'block';
+      }
+      
+      // Update counts with null checks
+      const totalRecordsEl = document.getElementById('total-records');
+      const validRecordsEl = document.getElementById('valid-records');
+      const errorCountEl = document.getElementById('error-count');
+      
+      if (totalRecordsEl) {
+        totalRecordsEl.textContent = results.total || results.csvData?.length || 0;
+      }
+      
+      if (validRecordsEl) {
+        validRecordsEl.textContent = results.isValid ? 
+          (results.total || results.csvData?.length || 0) : 
+          ((results.total || results.csvData?.length || 0) - (results.errors?.length || 0));
+      }
+      
+      if (errorCountEl) {
+        errorCountEl.textContent = results.errors?.length || 0;
+      }
+      
+      // Also update processing step summary if it exists
+      const totalRecordsSummary = document.getElementById('total-records-summary');
+      const validRecordsSummary = document.getElementById('valid-records-summary');
+      
+      if (totalRecordsSummary) {
+        totalRecordsSummary.textContent = results.total || results.csvData?.length || 0;
+      }
+      
+      if (validRecordsSummary) {
+        validRecordsSummary.textContent = results.isValid ? 
+          (results.total || results.csvData?.length || 0) : 
+          ((results.total || results.csvData?.length || 0) - (results.errors?.length || 0));
+      }
+      
+      // Display CSV preview if we're on the validation step
+      if (document.querySelector('.vespa-preview-table')) {
+        displayCsvPreview(results.csvData || []);
+      }
+      
+      // Display errors if there are any and the container exists
+      const errorsContainer = document.getElementById('validation-errors');
+      if (errorsContainer) {
+        displayValidationErrors(results.errors || []);
+      }
+    } catch (error) {
+      debugLog("Error displaying validation results:", error, 'error');
+      // Don't let display errors break the app flow
     }
-    
-    // Update counts
-    document.getElementById('total-records').textContent = results.total || results.csvData?.length || 0;
-    document.getElementById('valid-records').textContent = results.isValid ? 
-      (results.total || results.csvData?.length || 0) : 
-      ((results.total || results.csvData?.length || 0) - (results.errors?.length || 0));
-    document.getElementById('error-count').textContent = results.errors?.length || 0;
-    
-    // Also update processing step summary if it exists
-    const totalRecordsSummary = document.getElementById('total-records-summary');
-    const validRecordsSummary = document.getElementById('valid-records-summary');
-    
-    if (totalRecordsSummary) {
-      totalRecordsSummary.textContent = results.total || results.csvData?.length || 0;
-    }
-    
-    if (validRecordsSummary) {
-      validRecordsSummary.textContent = results.isValid ? 
-        (results.total || results.csvData?.length || 0) : 
-        ((results.total || results.csvData?.length || 0) - (results.errors?.length || 0));
-    }
-    
-    // Display CSV preview
-    displayCsvPreview(results.csvData || []);
-    
-    // Display errors
-    displayValidationErrors(results.errors || []);
   }
   
   /**
@@ -3212,5 +3236,4 @@ function bindStepEvents() {
   
   // Log initialization completion
   debugLog("VESPA Upload Bridge script loaded and ready")
-
 
