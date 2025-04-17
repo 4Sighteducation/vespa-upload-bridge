@@ -1430,80 +1430,134 @@ function downloadTemplateFile() {
   }
   
   /**
+   * Parse a CSV file into an array of objects
+   * @param {File} file - The CSV file to parse
+   * @returns {Promise<Array<Object>>} - Promise resolving to array of row objects
+   */
+  function parseCSVFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = function(event) {
+        try {
+          const csvText = event.target.result;
+          debugLog("CSV file read successfully", null, 'info');
+          
+          // Split into rows and handle different line endings
+          const rows = csvText.split(/\r\n|\n|\r/).filter(row => row.trim() !== '');
+          
+          if (rows.length === 0) {
+            reject(new Error('CSV file is empty'));
+            return;
+          }
+          
+          // Get headers from first row
+          const headers = rows[0].split(',').map(header => header.trim());
+          
+          // Parse data rows
+          const data = [];
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i].split(',');
+            const rowObj = {};
+            
+            // Map each cell to its header
+            headers.forEach((header, index) => {
+              rowObj[header] = index < row.length ? row[index].trim() : '';
+            });
+            
+            data.push(rowObj);
+          }
+          
+          debugLog(`CSV parsed successfully: ${data.length} data rows found`, null, 'success');
+          resolve(data);
+        } catch (error) {
+          debugLog(`CSV parsing error: ${error.message}`, error, 'error');
+          reject(error);
+        }
+      };
+      
+      reader.onerror = function() {
+        debugLog("Error reading CSV file", null, 'error');
+        reject(new Error('Error reading CSV file'));
+      };
+      
+      // Read the file as text
+      reader.readAsText(file);
+    });
+  }
+
+  /**
    * Validate the CSV data
    * This function replaces the previous validation approach that had issues
    */
-  /**
- * Validate the CSV data
- * This function replaces the previous validation approach that had issues
- */
-function validateCsvData() {
-  debugLog("Starting CSV validation", null, 'info');
-  
-  let file = null;
-  
-  // First try to use the stored selectedFile
-  if (selectedFile) {
-    file = selectedFile;
-    debugLog(`Using previously stored file: ${file.name} (${file.size} bytes)`);
-  } 
-  // If no stored file, try to get it from the current file input
-  else {
-    const fileInput = document.getElementById('csv-file');
-    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
-      debugLog("No file selected", null, 'error');
-      showError('Please select a CSV file first');
-      return;
-    }
-    file = fileInput.files[0];
-    debugLog(`Selected file from input: ${file.name} (${file.size} bytes)`);
-  }
-  
-  // Update UI to show validation in progress
-  updateValidationStatus('Validating data...', 'processing');
-  
-  // Prepare the file for upload
-  const formData = new FormData();
-  formData.append('file', file);
-  
-  // Determine the correct endpoint based on upload type
-  const endpoint = uploadType === 'staff' ? 'staff' : 'students';
-  
-  // EXPLICIT URL CONSTRUCTION
-  let baseUrl = API_BASE_URL;
-  debugLog(`Starting with base URL: ${baseUrl}`);
-  
-  if (!baseUrl.endsWith('/')) baseUrl += '/';
-  if (!baseUrl.includes('/api/')) {
-    // If it doesn't have /api/ but has /api at the end, add the trailing slash
-    if (baseUrl.endsWith('/api')) {
-      baseUrl += '/';
+  function validateCsvData() {
+    debugLog("Starting CSV validation", null, 'info');
+    
+    let file = null;
+    
+    // First try to use the stored selectedFile
+    if (selectedFile) {
+      file = selectedFile;
+      debugLog(`Using previously stored file: ${file.name} (${file.size} bytes)`);
     } 
-    // If it doesn't have /api at all, add it
-    else if (!baseUrl.endsWith('/api/')) {
-      baseUrl = baseUrl.replace(/\/+$/, '') + '/api/';
+    // If no stored file, try to get it from the current file input
+    else {
+      const fileInput = document.getElementById('csv-file');
+      if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        debugLog("No file selected", null, 'error');
+        showError('Please select a CSV file first');
+        return;
+      }
+      file = fileInput.files[0];
+      debugLog(`Selected file from input: ${file.name} (${file.size} bytes)`);
     }
-  }
-  
-  const validationUrl = `${baseUrl}${endpoint}/validate`;
-  debugLog(`Validation URL constructed: ${validationUrl}`, null, 'info');
-  
-  // Make the API request with detailed logging
-  debugLog(`Sending validation request for ${file.name}`);
-  
-  // Log request details before sending
-  debugLog("Request details:", {
-    method: 'POST',
-    url: validationUrl,
-    fileSize: file.size,
-    fileName: file.name,
-    fileType: file.type
-  });
-  
-  fetch(validationUrl, {
-    method: 'POST',
-    body: formData
-  })
+    
+    // Update UI to show validation in progress
+    updateValidationStatus('Validating data...', 'processing');
+    
+    // Parse the CSV file
+    parseCSVFile(file)
+      .then(csvData => {
+        // Determine the correct endpoint based on upload type
+        const endpoint = uploadType === 'staff' ? 'staff' : 'students';
+        
+        // EXPLICIT URL CONSTRUCTION
+        let baseUrl = API_BASE_URL;
+        debugLog(`Starting with base URL: ${baseUrl}`);
+        
+        if (!baseUrl.endsWith('/')) baseUrl += '/';
+        if (!baseUrl.includes('/api/')) {
+          // If it doesn't have /api/ but has /api at the end, add the trailing slash
+          if (baseUrl.endsWith('/api')) {
+            baseUrl += '/';
+          } 
+          // If it doesn't have /api at all, add it
+          else if (!baseUrl.endsWith('/api/')) {
+            baseUrl = baseUrl.replace(/\/+$/, '') + '/api/';
+          }
+        }
+        
+        const validationUrl = `${baseUrl}${endpoint}/validate`;
+        debugLog(`Validation URL constructed: ${validationUrl}`, null, 'info');
+        
+        // Make the API request with detailed logging
+        debugLog(`Sending validation request with ${csvData.length} rows of parsed CSV data`);
+        
+        // Log some sample data for debugging
+        if (csvData.length > 0) {
+          debugLog("First row sample:", csvData[0]);
+        }
+        
+        // Send the parsed CSV data as JSON
+        return fetch(validationUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({ csvData })
+        });
+      })
   .then(response => {
     debugLog(`Validation response status: ${response.status} ${response.statusText}`);
     // Always try to get response body for better error details
@@ -2871,5 +2925,6 @@ function bindStepEvents() {
   
   // Log initialization completion
   debugLog("VESPA Upload Bridge script loaded and ready")
+
       
 
