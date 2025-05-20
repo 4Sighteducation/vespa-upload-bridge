@@ -240,8 +240,22 @@ function closeModal() {
  * Add CSS styles to the page
  */
 function addStyles() {
-  // Function implementation is in the styles file
-  // This is just a placeholder to maintain proper function ordering
+  // Create a style element
+  const existingLink = document.getElementById('vespa-upload-styles');
+  if (existingLink) {
+    // Styles already added or being managed externally, perhaps by another version
+    debugLog("VESPA Upload styles link already exists.", null, 'info');
+    return;
+  }
+
+  const linkElement = document.createElement('link');
+  linkElement.id = 'vespa-upload-styles';
+  linkElement.rel = 'stylesheet';
+  linkElement.type = 'text/css';
+  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2.css';
+  
+  document.head.appendChild(linkElement);
+  debugLog("Dynamically linked external CSS: " + linkElement.href, null, 'info');
 }
 
 /**
@@ -1511,102 +1525,75 @@ function downloadTemplateFile() {
           const csvText = event.target.result;
           debugLog("CSV file read successfully", null, 'info');
           
-          // Split into rows and handle different line endings
-          const rows = csvText.split(/\r\n|\n|\r/).filter(row => row.trim() !== '');
-          
-          if (rows.length === 0) {
-            reject(new Error('CSV file is empty'));
+          // Robust CSV parsing
+          const rowsData = []; // Store arrays of strings (parsed rows)
+          let currentRow = [];
+          let inQuotes = false;
+          let value = "";
+
+          for (let i = 0; i < csvText.length; i++) {
+            const char = csvText[i];
+
+            if (char === '"') { // Check for quote
+              if (inQuotes && i + 1 < csvText.length && csvText[i+1] === '"') {
+                // Handle escaped quote (two double quotes)
+                value += '"';
+                i++; // Skip next quote
+              } else {
+                inQuotes = !inQuotes; // Toggle inQuotes state
+              }
+            } else if (char === ',' && !inQuotes) {
+              currentRow.push(value); // Don't trim yet, headers might need spaces
+              value = "";
+            } else if ((char === '\r' || char === '\n') && !inQuotes) {
+              // End of line
+              if (csvText[i] === '\r' && csvText[i+1] === '\n') { // CRLF
+                i++; // Skip LF
+              }
+              currentRow.push(value); // Add last value of the row
+              if (currentRow.length > 0 && currentRow.some(cell => cell.trim() !== "")) { // Only add non-empty rows
+                  rowsData.push(currentRow);
+              }
+              currentRow = [];
+              value = "";
+            } else {
+              value += char;
+            }
+          }
+          // Add the last value and row if any (e.g., if file doesn't end with newline)
+          currentRow.push(value);
+          if (currentRow.length > 0 && currentRow.some(cell => cell.trim() !== "")) {
+             rowsData.push(currentRow);
+          }
+
+          if (rowsData.length === 0) {
+            reject(new Error('CSV file is empty or contains no data'));
             return;
           }
           
-          // Get headers from first row
-          const headers = rows[0].split(',').map(header => header.trim());
+          // Get headers from first row, trimming them now
+          const headers = rowsData[0].map(header => header.trim());
           
           // Parse data rows
           const data = [];
-          for (let i = 1; i < rows.length; i++) {
-            const row = rows[i].split(',');
+          for (let i = 1; i < rowsData.length; i++) {
+            const rowArray = rowsData[i];
             const rowObj = {};
             
-            // Map each cell to its header
             headers.forEach((header, index) => {
-              let value = index < row.length ? row[index].trim() : '';
-              
-              // Special handling for Staff Type field - automatically convert spaces to commas
-              if (header === 'Staff Type' && value && uploadType === 'staff') {
-                // Replace spaces between staff type codes with commas if they're not already comma-separated
-                if (value.includes(' ')) {
-                  // More aggressive space to comma conversion for staff types
-                  const validTypes = ['admin', 'tut', 'sub', 'hoy', 'hod', 'gen'];
-                  
-                  // First try to split by spaces and check if each part is a valid type
-                  const parts = value.split(/\s+/);
-                  let allPartsValid = true;
-                  
-                  for (const part of parts) {
-                    if (!validTypes.includes(part)) {
-                      allPartsValid = false;
-                      break;
-                    }
-                  }
-                  
-                  if (allPartsValid) {
-                    const originalValue = value;
-                    value = parts.join(',');
-                    debugLog(`Row ${i}: Fixed Staff Type format from "${originalValue}" to "${value}"`, null, 'info');
-                  }
-                }
-              }
-              
-              rowObj[header] = value;
+              // Trim individual cell values here
+              let cellValue = index < rowArray.length ? rowArray[index].trim() : '';
+              rowObj[header] = cellValue;
             });
             
             data.push(rowObj);
           }
           
-          // Enhanced debugging - log each row in detail
           debugLog(`CSV parsed successfully: ${data.length} data rows found`, null, 'success');
           
-          // Log detailed information about each row for debugging
           data.forEach((row, i) => {
             const rowNumber = i + 1;
-            debugLog(`Detail for Row ${rowNumber}:`, row, 'info');
-            
-            // Special validation for staff uploads
-            if (uploadType === 'staff') {
-              // Check for common issues
-              const issues = [];
-              
-              // Required fields for staff
-              ['First Name', 'Last Name', 'Email Address', 'Staff Type'].forEach(field => {
-                if (!row[field] || row[field].trim() === '') {
-                  issues.push(`Missing required field: ${field}`);
-                }
-              });
-              
-              // Email format check
-              if (row['Email Address'] && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row['Email Address'])) {
-                issues.push('Invalid email format');
-              }
-              
-              // Staff Type format check
-              if (row['Staff Type']) {
-                const validTypes = ['admin', 'tut', 'sub', 'hoy', 'hod', 'gen'];
-                const types = row['Staff Type'].split(',').map(t => t.trim());
-                
-                types.forEach(type => {
-                  if (!validTypes.includes(type)) {
-                    issues.push(`Invalid staff type: "${type}"`);
-                  }
-                });
-              }
-              
-              if (issues.length > 0) {
-                debugLog(`⚠️ Issues in Row ${rowNumber}:`, issues, 'warn');
-              } else {
-                debugLog(`✅ Row ${rowNumber} looks valid`, null, 'success');
-              }
-            }
+            debugLog(`Parsed Row ${rowNumber} data:`, row, 'info');
           });
           
           resolve(data);
@@ -1621,7 +1608,6 @@ function downloadTemplateFile() {
         reject(new Error('Error reading CSV file'));
       };
       
-      // Read the file as text
       reader.readAsText(file);
     });
   }
@@ -2636,696 +2622,6 @@ function bindStepEvents() {
     showSuccess('School search completed');
   }
   
-  /**
-   * Add CSS styles for the wizard
-   * This is an extensive function that adds all the CSS styles to the page
-   */
-  function addStyles() {
-    // Create a style element
-    const styleElement = document.createElement('style');
-    
-    // Add the styles
-    styleElement.textContent = `
-      /* VESPA Upload Wizard Styles */
-      .vespa-upload-wizard {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        max-width: 900px;
-        margin: 0 auto;
-        background: #fff;
-        border-radius: 8px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        padding: 24px;
-        color: #333;
-      }
-      
-      .vespa-upload-header {
-        text-align: center;
-        margin-bottom: 24px;
-      }
-      
-      .vespa-upload-header h1 {
-        color: #007bff;
-        margin: 0 0 8px 0;
-        font-size: 28px;
-      }
-      
-      .vespa-upload-steps {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 32px;
-        position: relative;
-      }
-      
-      .vespa-upload-steps::before {
-        content: '';
-        position: absolute;
-        top: 24px;
-        left: 0;
-        right: 0;
-        height: 2px;
-        background: #e0e0e0;
-        z-index: 1;
-      }
-      
-      .vespa-step {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        position: relative;
-        z-index: 2;
-      }
-      
-      .vespa-step-number {
-        width: 48px;
-        height: 48px;
-        border-radius: 50%;
-        background: #e0e0e0;
-        color: #666;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: bold;
-        margin-bottom: 8px;
-        transition: all 0.3s;
-      }
-      
-      .vespa-step.active .vespa-step-number {
-        background: #007bff;
-        color: #fff;
-      }
-      
-      .vespa-step.completed .vespa-step-number {
-        background: #28a745;
-        color: #fff;
-      }
-      
-      .vespa-step-title {
-        font-size: 14px;
-        color: #666;
-        text-align: center;
-      }
-      
-      .vespa-step.active .vespa-step-title {
-        color: #007bff;
-        font-weight: bold;
-      }
-      
-      .vespa-step.completed .vespa-step-title {
-        color: #28a745;
-      }
-      
-      .vespa-upload-content {
-        min-height: 400px;
-        margin-bottom: 24px;
-      }
-      
-      .vespa-upload-content h2 {
-        color: #007bff;
-        margin: 0 0 16px 0;
-      }
-      
-      .vespa-upload-actions {
-        display: flex;
-        justify-content: space-between;
-        padding-top: 16px;
-        border-top: 1px solid #e0e0e0;
-      }
-      
-      .vespa-button {
-        padding: 10px 20px;
-        border-radius: 4px;
-        border: none;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s;
-      }
-      
-      .vespa-button.primary {
-        background: #007bff;
-        color: #fff;
-      }
-      
-      .vespa-button.primary:hover {
-        background: #0069d9;
-      }
-      
-      .vespa-button.secondary {
-        background: #f8f9fa;
-        color: #212529;
-        border: 1px solid #ddd;
-      }
-      
-      .vespa-button.secondary:hover {
-        background: #e2e6ea;
-      }
-      
-      .vespa-button-container {
-        margin-top: 20px;
-        text-align: center;
-      }
-      
-      /* Error and info boxes */
-      .vespa-error {
-        background: #fff5f5;
-        border-left: 4px solid #f44336;
-        padding: 12px 16px;
-        margin-bottom: 16px;
-        display: flex;
-        align-items: center;
-      }
-      
-      .vespa-error-icon {
-        margin-right: 12px;
-        font-size: 20px;
-      }
-      
-      .vespa-info-box {
-        background: #f8f9fa;
-        border-radius: 4px;
-        padding: 16px;
-        margin: 16px 0;
-        display: flex;
-      }
-      
-      .vespa-info-box.warning {
-        background: #fff3cd;
-        border-left: 4px solid #ffc107;
-      }
-      
-      .vespa-info-icon {
-        margin-right: 12px;
-        font-size: 24px;
-      }
-      
-      /* Success messages */
-      .vespa-success {
-        background: #d4edda;
-        border-left: 4px solid #28a745;
-        padding: 12px 16px;
-        margin-bottom: 16px;
-        display: flex;
-        align-items: center;
-      }
-      
-      .vespa-success-icon {
-        margin-right: 12px;
-        font-size: 20px;
-      }
-      
-      /* Upload options */
-      .vespa-upload-options {
-        display: flex;
-        gap: 16px;
-        margin: 24px 0;
-      }
-      
-      .vespa-upload-option {
-        flex: 1;
-        position: relative;
-      }
-      
-      .vespa-upload-option input[type="radio"] {
-        position: absolute;
-        opacity: 0;
-        width: 0;
-        height: 0;
-      }
-      
-      .vespa-upload-option label {
-        display: block;
-        padding: 16px;
-        border: 2px solid #e0e0e0;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: all 0.2s;
-      }
-      
-      .vespa-upload-option input[type="radio"]:checked + label {
-        border-color: #007bff;
-        background: #f0f7ff;
-      }
-      
-      .vespa-option-icon {
-        font-size: 32px;
-        margin-bottom: 8px;
-        text-align: center;
-      }
-      
-      .vespa-option-title {
-        font-weight: bold;
-        margin-bottom: 8px;
-        text-align: center;
-      }
-      
-      .vespa-option-description {
-        font-size: 14px;
-        color: #666;
-      }
-      
-      /* File upload styles */
-      .vespa-file-input {
-        position: relative;
-        margin-bottom: 24px;
-      }
-      
-      .vespa-file-input input[type="file"] {
-        position: absolute;
-        width: 100%;
-        height: 100%;
-        opacity: 0;
-        cursor: pointer;
-      }
-      
-      .vespa-file-input label {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 48px 24px;
-        border: 2px dashed #ccc;
-        border-radius: 8px;
-        background: #f8f9fa;
-        transition: all 0.2s;
-      }
-      
-      .vespa-file-input:hover label {
-        background: #e9ecef;
-        border-color: #adb5bd;
-      }
-      
-      .vespa-file-icon {
-        font-size: 48px;
-        margin-bottom: 16px;
-      }
-      
-      .vespa-file-text {
-        text-align: center;
-        color: #666;
-      }
-      
-      /* Table styles */
-      .vespa-preview-table {
-        width: 100%;
-        overflow-x: auto;
-      }
-      
-      .vespa-preview-table table {
-        width: 100%;
-        border-collapse: collapse;
-      }
-      
-      .vespa-preview-table th,
-      .vespa-preview-table td {
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        text-align: left;
-      }
-      
-      .vespa-preview-table th {
-        background: #f2f2f2;
-        font-weight: bold;
-      }
-      
-      .vespa-preview-table .vespa-placeholder {
-        text-align: center;
-        color: #999;
-        padding: 32px;
-      }
-      
-      /* Results styles */
-      .vespa-results-status {
-        display: flex;
-        align-items: center;
-        padding: 16px;
-        border-radius: 8px;
-        margin-bottom: 24px;
-      }
-      
-      .vespa-results-status.success {
-        background: #d4edda;
-        color: #155724;
-      }
-      
-      .vespa-results-status.warning {
-        background: #fff3cd;
-        color: #856404;
-      }
-      
-      .vespa-results-status.error {
-        background: #f8d7da;
-        color: #721c24;
-      }
-      
-      .vespa-status-icon {
-        font-size: 32px;
-        margin-right: 16px;
-      }
-      
-      .vespa-status-text {
-        font-weight: bold;
-      }
-      
-      .vespa-summary-details {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-        gap: 16px;
-        margin-bottom: 24px;
-      }
-      
-      .vespa-summary-item {
-        background: #f8f9fa;
-        padding: 12px;
-        border-radius: 4px;
-      }
-      
-      .vespa-summary-label {
-        font-weight: bold;
-        margin-bottom: 4px;
-      }
-      
-      .vespa-validation-badge {
-        display: inline-block;
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-size: 12px;
-      }
-      
-      .vespa-validation-badge.success {
-        background: #d4edda;
-        color: #155724;
-      }
-      
-      .vespa-validation-badge.error {
-        background: #f8d7da;
-        color: #721c24;
-      }
-      
-      /* Modal styles */
-      .vespa-modal-backdrop {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 9999;
-        animation: fadeIn 0.3s ease;
-      }
-      
-      .vespa-modal {
-        background-color: #fff;
-        border-radius: 8px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-        width: 90%;
-        max-width: 800px;
-        max-height: 90vh;
-        overflow-y: auto;
-        animation: zoomIn 0.3s ease;
-      }
-      
-      @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-      
-      @keyframes zoomIn {
-        from { opacity: 0; transform: scale(0.95); }
-        to { opacity: 1; transform: scale(1); }
-      }
-      
-      .vespa-modal-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 16px 20px;
-        border-bottom: 1px solid #e0e0e0;
-      }
-      
-      .vespa-modal-title {
-        font-size: 18px;
-        font-weight: 600;
-        color: #2c3e50;
-        margin: 0;
-      }
-      
-      .vespa-modal-close {
-        background: none;
-        border: none;
-        font-size: 20px;
-        cursor: pointer;
-        color: #6c757d;
-        line-height: 1;
-      }
-      
-      .vespa-modal-body {
-        padding: 20px;
-      }
-      
-      .vespa-modal-footer {
-        padding: 12px 20px;
-        border-top: 1px solid #e0e0e0;
-        display: flex;
-        justify-content: flex-end;
-        gap: 10px;
-      }
-      
-      /* Template modal specific styles */
-      .vespa-templates-container {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 20px;
-      }
-      
-      .vespa-template-card {
-        flex: 1;
-        min-width: 300px;
-        border: 1px solid #e0e0e0;
-        border-radius: 8px;
-        padding: 20px;
-        background-color: #fff;
-      }
-      
-      .vespa-template-card h3 {
-        margin-top: 0;
-        color: #2c3e50;
-        border-bottom: 1px solid #e0e0e0;
-        padding-bottom: 10px;
-      }
-      
-      .vespa-template-preview {
-        margin-bottom: 15px;
-        overflow-x: auto;
-      }
-      
-      .vespa-template-preview table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-      }
-      
-      .vespa-template-preview th,
-      .vespa-template-preview td {
-        padding: 6px 8px;
-        border: 1px solid #e0e0e0;
-        text-align: left;
-      }
-      
-      .vespa-template-preview th {
-        background-color: #f8f9fa;
-        font-weight: 500;
-      }
-      
-      .vespa-template-info {
-        margin-bottom: 15px;
-      }
-      
-      .vespa-template-info ul {
-        padding-left: 20px;
-        margin: 10px 0;
-      }
-      
-      .vespa-template-info li {
-        margin-bottom: 5px;
-        font-size: 14px;
-      }
-      
-      /* Debug panel styles */
-      #vespa-upload-debug-indicator {
-        position: fixed;
-        bottom: 10px;
-        right: 10px;
-        background-color: #007bff;
-        color: white;
-        padding: 5px 10px;
-        border-radius: 5px;
-        font-size: 12px;
-        font-family: monospace;
-        z-index: 9999;
-        opacity: 0.8;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-      }
-      
-      #vespa-debug-panel {
-        position: fixed;
-        bottom: 50px;
-        right: 10px;
-        background-color: #fff;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        padding: 15px;
-        width: 350px;
-        max-height: 500px;
-        overflow-y: auto;
-        z-index: 9998;
-        font-family: monospace;
-        font-size: 12px;
-      }
-      
-      /* School selection styles */
-      .vespa-school-search {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-bottom: 20px;
-      }
-      
-      .vespa-school-search input {
-        flex: 1;
-        min-width: 200px;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-      }
-      
-      .vespa-school-search select {
-        flex: 2;
-        min-width: 250px;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-      }
-      
-      .vespa-school-details {
-        margin-top: 20px;
-        padding: 15px;
-        background: #f8f9fa;
-        border-radius: 4px;
-      }
-      
-      .vespa-info-row {
-        display: flex;
-        margin-bottom: 8px;
-      }
-      
-      .vespa-info-label {
-        width: 120px;
-        font-weight: bold;
-      }
-      
-      /* Checkbox and input styles */
-      .vespa-checkbox-group {
-        margin-bottom: 12px;
-      }
-      
-      .vespa-input-group {
-        margin-bottom: 12px;
-      }
-      
-      .vespa-input-group label {
-        display: block;
-        margin-bottom: 4px;
-        font-weight: 500;
-      }
-      
-      .vespa-input-group input {
-        width: 100%;
-        padding: 8px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-      }
-      
-      /* Validation results specific styles */
-      .vespa-validation-container {
-        margin-bottom: 24px;
-      }
-      
-      .vespa-validation-status {
-        display: flex;
-        align-items: center;
-        padding: 16px;
-        border-radius: 8px;
-        margin-bottom: 16px;
-        background: #f8f9fa;
-      }
-      
-      .vespa-validation-status.processing {
-        background: #e0f7fa;
-        color: #0288d1;
-      }
-      
-      .vespa-validation-status.success {
-        background: #d4edda;
-        color: #155724;
-      }
-      
-      .vespa-validation-status.error {
-        background: #f8d7da;
-        color: #721c24;
-      }
-      
-      .vespa-validation-preview {
-        margin-top: 24px;
-      }
-      
-      .vespa-validation-preview h3 {
-        margin-bottom: 12px;
-      }
-      
-      .vespa-results-summary {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-        margin-bottom: 24px;
-      }
-      
-      .vespa-result-item {
-        background: #f8f9fa;
-        padding: 12px;
-        border-radius: 4px;
-        min-width: 150px;
-      }
-      
-      .vespa-result-label {
-        font-weight: bold;
-        margin-bottom: 4px;
-      }
-      
-      .vespa-result-value {
-        font-size: 18px;
-      }
-      
-      .vespa-errors-container {
-        margin-top: 16px;
-      }
-      
-      .vespa-error-item {
-        background: #f8f9fa;
-        border-left: 4px solid #f44336;
-        padding: 12px 16px;
-        margin-bottom: 8px;
-      }
-    `;
-    
-    // Add the style element to the document
-    document.head.appendChild(styleElement);
-  }
-  
   // === IMPORTANT: Expose functions to global scope ===
   // This is critical for the system to be able to call our functions
   window.initializeUploadBridge = initializeUploadBridge;
@@ -3339,5 +2635,4 @@ function bindStepEvents() {
   
   // Log initialization completion
   debugLog("VESPA Upload Bridge script loaded and ready")
-
 
