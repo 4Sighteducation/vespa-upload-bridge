@@ -2180,9 +2180,9 @@ function downloadTemplateFile() {
     let phase1ResponseData = null;
 
     try {
-      const constructedUrl_Phase1 = `${API_BASE_URL}/staff/process`;
+      const constructedUrl_Phase1 = `${API_BASE_URL}staff/process`; // Removed leading slash from endpoint path
       debugLog("Phase 1: API_BASE_URL being used:", API_BASE_URL);
-      debugLog("Phase 1: Constructed URL for /staff/process:", constructedUrl_Phase1);
+      debugLog("Phase 1: Constructed URL for staff/process:", constructedUrl_Phase1);
 
       const phase1Response = await $.ajax({
           url: constructedUrl_Phase1, // Use the logged variable
@@ -2219,9 +2219,9 @@ function downloadTemplateFile() {
           uploaderSchoolId: uploaderSchoolId
       });
 
-      const constructedUrl_Phase2 = `${API_BASE_URL}/staff/link-staff-admins`;
+      const constructedUrl_Phase2 = `${API_BASE_URL}staff/link-staff-admins`; // Removed leading slash
       debugLog("Phase 2: API_BASE_URL being used:", API_BASE_URL);
-      debugLog("Phase 2: Constructed URL for /staff/link-staff-admins:", constructedUrl_Phase2);
+      debugLog("Phase 2: Constructed URL for staff/link-staff-admins:", constructedUrl_Phase2);
 
       const phase2Response = await $.ajax({
           url: constructedUrl_Phase2, // Use the logged variable
@@ -2792,3 +2792,4 @@ function bindStepEvents() {
     }
     debugLog(`Status display updated: ${message}`, {type, showSpinner}, 'info');
   }
+
