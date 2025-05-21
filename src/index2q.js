@@ -2092,145 +2092,197 @@ function downloadTemplateFile() {
    * Process the upload data
    * This function handles the actual upload/processing of the validated data
    */
-  function processUploadData() {
-    console.log('[VESPA Upload] Starting data processing');
+  async function processUploadData() { // Changed to async
+    debugLog("Starting data processing (Two-Phase)", null, 'info');
     
     // Safety checks
-    if (!validationResults) {
-      showError('Please validate your data first');
+    if (!validationResults || !validationResults.csvData) { // csvData is where the actual data rows are
+      showError('Please validate your data first, or no valid data to process.');
+      debugLog("ProcessUploadData: No validationResults or validationResults.csvData", validationResults, 'error');
+      return;
+    }
+    
+    const filteredData = validationResults.csvData.filter(row => {
+      const email = row && row['Email Address'] ? row['Email Address'].trim() : '';
+      const firstName = row && row['First Name'] ? row['First Name'].trim() : '';
+      const lastName = row && row['Last Name'] ? row['Last Name'].trim() : '';
+      const staffType = row && row['Staff Type'] ? row['Staff Type'].trim() : '';
+      return email && (firstName || lastName) && staffType; // Basic check, server does more
+    });
+
+    if (filteredData.length === 0) {
+      showError('No valid data rows to process after filtering. Please check your CSV content.');
+      debugLog("ProcessUploadData: No valid data after filtering.", validationResults.csvData, 'warn');
       return;
     }
     
     // Get processing options
     const sendNotifications = document.getElementById('send-notifications')?.checked ?? true;
-    const runCalculators = document.getElementById('run-calculators')?.checked ?? true;
-    const notificationEmail = document.getElementById('notification-email')?.value || '';
+    const runCalculators = document.getElementById('run-calculators')?.checked ?? true; // For students
+    const notificationEmail = document.getElementById('notification-email')?.value || userContext?.userEmail || '';
     
+    const currentProcessingOptions = {
+      sendNotifications: sendNotifications,
+      runCalculators: runCalculators, // Relevant for student uploads primarily
+      notificationEmail: notificationEmail
+    };
+
     // Update UI to show processing in progress
-    const statusDiv = document.querySelector('.vespa-processing-status');
-    if (statusDiv) {
-      statusDiv.innerHTML = `
-        <div class="vespa-status-icon">⏳</div>
-        <div class="vespa-status-text">Processing data...</div>
-      `;
-    }
+    updateStatusDisplay('Processing step 1 of 2: Creating and updating staff accounts...', 'processing', true);
     
-    // Disable process button
-    const processButton = document.getElementById('process-button');
+    // Disable process button and next/prev
+    const processButton = document.getElementById('process-button') || document.getElementById('vespa-next-button');
+    const prevButton = document.getElementById('vespa-prev-button');
+    const nextButton = document.getElementById('vespa-next-button');
+
     if (processButton) {
       processButton.disabled = true;
       processButton.textContent = 'Processing...';
     }
+    if (prevButton) prevButton.disabled = true;
+    if (nextButton && nextButton !== processButton) nextButton.disabled = true;
     
-    // Set processing flag
     isProcessing = true;
     
-    // Prepare the request data
-    const requestData = {
-      csvData: validationResults.csvData,
-      options: {
-        sendNotifications: sendNotifications,
-        runCalculators: runCalculators,
-        notificationEmail: notificationEmail
-      },
-      // Add user context to identify the school/customer
-      context: {
+    const uploaderContextForAPI = { // Ensure this context is correctly populated
         userId: userContext?.userId || null,
-        schoolId: selectedSchool?.schoolId || userContext?.schoolId || null,
-        customerId: selectedSchool?.customerId || userContext?.customerId || null
-      }
+        // For school selection, selectedSchool is an object { schoolId, customerId, name }
+        // For non-superusers, these might come from userContext directly if populated by Knack
+        schoolId: selectedSchool?.schoolId || userContext?.schoolId || null, 
+        customerId: selectedSchool?.customerId || userContext?.customerId || null,
+        // Pass other relevant context if needed by backend, e.g., uploader's role for permissions
+        userRole: userContext?.userRole || null 
     };
-    
-    // Determine the correct endpoint
-const endpoint = uploadType === 'staff' ? 'staff' : 'students';
 
-// EXPLICIT URL CONSTRUCTION - ensure /api/ is in the path
-let baseUrl = API_BASE_URL;
-console.log('[VESPA Upload] API Base URL (original):', baseUrl);
-
-if (!baseUrl.endsWith('/')) {
-  baseUrl += '/';
-  console.log('[VESPA Upload] Added trailing slash:', baseUrl);
-}
-
-if (!baseUrl.includes('/api/')) {
-  // If it doesn't have /api/ but has /api at the end, add the trailing slash
-  if (baseUrl.endsWith('/api')) {
-    baseUrl += '/';
-    console.log('[VESPA Upload] Added trailing slash after /api:', baseUrl);
-  } 
-  // If it doesn't have /api at all, add it
-  else if (!baseUrl.endsWith('/api/')) {
-    const originalUrl = baseUrl;
-    baseUrl = baseUrl.replace(/\/+$/, '') + '/api/';
-    console.log(`[VESPA Upload] Added /api/ path: ${originalUrl} -> ${baseUrl}`);
-  }
-}
-
-const processUrl = `${baseUrl}${endpoint}/process`;
-console.log('[VESPA Upload] Final process URL:', processUrl);
-    
-    console.log('[VESPA Upload] Process URL:', processUrl);
-    console.log('[VESPA Upload] Process options:', requestData.options);
-    
-    // Make the API request
-    fetch(processUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestData)
-    })
-    .then(handleApiResponse)
-    .then(result => {
-      console.log('[VESPA Upload] Processing result:', result);
-      
-      // Store the results
-      processingResults = result;
-      
-      // Update UI to show success
-      if (statusDiv) {
-        statusDiv.innerHTML = `
-          <div class="vespa-status-icon">✅</div>
-          <div class="vespa-status-text">Processing completed</div>
-        `;
-      }
-      
-      // Reset processing flag
-      isProcessing = false;
-      
-      // Move to results step
-      setTimeout(() => {
-        currentStep++;
-        renderStep(currentStep);
-      }, 1000);
-    })
-    .catch(error => {
-      console.error('[VESPA Upload] Processing error:', error);
-      
-      // Show error in UI
-      if (statusDiv) {
-        statusDiv.innerHTML = `
-          <div class="vespa-status-icon">❌</div>
-          <div class="vespa-status-text">Processing failed</div>
-        `;
-      }
-      
-      showError(`Processing failed: ${error.message}`);
-      
-      // Reset processing flag
-      isProcessing = false;
-      
-      // Re-enable process button
-      if (processButton) {
-        processButton.disabled = false;
-        processButton.textContent = 'Try Again';
-      }
-// IMPORTANT: Don't proceed to next step if there's an error
-return; // Make sure we don't advance to the next step on error
-
-
+    debugLog("Phase 1 Request Data:", {
+      csvData: filteredData, // Use filtered data
+      options: currentProcessingOptions,
+      context: uploaderContextForAPI
     });
+    
+    let phase1ResponseData = null;
+
+    try {
+      const phase1Response = await $.ajax({
+          url: `${API_BASE_URL}/staff/process`,
+          type: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({
+              csvData: filteredData, // Send the filtered data
+              options: currentProcessingOptions,
+              context: uploaderContextForAPI
+          }),
+          xhrFields: { withCredentials: true } // If your API needs cookies/auth headers
+      });
+
+      debugLog("Phase 1 Response:", phase1Response, 'success');
+      phase1ResponseData = phase1Response; // Store for later aggregation
+
+      if (!phase1Response.success || !phase1Response.results || !phase1Response.results.processedStaffDetails) {
+          throw new Error(phase1Response.message || 'Phase 1 processing failed to return expected details.');
+      }
+
+      updateStatusDisplay('Processing step 1 complete. Starting step 2: Connecting staff to Staff Admins...', 'processing', true);
+      
+      const processedStaffDetails = phase1Response.results.processedStaffDetails;
+      const vespaCustomerId = phase1Response.results.vespaCustomerId;
+      const uploaderSchoolId = phase1Response.results.uploaderSchoolId;
+
+      if (!vespaCustomerId || !uploaderSchoolId) {
+          throw new Error("Missing vespaCustomerId or uploaderSchoolId from Phase 1 for linking.");
+      }
+      
+      debugLog("Phase 2 Request Data:", {
+          vespaCustomerId: vespaCustomerId,
+          processedStaffDetails: processedStaffDetails,
+          uploaderSchoolId: uploaderSchoolId
+      });
+
+      const phase2Response = await $.ajax({
+          url: `${API_BASE_URL}/staff/link-staff-admins`,
+          type: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({
+              vespaCustomerId: vespaCustomerId,
+              processedStaffDetails: processedStaffDetails,
+              uploaderSchoolId: uploaderSchoolId
+          }),
+          xhrFields: { withCredentials: true }
+      });
+
+      debugLog("Phase 2 Response:", phase2Response, 'success');
+
+      // Aggregate results
+      // The 'processingResults' global variable will store the final combined outcome.
+      processingResults = {
+          phase1: phase1ResponseData.results,
+          phase2: phase2Response.results,
+          overallSuccess: phase1ResponseData.success && phase2Response.success,
+          // Consolidate errors for final display
+          errors: [
+              ...(phase1ResponseData.results.accountErrors || []), 
+              ...(phase2Response.results?.userLinkErrors || [])
+          ],
+          total: phase1ResponseData.results.totalRowsInCsv,
+          successful: phase1ResponseData.results.successfulAccounts, // Primarily from phase 1
+          created: phase1ResponseData.results.accountsCreated,
+          updated: phase1ResponseData.results.accountsUpdated,
+          linked: phase2Response.results?.successfulUserRoleLinks || 0,
+          linkingErrors: phase2Response.results?.userLinkErrors?.length || 0
+      };
+      
+      const finalMessage = processingResults.overallSuccess ? 
+          `All staff processed. Accounts: ${processingResults.successful}. Linked: ${processingResults.linked}.` :
+          `Processing finished with some issues. Accounts: ${processingResults.successful}, Linked: ${processingResults.linked}, Errors: ${processingResults.errors.length}.`;
+      
+      updateStatusDisplay(finalMessage, processingResults.overallSuccess ? 'success' : 'warning', false);
+      
+      isProcessing = false;
+      if (processButton) processButton.disabled = false; // Re-enable if needed for retry, or hide
+      if (prevButton) prevButton.disabled = false;
+      if (nextButton && nextButton !== processButton) nextButton.disabled = false;
+
+
+      setTimeout(() => {
+          currentStep++; // Move to results step
+          renderStep(currentStep);
+      }, 1500);
+
+    } catch (error) {
+      const errorMessage = error.responseJSON?.message || error.responseText || error.message || "An unknown error occurred during processing.";
+      debugLog("Processing Error (either phase):", { error, errorMessage }, 'error');
+      updateStatusDisplay(`Processing failed: ${errorMessage}`, 'error', false);
+      showError(`Processing failed: ${errorMessage}`);
+      
+      // Store partial results if Phase 1 completed
+      processingResults = {
+          phase1: phase1ResponseData ? phase1ResponseData.results : { accountErrors: [{ row: 'N/A', message: `Processing aborted before Phase 1 completion or Phase 1 failed: ${errorMessage}`}] },
+          phase2: null,
+          overallSuccess: false,
+          errors: [...(phase1ResponseData?.results?.accountErrors || []), { row: 'N/A', message: `Phase 2 did not run or failed: ${errorMessage}` }],
+          // Populate other fields as best as possible
+          total: phase1ResponseData?.results?.totalRowsInCsv || filteredData.length,
+          successful: phase1ResponseData?.results?.successfulAccounts || 0,
+          created: phase1ResponseData?.results?.accountsCreated || 0,
+          updated: phase1ResponseData?.results?.accountsUpdated || 0,
+          linked: 0,
+          linkingErrors: 0
+      };
+      
+      isProcessing = false;
+      if (processButton) {
+          processButton.disabled = false;
+          processButton.textContent = 'Retry Processing';
+      }
+      if (prevButton) prevButton.disabled = false;
+      if (nextButton && nextButton !== processButton) nextButton.disabled = false;
+
+      // Optionally, still go to results step to show partial failure
+      setTimeout(() => {
+          currentStep++; 
+          renderStep(currentStep); // Render results step even on failure to show details
+      }, 1500);
+    }
   }
   
   /**
@@ -2635,4 +2687,85 @@ function bindStepEvents() {
   
   // Log initialization completion
   debugLog("VESPA Upload Bridge script loaded and ready")
+
+  /**
+   * Update the general status display (e.g., during processing)
+   * @param {string} message - Status message to display
+   * @param {string} type - Status type (ready, processing, success, error, info)
+   * @param {boolean} showSpinner - Whether to show a spinner icon (defaults to true for 'processing')
+   */
+  function updateStatusDisplay(message, type = 'info', showSpinner = undefined) {
+    let statusDiv;
+    // Try to find the status display within the current step's content
+    if (currentStep === 4 && !VESPA_UPLOAD_CONFIG.userRole === 'Super User') { // Processing step for regular user
+      statusDiv = document.querySelector('.vespa-processing-status');
+    } else if (currentStep === 5 && VESPA_UPLOAD_CONFIG.userRole === 'Super User') { // Processing step for super user
+      statusDiv = document.querySelector('.vespa-processing-status');
+    } else {
+       // Fallback or if we need a more generic status update location later
+      statusDiv = document.getElementById('general-status-display'); 
+      if (!statusDiv) {
+          // Create one if it doesn't exist, perhaps at the top of .vespa-upload-content
+          const contentArea = document.querySelector('.vespa-upload-content');
+          if (contentArea) {
+              statusDiv = document.createElement('div');
+              statusDiv.id = 'general-status-display';
+              statusDiv.className = 'vespa-status-display-generic'; // Add a class for styling
+              contentArea.prepend(statusDiv);
+          }
+      }
+    }
+
+    if (!statusDiv) {
+      debugLog("Could not find status display element.", {message, type}, 'warn');
+      return;
+    }
+
+    let icon = 'ℹ️'; // Default for info
+    let className = 'info';
+    if (showSpinner === undefined) {
+      showSpinner = (type === 'processing');
+    }
+
+    switch (type) {
+      case 'processing':
+        icon = '⏳';
+        className = 'processing';
+        break;
+      case 'success':
+        icon = '✅';
+        className = 'success';
+        break;
+      case 'error':
+        icon = '❌';
+        className = 'error';
+        break;
+      case 'ready':
+        icon = '⏳'; // Or some other icon like a dot
+        className = 'ready';
+        break;
+      case 'info':
+      default:
+        icon = 'ℹ️';
+        className = 'info';
+        break;
+    }
+    
+    statusDiv.innerHTML = `
+      <div class="vespa-status-icon">${showSpinner ? '<div class="vespa-spinner"></div>' : icon}</div>
+      <div class="vespa-status-text">${message}</div>
+    `;
+    
+    // Update classes: remove old, add new
+    statusDiv.className = ''; // Clear existing specific type classes
+    statusDiv.classList.add('vespa-processing-status'); // Keep base class
+    if(document.getElementById('general-status-display') === statusDiv) statusDiv.classList.add('vespa-status-display-generic');
+
+
+    if (className) {
+      statusDiv.classList.add(className);
+    }
+    debugLog(`Status display updated: ${message}`, {type, showSpinner}, 'info');
+  }
+
 
