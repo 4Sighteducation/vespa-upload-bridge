@@ -372,6 +372,15 @@
   color: #721c24;
 }
 
+/* Added style for the centered summary message in results step */
+.vespa-results-summary.centered-summary {
+  text-align: center;
+  padding: 20px;
+  /* Inherits other .vespa-results-summary styles like gap, margin-bottom if not overridden */
+  /* If it should not be a grid, override display property */
+  display: block; /* Or any other appropriate display type if not grid */
+}
+
 /* Modal styles */
 .vespa-modal-backdrop {
   position: fixed;
