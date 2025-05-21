@@ -2154,7 +2154,7 @@ function downloadTemplateFile() {
         userRole: userContext?.userRole || null 
     };
 
-    debugLog("Phase 1 Request Data:", {
+    debugLog("Phase 1 Request Data Sent To API:", {
       csvData: filteredData, // Use filtered data
       options: currentProcessingOptions,
       context: uploaderContextForAPI
@@ -2163,8 +2163,12 @@ function downloadTemplateFile() {
     let phase1ResponseData = null;
 
     try {
+      const constructedUrl_Phase1 = `${API_BASE_URL}/staff/process`;
+      debugLog("Phase 1: API_BASE_URL being used:", API_BASE_URL);
+      debugLog("Phase 1: Constructed URL for /staff/process:", constructedUrl_Phase1);
+
       const phase1Response = await $.ajax({
-          url: `${API_BASE_URL}/staff/process`,
+          url: constructedUrl_Phase1, // Use the logged variable
           type: 'POST',
           contentType: 'application/json',
           data: JSON.stringify({
@@ -2192,14 +2196,18 @@ function downloadTemplateFile() {
           throw new Error("Missing vespaCustomerId or uploaderSchoolId from Phase 1 for linking.");
       }
       
-      debugLog("Phase 2 Request Data:", {
+      debugLog("Phase 2 Request Data Sent To API:", {
           vespaCustomerId: vespaCustomerId,
           processedStaffDetails: processedStaffDetails,
           uploaderSchoolId: uploaderSchoolId
       });
 
+      const constructedUrl_Phase2 = `${API_BASE_URL}/staff/link-staff-admins`;
+      debugLog("Phase 2: API_BASE_URL being used:", API_BASE_URL);
+      debugLog("Phase 2: Constructed URL for /staff/link-staff-admins:", constructedUrl_Phase2);
+
       const phase2Response = await $.ajax({
-          url: `${API_BASE_URL}/staff/link-staff-admins`,
+          url: constructedUrl_Phase2, // Use the logged variable
           type: 'POST',
           contentType: 'application/json',
           data: JSON.stringify({
@@ -2767,5 +2775,3 @@ function bindStepEvents() {
     }
     debugLog(`Status display updated: ${message}`, {type, showSpinner}, 'info');
   }
-
-
