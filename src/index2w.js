@@ -269,7 +269,7 @@ function addStyles() {
   linkElement.id = 'vespa-upload-styles';
   linkElement.rel = 'stylesheet';
   linkElement.type = 'text/css';
-  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2a.css';
+  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2b.css';
   
   document.head.appendChild(linkElement);
   debugLog("Dynamically linked external CSS: " + linkElement.href, null, 'info');
@@ -1271,32 +1271,42 @@ function renderSelectTypeStep() {
    * @returns {string} HTML for the step
    */
   function renderResultsStep() {
-    // Create the ALPS calculations HTML outside the template literal
-    let alpsCalculationsHtml = '';
-    if (uploadType === 'student' && processingResults && processingResults.alpsCalculationsPerformed) {
-      alpsCalculationsHtml = `
-        <div class="vespa-summary-item">
-          <div class="vespa-summary-label">ALPS Calculations:</div>
-          <div class="vespa-summary-value">${processingResults.alpsCalculationsPerformed} completed</div>
-        </div>
-      `;
+    let statusText = 'Processing Complete';
+    let statusClass = 'info'; // Default to info
+    let statusIcon = 'ℹ️';
+    let summaryHtml = '<p>Your upload is being processed in the background. You will receive an email with the detailed results shortly.</p>';
+
+    if (processingResults) {
+        if (processingResults.status === 'queued') {
+            statusText = 'Upload Queued for Background Processing';
+            statusClass = 'success';
+            statusIcon = '✅';
+            summaryHtml = `
+                <p>Your data upload (Job ID: <strong>${processingResults.jobId || 'N/A'}</strong>) has been successfully queued.</p>
+                <p>It will be processed in the background. You will receive a confirmation email with the detailed results once it's complete.</p>
+                <p>You can safely close this window.</p>
+            `;
+        } else if (processingResults.status === 'submission_failed') {
+            statusText = 'Upload Submission Failed';
+            statusClass = 'error';
+            statusIcon = '❌';
+            summaryHtml = `
+                <p>There was an error submitting your upload for processing.</p>
+                <p><strong>Error:</strong> ${processingResults.message || 'Unknown submission error.'}</p>
+                <p>Please try submitting the upload again. If the problem persists, contact support.</p>
+            `;
+        } else {
+            // This case would be if we somehow got here with old, non-queued results structure
+            // For now, keep a simplified message for unexpected states.
+            statusText = processingResults.overallSuccess ? 'Upload Processed (Details in Email)' : 'Upload Processed with Issues (Details in Email)';
+            statusClass = processingResults.overallSuccess ? 'success' : 'warning';
+            statusIcon = processingResults.overallSuccess ? '✅' : '⚠️';
+            summaryHtml = `<p>The upload process has finished. Please check your email for a detailed summary of the results.</p>`;
+        }
     }
     
-    // Determine status class based on processing results
-const statusClass = !processingResults ? 'error' : 
-(processingResults.errors && processingResults.errors.length > 0) ? 'warning' : 'success';
-const statusIcon = statusClass === 'success' ? '✅' : '⚠️';
-const statusText = !processingResults ? 'Upload Failed' :
-statusClass === 'success' ? 'Upload Completed Successfully' : 'Upload Completed with Warnings';
-    // Only show these fields if we have actual results
-    const totalRecords = processingResults ? processingResults.total || 0 : 0;
-    const successCount = processingResults ? processingResults.successful || 0 : 0;
-    const errorCount = processingResults && processingResults.errors ? processingResults.errors.length : 0;
-    const createdCount = processingResults ? processingResults.created || 0 : 0;
-    const updatedCount = processingResults ? processingResults.updated || 0 : 0;
-    
     return `
-      <h2>Upload Results</h2>
+      <h2>Upload Status</h2>
       
       <div class="vespa-results-container">
         <div class="vespa-results-status ${statusClass}">
@@ -1304,50 +1314,16 @@ statusClass === 'success' ? 'Upload Completed Successfully' : 'Upload Completed 
           <div class="vespa-status-text">${statusText}</div>
         </div>
         
-        <div class="vespa-results-summary">
-          <h3>Summary</h3>
-          <div class="vespa-summary-details">
-            <div class="vespa-summary-item">
-              <div class="vespa-summary-label">Upload Type:</div>
-              <div class="vespa-summary-value">${uploadType === 'staff' ? 'Staff' : 'Student'} Upload</div>
-            </div>
-            <div class="vespa-summary-item">
-              <div class="vespa-summary-label">Total Records:</div>
-              <div class="vespa-summary-value">${totalRecords}</div>
-            </div>
-            <div class="vespa-summary-item">
-              <div class="vespa-summary-label">Successfully Processed:</div>
-              <div class="vespa-summary-value">${successCount}</div>
-            </div>
-            <div class="vespa-summary-item">
-              <div class="vespa-summary-label">Errors:</div>
-              <div class="vespa-summary-value">${errorCount}</div>
-            </div>
-            <div class="vespa-summary-item">
-              <div class="vespa-summary-label">New Records Created:</div>
-              <div class="vespa-summary-value">${createdCount}</div>
-            </div>
-            <div class="vespa-summary-item">
-              <div class="vespa-summary-label">Records Updated:</div>
-              <div class="vespa-summary-value">${updatedCount}</div>
-            </div>
-            ${alpsCalculationsHtml}
-          </div>
+        <div class="vespa-results-summary centered-summary">
+          ${summaryHtml}
         </div>
         
         <div class="vespa-results-actions">
-          <button class="vespa-button secondary" id="download-results">Download Results CSV</button>
+          <!-- Download results button might be removed or disabled as results are emailed -->
+          <!-- <button class="vespa-button secondary" id="download-results" style="display: none;">Download Results CSV</button> -->
           <button class="vespa-button primary" id="start-new-upload">Start New Upload</button>
         </div>
         
-        ${errorCount > 0 ? `
-        <div class="vespa-results-details">
-          <h3>Error Details</h3>
-          <div class="vespa-errors-container" id="results-errors">
-            <!-- Error details will be populated here -->
-          </div>
-        </div>
-        ` : ''}
       </div>
     `;
   }
@@ -2110,206 +2086,142 @@ function downloadTemplateFile() {
    * This function handles the actual upload/processing of the validated data
    */
   async function processUploadData() { // Changed to async
-    debugLog("Starting data processing (Two-Phase)", null, 'info');
+    debugLog("Starting data processing (Background Job)", null, 'info');
     
     // Safety checks
-    if (!validationResults || !validationResults.csvData) { // csvData is where the actual data rows are
+    if (!validationResults || !validationResults.csvData) {
       showError('Please validate your data first, or no valid data to process.');
       debugLog("ProcessUploadData: No validationResults or validationResults.csvData", validationResults, 'error');
       return;
     }
     
+    // Filter data to ensure only rows with essential information are sent for processing
+    // This mirrors the initial filtering that was in the backend's Phase 1
     const filteredData = validationResults.csvData.filter(row => {
-      const email = row && row['Email Address'] ? row['Email Address'].trim() : '';
-      const firstName = row && row['First Name'] ? row['First Name'].trim() : '';
-      const lastName = row && row['Last Name'] ? row['Last Name'].trim() : '';
-      const staffType = row && row['Staff Type'] ? row['Staff Type'].trim() : '';
-      return email && (firstName || lastName) && staffType; // Basic check, server does more
+        const email = row && row['Email Address'] ? row['Email Address'].trim() : '';
+        const firstName = row && row['First Name'] ? row['First Name'].trim() : '';
+        const lastName = row && row['Last Name'] ? row['Last Name'].trim() : '';
+        const staffType = row && row['Staff Type'] ? row['Staff Type'].trim() : '';
+        // Ensure core fields for creating/identifying a user are present
+        return email && (firstName || lastName) && staffType;
     });
 
     if (filteredData.length === 0) {
-      showError('No valid data rows to process after filtering. Please check your CSV content.');
-      debugLog("ProcessUploadData: No valid data after filtering.", validationResults.csvData, 'warn');
+      showError('No valid data rows to process after filtering. Please check your CSV content for Email, Name, and Staff Type.');
+      debugLog("ProcessUploadData: No valid data after initial client-side filtering.", validationResults.csvData, 'warn');
       return;
     }
     
     // Get processing options
     const sendNotifications = document.getElementById('send-notifications')?.checked ?? true;
-    const runCalculators = document.getElementById('run-calculators')?.checked ?? true; // For students
     const notificationEmail = document.getElementById('notification-email')?.value || userContext?.userEmail || '';
     
     const currentProcessingOptions = {
       sendNotifications: sendNotifications,
-      runCalculators: runCalculators, // Relevant for student uploads primarily
       notificationEmail: notificationEmail
+      // runCalculators is not relevant for staff, will be handled for students
     };
 
-    // Update UI to show processing in progress
-    updateStatusDisplay('Processing step 1 of 2: Creating and updating staff accounts...', 'processing', true);
+    // Update UI to show processing request is being submitted
+    updateStatusDisplay('Submitting your data for background processing... Please wait.', 'processing', true);
     
-    // Disable process button and next/prev
     const processButton = document.getElementById('process-button') || document.getElementById('vespa-next-button');
     const prevButton = document.getElementById('vespa-prev-button');
     const nextButton = document.getElementById('vespa-next-button');
 
     if (processButton) {
       processButton.disabled = true;
-      processButton.textContent = 'Processing...';
+      processButton.textContent = 'Submitting...';
     }
     if (prevButton) prevButton.disabled = true;
     if (nextButton && nextButton !== processButton) nextButton.disabled = true;
     
     isProcessing = true;
     
-    const uploaderContextForAPI = { // Ensure this context is correctly populated
+    const uploaderContextForAPI = {
         userId: userContext?.userId || null,
-        // For school selection, selectedSchool is an object { schoolId, customerId, name }
-        // For non-superusers, these might come from userContext directly if populated by Knack
+        userEmail: userContext?.userEmail || null, // Added uploader email for notifications from worker
         schoolId: selectedSchool?.schoolId || userContext?.schoolId || null, 
         customerId: selectedSchool?.customerId || userContext?.customerId || null,
-        // Pass other relevant context if needed by backend, e.g., uploader's role for permissions
         userRole: userContext?.userRole || null 
     };
 
-    debugLog("Phase 1 Request Data Sent To API:", {
-      csvData: filteredData, // Use filtered data
+    debugLog("Data to be sent to /api/staff/process (enqueue):", {
+      csvData: filteredData,
       options: currentProcessingOptions,
       context: uploaderContextForAPI
     });
     
-    let phase1ResponseData = null;
-
     try {
-      const constructedUrl_Phase1 = `${API_BASE_URL}staff/process`; // Ensures no double slash if API_BASE_URL ends with /
-      debugLog("Phase 1: API_BASE_URL being used:", API_BASE_URL);
-      debugLog("Phase 1: Constructed URL for staff/process:", constructedUrl_Phase1);
+      const constructedUrl = `${API_BASE_URL}staff/process`;
+      debugLog("API call to enqueue job: POST " + constructedUrl);
 
-      const phase1Response = await $.ajax({
-          url: constructedUrl_Phase1, 
+      const response = await $.ajax({
+          url: constructedUrl, 
           type: 'POST',
           contentType: 'application/json',
           data: JSON.stringify({
-              csvData: filteredData, // Send the filtered data
+              csvData: filteredData, 
               options: currentProcessingOptions,
               context: uploaderContextForAPI
-          }),
-          xhrFields: { withCredentials: true } // If your API needs cookies/auth headers
-      });
-
-      debugLog("Phase 1 Response:", phase1Response, 'success');
-      phase1ResponseData = phase1Response; // Store for later aggregation
-
-      if (!phase1Response.success || !phase1Response.results || !phase1Response.results.processedStaffDetails) {
-          throw new Error(phase1Response.message || 'Phase 1 processing failed to return expected details.');
-      }
-
-      updateStatusDisplay('Processing step 1 complete. Starting step 2: Connecting staff to Staff Admins...', 'processing', true);
-      
-      const processedStaffDetails = phase1Response.results.processedStaffDetails;
-      const vespaCustomerId = phase1Response.results.vespaCustomerId;
-      const uploaderSchoolId = phase1Response.results.uploaderSchoolId;
-      const newlyCreatedAdminUserObject3Ids = phase1Response.results.newlyCreatedAdminUserObject3Ids || []; // Get the new list
-
-      if (!vespaCustomerId || !uploaderSchoolId) {
-          // uploaderSchoolId might be optional if not strictly needed by createStaffRoleRecords for linking, but vespaCustomerId is crucial
-          throw new Error("Missing vespaCustomerId from Phase 1 for linking. uploaderSchoolId might also be missing.");
-      }
-      
-      debugLog("Phase 2 Request Data Sent To API:", {
-          vespaCustomerId: vespaCustomerId,
-          processedStaffDetails: processedStaffDetails,
-          uploaderSchoolId: uploaderSchoolId,
-          newlyCreatedAdminUserObject3Ids: newlyCreatedAdminUserObject3Ids // Include in log
-      });
-
-      const constructedUrl_Phase2 = `${API_BASE_URL}staff/link-staff-admins`; // Ensures no double slash
-      debugLog("Phase 2: API_BASE_URL being used:", API_BASE_URL);
-      debugLog("Phase 2: Constructed URL for staff/link-staff-admins:", constructedUrl_Phase2);
-
-      const phase2Response = await $.ajax({
-          url: constructedUrl_Phase2, 
-          type: 'POST',
-          contentType: 'application/json',
-          data: JSON.stringify({
-              vespaCustomerId: vespaCustomerId,
-              processedStaffDetails: processedStaffDetails,
-              uploaderSchoolId: uploaderSchoolId,
-              newlyCreatedAdminUserObject3Ids: newlyCreatedAdminUserObject3Ids // Send to backend
           }),
           xhrFields: { withCredentials: true }
       });
 
-      debugLog("Phase 2 Response:", phase2Response, 'success');
+      debugLog("Job Enqueue Response:", response, 'success');
 
-      // Aggregate results
-      // The 'processingResults' global variable will store the final combined outcome.
-      processingResults = {
-          phase1: phase1ResponseData.results,
-          phase2: phase2Response.results,
-          overallSuccess: phase1ResponseData.success && phase2Response.success,
-          // Consolidate errors for final display
-          errors: [
-              ...(phase1ResponseData.results.accountErrors || []), 
-              ...(phase2Response.results?.userLinkErrors || [])
-          ],
-          total: phase1ResponseData.results.totalRowsInCsv,
-          successful: phase1ResponseData.results.successfulAccounts, // Primarily from phase 1
-          created: phase1ResponseData.results.accountsCreated,
-          updated: phase1ResponseData.results.accountsUpdated,
-          linked: phase2Response.results?.successfulUserRoleLinks || 0,
-          linkingErrors: phase2Response.results?.userLinkErrors?.length || 0
-      };
-      
-      const finalMessage = processingResults.overallSuccess ? 
-          `All staff processed. Accounts: ${processingResults.successful}. Linked: ${processingResults.linked}.` :
-          `Processing finished with some issues. Accounts: ${processingResults.successful}, Linked: ${processingResults.linked}, Errors: ${processingResults.errors.length}.`;
-      
-      updateStatusDisplay(finalMessage, processingResults.overallSuccess ? 'success' : 'warning', false);
-      
-      isProcessing = false;
-      if (processButton) processButton.disabled = false; // Re-enable if needed for retry, or hide
-      if (prevButton) prevButton.disabled = false;
-      if (nextButton && nextButton !== processButton) nextButton.disabled = false;
+      if (response.success && response.jobId) {
+        // Job successfully queued
+        updateStatusDisplay(`Upload accepted (Job ID: ${response.jobId}). It is now processing in the background. You will receive an email summary. This window can be closed.`, 'success', false);
+        showSuccess("Your upload has been queued successfully! You'll receive an email with the results.");
+        
+        // Update the global processingResults to reflect queuing, not final results
+        processingResults = {
+            jobId: response.jobId,
+            status: 'queued',
+            message: response.message,
+            total: filteredData.length // Reflect the number of rows submitted
+        };
+        
+        // Disable further actions on this step, maybe show a button to start a new upload on results page
+        if (processButton) {
+            processButton.textContent = 'Processing in Background';
+            processButton.disabled = true; 
+        }
+        // Go to results page, which will now show a simplified message
+        setTimeout(() => {
+            currentStep++; 
+            renderStep(currentStep);
+        }, 2500); // Give user time to read message
 
-
-      setTimeout(() => {
-          currentStep++; // Move to results step
-          renderStep(currentStep);
-      }, 1500);
+      } else {
+        // Job enqueueing failed
+        throw new Error(response.message || 'Failed to queue the upload job. Please try again.');
+      }
 
     } catch (error) {
-      const errorMessage = error.responseJSON?.message || error.responseText || error.message || "An unknown error occurred during processing.";
-      debugLog("Processing Error (either phase):", { error, errorMessage }, 'error');
-      updateStatusDisplay(`Processing failed: ${errorMessage}`, 'error', false);
-      showError(`Processing failed: ${errorMessage}`);
+      const errorMessage = error.responseJSON?.message || error.responseText || error.message || "An unknown error occurred while submitting your upload.";
+      debugLog("Error Enqueuing Job:", { error, errorMessage }, 'error');
+      updateStatusDisplay(`Submission failed: ${errorMessage}`, 'error', false);
+      showError(`Failed to submit your upload: ${errorMessage}`);
       
-      // Store partial results if Phase 1 completed
-      processingResults = {
-          phase1: phase1ResponseData ? phase1ResponseData.results : { accountErrors: [{ row: 'N/A', message: `Processing aborted before Phase 1 completion or Phase 1 failed: ${errorMessage}`}] },
-          phase2: null,
-          overallSuccess: false,
-          errors: [...(phase1ResponseData?.results?.accountErrors || []), { row: 'N/A', message: `Phase 2 did not run or failed: ${errorMessage}` }],
-          // Populate other fields as best as possible
-          total: phase1ResponseData?.results?.totalRowsInCsv || filteredData.length,
-          successful: phase1ResponseData?.results?.successfulAccounts || 0,
-          created: phase1ResponseData?.results?.accountsCreated || 0,
-          updated: phase1ResponseData?.results?.accountsUpdated || 0,
-          linked: 0,
-          linkingErrors: 0
+      processingResults = { // Store error state
+          status: 'submission_failed',
+          message: errorMessage,
+          errors: [{ message: errorMessage}]
       };
       
       isProcessing = false;
       if (processButton) {
           processButton.disabled = false;
-          processButton.textContent = 'Retry Processing';
+          processButton.textContent = 'Retry Submission';
       }
       if (prevButton) prevButton.disabled = false;
       if (nextButton && nextButton !== processButton) nextButton.disabled = false;
-
-      // Optionally, still go to results step to show partial failure
-      setTimeout(() => {
+      // Optionally, still go to results step to show this submission failure
+       setTimeout(() => {
           currentStep++; 
-          renderStep(currentStep); // Render results step even on failure to show details
+          renderStep(currentStep);
       }, 1500);
     }
   }
@@ -2796,4 +2708,3 @@ function bindStepEvents() {
     }
     debugLog(`Status display updated: ${message}`, {type, showSpinner}, 'info');
   }
-
