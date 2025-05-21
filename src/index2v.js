@@ -2180,12 +2180,12 @@ function downloadTemplateFile() {
     let phase1ResponseData = null;
 
     try {
-      const constructedUrl_Phase1 = `${API_BASE_URL}staff/process`; // Removed leading slash from endpoint path
+      const constructedUrl_Phase1 = `${API_BASE_URL}staff/process`; // Ensures no double slash if API_BASE_URL ends with /
       debugLog("Phase 1: API_BASE_URL being used:", API_BASE_URL);
       debugLog("Phase 1: Constructed URL for staff/process:", constructedUrl_Phase1);
 
       const phase1Response = await $.ajax({
-          url: constructedUrl_Phase1, // Use the logged variable
+          url: constructedUrl_Phase1, 
           type: 'POST',
           contentType: 'application/json',
           data: JSON.stringify({
@@ -2208,29 +2208,33 @@ function downloadTemplateFile() {
       const processedStaffDetails = phase1Response.results.processedStaffDetails;
       const vespaCustomerId = phase1Response.results.vespaCustomerId;
       const uploaderSchoolId = phase1Response.results.uploaderSchoolId;
+      const newlyCreatedAdminUserObject3Ids = phase1Response.results.newlyCreatedAdminUserObject3Ids || []; // Get the new list
 
       if (!vespaCustomerId || !uploaderSchoolId) {
-          throw new Error("Missing vespaCustomerId or uploaderSchoolId from Phase 1 for linking.");
+          // uploaderSchoolId might be optional if not strictly needed by createStaffRoleRecords for linking, but vespaCustomerId is crucial
+          throw new Error("Missing vespaCustomerId from Phase 1 for linking. uploaderSchoolId might also be missing.");
       }
       
       debugLog("Phase 2 Request Data Sent To API:", {
           vespaCustomerId: vespaCustomerId,
           processedStaffDetails: processedStaffDetails,
-          uploaderSchoolId: uploaderSchoolId
+          uploaderSchoolId: uploaderSchoolId,
+          newlyCreatedAdminUserObject3Ids: newlyCreatedAdminUserObject3Ids // Include in log
       });
 
-      const constructedUrl_Phase2 = `${API_BASE_URL}staff/link-staff-admins`; // Removed leading slash
+      const constructedUrl_Phase2 = `${API_BASE_URL}staff/link-staff-admins`; // Ensures no double slash
       debugLog("Phase 2: API_BASE_URL being used:", API_BASE_URL);
       debugLog("Phase 2: Constructed URL for staff/link-staff-admins:", constructedUrl_Phase2);
 
       const phase2Response = await $.ajax({
-          url: constructedUrl_Phase2, // Use the logged variable
+          url: constructedUrl_Phase2, 
           type: 'POST',
           contentType: 'application/json',
           data: JSON.stringify({
               vespaCustomerId: vespaCustomerId,
               processedStaffDetails: processedStaffDetails,
-              uploaderSchoolId: uploaderSchoolId
+              uploaderSchoolId: uploaderSchoolId,
+              newlyCreatedAdminUserObject3Ids: newlyCreatedAdminUserObject3Ids // Send to backend
           }),
           xhrFields: { withCredentials: true }
       });
