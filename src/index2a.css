@@ -673,3 +673,73 @@
   margin-bottom: 8px;
 }
 
+/* Spinner Animation */
+@keyframes vespa-spinner-anim {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.vespa-spinner {
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  border-left-color: #007bff; /* Spinner color */
+  border-radius: 50%;
+  width: 24px; /* Adjust size as needed */
+  height: 24px; /* Adjust size as needed */
+  animation: vespa-spinner-anim 1s linear infinite;
+}
+
+/* Generic Status Display Styling (if used as a fallback) */
+.vespa-status-display-generic {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border-radius: 4px;
+  font-size: 1em;
+}
+
+.vespa-status-display-generic .vespa-status-icon {
+  margin-right: 10px;
+  font-size: 20px; /* Default icon size */
+  display: flex; /* To center spinner if it's the icon */
+  align-items: center;
+}
+
+.vespa-status-display-generic .vespa-status-text {
+  font-weight: 500;
+}
+
+/* Specific styles for status types on the generic display */
+.vespa-status-display-generic.processing {
+  background-color: #e0f7fa;
+  color: #0288d1;
+  border-left: 4px solid #0288d1;
+}
+.vespa-status-display-generic.success {
+  background-color: #d4edda;
+  color: #155724;
+  border-left: 4px solid #155724;
+}
+.vespa-status-display-generic.error {
+  background-color: #f8d7da;
+  color: #721c24;
+  border-left: 4px solid #721c24;
+}
+.vespa-status-display-generic.info {
+  background-color: #e7e7e7;
+  color: #333;
+  border-left: 4px solid #6c757d;
+}
+.vespa-status-display-generic.ready {
+  background-color: #f8f9fa;
+  color: #333;
+  border-left: 4px solid #adb5bd;
+}
+
+/* Ensure .vespa-processing-status also benefits from icon centering for spinner */
+.vespa-processing-status .vespa-status-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center; /* If icon is larger than spinner */
+}
+
