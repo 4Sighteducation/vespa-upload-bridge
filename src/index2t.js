@@ -64,21 +64,38 @@ function logApiCall(url, method, data) {
  * @returns {string} The determined API URL
  */
 function determineApiUrl() {
-  // First priority: Use the URL from VESPA_UPLOAD_CONFIG if available
+  let apiUrl = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api'; // Default with /api
+
   if (VESPA_UPLOAD_CONFIG && VESPA_UPLOAD_CONFIG.apiUrl) {
-    debugLog("Using API URL from config", VESPA_UPLOAD_CONFIG.apiUrl);
-    return VESPA_UPLOAD_CONFIG.apiUrl;
+    debugLog("Using API URL from VESPA_UPLOAD_CONFIG", VESPA_UPLOAD_CONFIG.apiUrl);
+    apiUrl = VESPA_UPLOAD_CONFIG.apiUrl;
+  } else if (window.VESPA_UPLOAD_CONFIG && window.VESPA_UPLOAD_CONFIG.apiUrl) {
+    debugLog("Using API URL from window.VESPA_UPLOAD_CONFIG", window.VESPA_UPLOAD_CONFIG.apiUrl);
+    apiUrl = window.VESPA_UPLOAD_CONFIG.apiUrl;
+  } else {
+    debugLog("Using hardcoded default API URL", apiUrl);
+  }
+
+  // Ensure the apiUrl ends with /api or /api/
+  if (!apiUrl.endsWith('/api') && !apiUrl.endsWith('/api/')) {
+    if (apiUrl.endsWith('/')) {
+      apiUrl += 'api';
+    } else {
+      apiUrl += '/api';
+    }
+    debugLog("Adjusted API URL to include /api suffix", apiUrl);
   }
   
-  // Second priority: Use the window object if available
-  if (window.VESPA_UPLOAD_CONFIG && window.VESPA_UPLOAD_CONFIG.apiUrl) {
-    debugLog("Using API URL from window config", window.VESPA_UPLOAD_CONFIG.apiUrl);
-    return window.VESPA_UPLOAD_CONFIG.apiUrl;
+  // Ensure it ends with a single slash if it has /api
+  if (apiUrl.endsWith('/api')) {
+      apiUrl += '/';
+      debugLog("Ensured API URL ends with a slash after /api", apiUrl);
   }
-  
-  // Last resort: Use the hardcoded URL
-  debugLog("Using default API URL", API_BASE_URL);
-  return API_BASE_URL;
+
+  // Final check: remove any double slashes before /api if they occurred
+  apiUrl = apiUrl.replace(/\/\/api\//g, '/api/');
+  debugLog("Final API URL after normalization", apiUrl);
+  return apiUrl;
 }
 
 /**
