@@ -1934,8 +1934,28 @@ function downloadTemplateFile() {
         debugLog("Local validation passed, proceeding with API validation");
         
         // Determine the correct endpoint based on upload type
-        const endpoint = uploadType === 'staff' ? 'staff' : 'students';
-        
+        let endpointPath = '';
+        switch (uploadType) {
+          case 'staff':
+            endpointPath = 'staff/validate';
+            break;
+          case 'student-onboard':
+            endpointPath = 'students/onboard/validate';
+            break;
+          case 'student-ks4':
+            endpointPath = 'students/ks4-subjects/validate';
+            break;
+          case 'student-ks5':
+            endpointPath = 'students/ks5-subjects/validate';
+            break;
+          default:
+            showError('Invalid upload type for API validation.');
+            debugLog(`validateCsvData: Invalid uploadType "${uploadType}" for API call`, null, 'error');
+            // Reject the promise or handle appropriately if we are in a promise chain that expects it.
+            // For now, this will prevent the fetch call below if the endpointPath is not set.
+            return; // Or throw new Error based on how this function's callers expect errors.
+        }
+
         // EXPLICIT URL CONSTRUCTION - now with more logging and safety
         let baseUrl = API_BASE_URL;
         debugLog(`API Base URL (original): "${baseUrl}"`, null, 'info');
@@ -1945,21 +1965,19 @@ function downloadTemplateFile() {
           debugLog(`Added trailing slash: "${baseUrl}"`, null, 'info');
         }
         
+        // Ensure /api/ is present correctly, this logic might need review based on determineApiUrl behavior
         if (!baseUrl.includes('/api/')) {
-          // If it doesn't have /api/ but has /api at the end, add the trailing slash
           if (baseUrl.endsWith('/api')) {
             baseUrl += '/';
             debugLog(`Added trailing slash after /api: "${baseUrl}"`, null, 'info');
-          } 
-          // If it doesn't have /api at all, add it
-          else if (!baseUrl.endsWith('/api/')) {
+          } else {
             const originalUrl = baseUrl;
             baseUrl = baseUrl.replace(/\/+$/, '') + '/api/';
             debugLog(`Added /api/ path: "${originalUrl}" -> "${baseUrl}"`, null, 'info');
           }
         }
         
-        const validationUrl = `${baseUrl}${endpoint}/validate`;
+        const validationUrl = `${baseUrl}${endpointPath}`;
         debugLog(`Final validation URL: "${validationUrl}"`, null, 'info');
         
         // Create a formatted log of all CSV data being sent
@@ -2947,4 +2965,3 @@ function bindStepEvents() {
     }
     debugLog(`Status display updated: ${message}`, {type, showSpinner}, 'info');
   }
-
