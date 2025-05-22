@@ -980,7 +980,7 @@ function renderSelectTypeStep() {
           <label for="upload-student-onboard">
             <div class="vespa-option-icon">🎓</div>
             <div class="vespa-option-title">Create Student Accounts (Stage 1)</div>
-            <div class="vespa-option-description">Onboard new students using <code>StudentData.csv</code>. Creates accounts and core records.</div>
+            <div class="vespa-option-description">Onboard new students<code>StudentData.csv</code>.</div>
           </label>
         </div>
 
@@ -988,8 +988,8 @@ function renderSelectTypeStep() {
           <input type="radio" id="upload-student-subjects" name="upload-type" value="student-subjects">
           <label for="upload-student-subjects">
             <div class="vespa-option-icon">📚</div>
-            <div class="vespa-option-title">Upload Student Subject Data (Stage 2)</div>
-            <div class="vespa-option-description">Upload KS4 (GCSE) or KS5 (A-Level/L3) subject data for existing students.</div>
+            <div class="vespa-option-title">Upload Student Subject Data</div>
+            <div class="vespa-option-description">Upload KS4  or KS5 subject data</div>
           </label>
         </div>
       </div>
