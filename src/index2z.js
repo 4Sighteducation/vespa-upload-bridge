@@ -979,8 +979,8 @@ function renderSelectTypeStep() {
           <input type="radio" id="upload-student-onboard" name="upload-type" value="student-onboard">
           <label for="upload-student-onboard">
             <div class="vespa-option-icon">🎓</div>
-            <div class="vespa-option-title">Create Student Accounts (Stage 1)</div>
-            <div class="vespa-option-description">Onboard new students<code>StudentData.csv</code>.</div>
+            <div class="vespa-option-title">Create Student Accounts</div>
+            <div class="vespa-option-description">Onboard new students <code>StudentData.csv</code>.</div>
           </label>
         </div>
 
