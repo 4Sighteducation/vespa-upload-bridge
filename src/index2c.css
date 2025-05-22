@@ -234,6 +234,34 @@
   color: #666;
 }
 
+/* Style for sub-options to make them visually grouped */
+.vespa-upload-sub-options {
+  display: flex;
+  gap: 12px; /* Smaller gap for sub-options */
+  padding: 12px;
+  background-color: #e9f2ff; /* Slightly different background for distinction */
+  border-radius: 6px;
+  margin-top: 10px;
+}
+
+.vespa-upload-option.sub-option label {
+  padding: 12px; /* Slightly smaller padding */
+  /* background-color: #ffffff; /* Ensure sub-options have their own distinct background if needed */
+}
+
+.vespa-upload-option.sub-option .vespa-option-icon {
+  font-size: 28px; /* Smaller icon for sub-options */
+  margin-bottom: 6px;
+}
+
+.vespa-upload-option.sub-option .vespa-option-title {
+  font-size: 1em; /* Adjust title size if needed */
+}
+
+.vespa-upload-option.sub-option .vespa-option-description {
+  font-size: 0.85em; /* Smaller description */
+}
+
 /* File upload styles */
 .vespa-file-input {
   position: relative;
