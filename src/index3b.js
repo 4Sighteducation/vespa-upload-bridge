@@ -988,7 +988,7 @@ function renderSelectTypeStep() {
           <input type="radio" id="upload-student-subjects" name="upload-type" value="student-subjects">
           <label for="upload-student-subjects">
             <div class="vespa-option-icon">📚</div>
-            <div class="vespa-option-title">Upload Student Subject Data</div>
+            <div class="vespa-option-title">Upload Student Subject Data to appear above VESPA report</div>
             <div class="vespa-option-description">Upload KS4  or KS5 subject data</div>
           </label>
         </div>
