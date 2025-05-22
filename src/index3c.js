@@ -979,8 +979,8 @@ function renderSelectTypeStep() {
           <input type="radio" id="upload-student-onboard" name="upload-type" value="student-onboard">
           <label for="upload-student-onboard">
             <div class="vespa-option-icon">🎓</div>
-            <div class="vespa-option-title">Create Student Accounts</div>
-            <div class="vespa-option-description">Onboard new students <code>StudentData.csv</code>.</div>
+            <div class="vespa-option-title">Create Student Accounts (Stage 1)</div>
+            <div class="vespa-option-description">Onboard new students<code>StudentData.csv</code>.</div>
           </label>
         </div>
 
@@ -988,7 +988,7 @@ function renderSelectTypeStep() {
           <input type="radio" id="upload-student-subjects" name="upload-type" value="student-subjects">
           <label for="upload-student-subjects">
             <div class="vespa-option-icon">📚</div>
-            <div class="vespa-option-title">Upload Student Subject Data to appear above VESPA report</div>
+            <div class="vespa-option-title">Upload Student Subject Data</div>
             <div class="vespa-option-description">Upload KS4  or KS5 subject data</div>
           </label>
         </div>
@@ -1250,7 +1250,7 @@ function renderSelectTypeStep() {
   function renderProcessingStep() {
     // Default empty email value from config
     const userEmail = VESPA_UPLOAD_CONFIG && VESPA_UPLOAD_CONFIG.userEmail ? VESPA_UPLOAD_CONFIG.userEmail : '';
-    
+
     // Create the validation results HTML outside the template literal
     let validationStatusHtml = '';
     if (validationResults) {
@@ -1267,18 +1267,35 @@ function renderSelectTypeStep() {
         </div>
       `;
     }
-    
+
+    // Determine Upload Type Text for display
+    let uploadTypeText = 'Unknown';
+    switch (uploadType) {
+      case 'staff':
+        uploadTypeText = 'Staff Upload';
+        break;
+      case 'student-onboard':
+        uploadTypeText = 'Student Accounts (Stage 1)';
+        break;
+      case 'student-ks4':
+        uploadTypeText = 'KS4 Subject Data (Stage 2)';
+        break;
+      case 'student-ks5':
+        uploadTypeText = 'KS5 Subject Data (Stage 2)';
+        break;
+    }
+
     // Create the calculator options HTML outside the template literal
     let calculatorOptionsHtml = '';
-    if (uploadType === 'student') {
+    if (uploadType === 'student-ks4' || uploadType === 'student-ks5') {
       calculatorOptionsHtml = `
         <div class="vespa-checkbox-group">
           <input type="checkbox" id="run-calculators" checked>
-          <label for="run-calculators">Run ALPS calculators for GCSE data (if present)</label>
+          <label for="run-calculators">Run ALPS calculators for subject data</label>
         </div>
       `;
     }
-    
+
     return `
       <h2>Process Upload</h2>
       <p>Your data is ready to be processed. Click "Process" to continue.</p>
@@ -1294,15 +1311,15 @@ function renderSelectTypeStep() {
           <div class="vespa-summary-details">
             <div class="vespa-summary-item">
               <div class="vespa-summary-label">Upload Type:</div>
-              <div class="vespa-summary-value">${uploadType === 'staff' ? 'Staff' : 'Student'} Upload</div>
+              <div class="vespa-summary-value">${uploadTypeText}</div>
             </div>
             <div class="vespa-summary-item">
               <div class="vespa-summary-label">Total Records:</div>
-              <div class="vespa-summary-value" id="total-records-summary">0</div>
+              <div class="vespa-summary-value" id="total-records-summary">${validationResults?.total || validationResults?.csvData?.length || 0}</div>
             </div>
             <div class="vespa-summary-item">
               <div class="vespa-summary-label">Valid Records:</div>
-              <div class="vespa-summary-value" id="valid-records-summary">0</div>
+              <div class="vespa-summary-value" id="valid-records-summary">${validationResults?.isValid ? (validationResults?.total || validationResults?.csvData?.length || 0) : ((validationResults?.total || validationResults?.csvData?.length || 0) - (validationResults?.errors?.length || 0))}</div>
             </div>
             ${validationStatusHtml}
           </div>
@@ -1313,7 +1330,7 @@ function renderSelectTypeStep() {
           <div class="vespa-options-form">
             <div class="vespa-checkbox-group">
               <input type="checkbox" id="send-notifications" checked>
-              <label for="send-notifications">Send welcome emails to new users</label>
+              <label for="send-notifications">Send welcome emails to new users (if applicable)</label>
             </div>
             
             ${calculatorOptionsHtml}
@@ -1779,7 +1796,7 @@ function downloadTemplateFile() {
         });
         
         // Email format check for Student Email
-        if (row['Student Email'] && !/^[\sS@]+@[\sS@]+\.[\sS@]+$/.test(row['Student Email'])) {
+        if (row['Student Email'] && !/^[^\s@]+@[^\s@]+\\.[^\s@]+$/.test(row['Student Email'])) {
           results.isValid = false;
           results.errors.push({
             row: rowNum,
@@ -2248,44 +2265,84 @@ function downloadTemplateFile() {
    */
   async function processUploadData() { // Changed to async
     debugLog("Starting data processing (Background Job)", null, 'info');
-    
+
     // Safety checks
     if (!validationResults || !validationResults.csvData) {
       showError('Please validate your data first, or no valid data to process.');
       debugLog("ProcessUploadData: No validationResults or validationResults.csvData", validationResults, 'error');
       return;
     }
-    
-    // Filter data to ensure only rows with essential information are sent for processing
-    // This mirrors the initial filtering that was in the backend's Phase 1
-    const filteredData = validationResults.csvData.filter(row => {
-        const email = row && row['Email Address'] ? row['Email Address'].trim() : '';
-        const firstName = row && row['First Name'] ? row['First Name'].trim() : '';
-        const lastName = row && row['Last Name'] ? row['Last Name'].trim() : '';
-        const staffType = row && row['Staff Type'] ? row['Staff Type'].trim() : '';
-        // Ensure core fields for creating/identifying a user are present
-        return email && (firstName || lastName) && staffType;
-    });
+
+    let filteredData = [];
+    let endpointPath = '';
+    let runCalculators = false; // Default
+
+    // Determine endpoint and filter data based on uploadType
+    switch (uploadType) {
+      case 'staff':
+        endpointPath = 'staff/process';
+        filteredData = validationResults.csvData.filter(row => {
+          const email = row && row['Email Address'] ? row['Email Address'].trim() : '';
+          const firstName = row && row['First Name'] ? row['First Name'].trim() : '';
+          const lastName = row && row['Last Name'] ? row['Last Name'].trim() : '';
+          const staffType = row && row['Staff Type'] ? row['Staff Type'].trim() : '';
+          return email && (firstName || lastName) && staffType;
+        });
+        break;
+      case 'student-onboard':
+        endpointPath = 'students/onboard/process';
+        filteredData = validationResults.csvData.filter(row => { // Basic check, backend will do more
+          const upn = row && row['UPN'] ? row['UPN'].trim() : '';
+          const email = row && row['Student Email'] ? row['Student Email'].trim() : '';
+          return upn || email; 
+        });
+        break;
+      case 'student-ks4':
+        endpointPath = 'students/ks4-subjects/process';
+        filteredData = validationResults.csvData.filter(row => {
+          const upn = row && row['UPN'] ? row['UPN'].trim() : '';
+          const email = row && row['Student_Email'] ? row['Student_Email'].trim() : '';
+          return upn || email;
+        });
+        runCalculators = document.getElementById('run-calculators')?.checked ?? false;
+        break;
+      case 'student-ks5':
+        endpointPath = 'students/ks5-subjects/process';
+        filteredData = validationResults.csvData.filter(row => {
+          const upn = row && row['UPN'] ? row['UPN'].trim() : '';
+          const email = row && row['Student_Email'] ? row['Student_Email'].trim() : '';
+          return upn || email;
+        });
+        runCalculators = document.getElementById('run-calculators')?.checked ?? false;
+        break;
+      default:
+        showError('Invalid upload type for processing.');
+        debugLog(`ProcessUploadData: Invalid uploadType "${uploadType}"`, null, 'error');
+        return;
+    }
 
     if (filteredData.length === 0) {
-      showError('No valid data rows to process after filtering. Please check your CSV content for Email, Name, and Staff Type.');
-      debugLog("ProcessUploadData: No valid data after initial client-side filtering.", validationResults.csvData, 'warn');
+      showError('No valid data rows to process after filtering. Please check your CSV content for essential identifiers.');
+      debugLog(`ProcessUploadData: No valid data after filtering for ${uploadType}.`, validationResults.csvData, 'warn');
       return;
     }
-    
+
     // Get processing options
     const sendNotifications = document.getElementById('send-notifications')?.checked ?? true;
     const notificationEmail = document.getElementById('notification-email')?.value || userContext?.userEmail || '';
-    
+
     const currentProcessingOptions = {
       sendNotifications: sendNotifications,
-      notificationEmail: notificationEmail
-      // runCalculators is not relevant for staff, will be handled for students
+      notificationEmail: notificationEmail,
     };
+
+    if (uploadType === 'student-ks4' || uploadType === 'student-ks5') {
+        currentProcessingOptions.runCalculators = runCalculators;
+    }
 
     // Update UI to show processing request is being submitted
     updateStatusDisplay('Submitting your data for background processing... Please wait.', 'processing', true);
-    
+
     const processButton = document.getElementById('process-button') || document.getElementById('vespa-next-button');
     const prevButton = document.getElementById('vespa-prev-button');
     const nextButton = document.getElementById('vespa-next-button');
@@ -2296,33 +2353,37 @@ function downloadTemplateFile() {
     }
     if (prevButton) prevButton.disabled = true;
     if (nextButton && nextButton !== processButton) nextButton.disabled = true;
-    
+
     isProcessing = true;
-    
+
     const uploaderContextForAPI = {
         userId: userContext?.userId || null,
-        userEmail: userContext?.userEmail || null, // Added uploader email for notifications from worker
-        schoolId: selectedSchool?.schoolId || userContext?.schoolId || null, 
+        userEmail: userContext?.userEmail || null,
+        schoolId: selectedSchool?.schoolId || userContext?.schoolId || null,
         customerId: selectedSchool?.customerId || userContext?.customerId || null,
-        userRole: userContext?.userRole || null 
+        userRole: userContext?.userRole || null
     };
 
-    debugLog("Data to be sent to /api/staff/process (enqueue):", {
+    debugLog(`Data to be sent to /api/${endpointPath}:`, {
       csvData: filteredData,
       options: currentProcessingOptions,
       context: uploaderContextForAPI
     });
-    
+
     try {
-      const constructedUrl = `${API_BASE_URL}staff/process`;
+      let baseUrl = API_BASE_URL;
+      if (!baseUrl.endsWith('/')) {
+          baseUrl += '/';
+      }
+      const constructedUrl = `${baseUrl}${endpointPath}`;
       debugLog("API call to enqueue job: POST " + constructedUrl);
 
       const response = await $.ajax({
-          url: constructedUrl, 
+          url: constructedUrl,
           type: 'POST',
           contentType: 'application/json',
           data: JSON.stringify({
-              csvData: filteredData, 
+              csvData: filteredData,
               options: currentProcessingOptions,
               context: uploaderContextForAPI
           }),
@@ -2336,27 +2397,23 @@ function downloadTemplateFile() {
         updateStatusDisplay(`Upload accepted (Job ID: ${response.jobId}). It is now processing in the background. You will receive an email summary. This window can be closed.`, 'success', false);
         showSuccess("Your upload has been queued successfully! You'll receive an email with the results.");
         
-        // Update the global processingResults to reflect queuing, not final results
         processingResults = {
             jobId: response.jobId,
             status: 'queued',
             message: response.message,
-            total: filteredData.length // Reflect the number of rows submitted
+            total: filteredData.length
         };
         
-        // Disable further actions on this step, maybe show a button to start a new upload on results page
         if (processButton) {
             processButton.textContent = 'Processing in Background';
             processButton.disabled = true; 
         }
-        // Go to results page, which will now show a simplified message
         setTimeout(() => {
             currentStep++; 
             renderStep(currentStep);
-        }, 2500); // Give user time to read message
+        }, 2500);
 
       } else {
-        // Job enqueueing failed
         throw new Error(response.message || 'Failed to queue the upload job. Please try again.');
       }
 
@@ -2366,10 +2423,10 @@ function downloadTemplateFile() {
       updateStatusDisplay(`Submission failed: ${errorMessage}`, 'error', false);
       showError(`Failed to submit your upload: ${errorMessage}`);
       
-      processingResults = { // Store error state
+      processingResults = { 
           status: 'submission_failed',
           message: errorMessage,
-          errors: [{ message: errorMessage}]
+          errors: [{ message: errorMessage}] 
       };
       
       isProcessing = false;
@@ -2379,7 +2436,6 @@ function downloadTemplateFile() {
       }
       if (prevButton) prevButton.disabled = false;
       if (nextButton && nextButton !== processButton) nextButton.disabled = false;
-      // Optionally, still go to results step to show this submission failure
        setTimeout(() => {
           currentStep++; 
           renderStep(currentStep);
@@ -2891,3 +2947,4 @@ function bindStepEvents() {
     }
     debugLog(`Status display updated: ${message}`, {type, showSpinner}, 'info');
   }
+
