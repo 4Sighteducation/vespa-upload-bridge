@@ -269,7 +269,7 @@ function addStyles() {
   linkElement.id = 'vespa-upload-styles';
   linkElement.rel = 'stylesheet';
   linkElement.type = 'text/css';
-  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2b.css';
+  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2c.css';
   
   document.head.appendChild(linkElement);
   debugLog("Dynamically linked external CSS: " + linkElement.href, null, 'info');
@@ -289,11 +289,22 @@ function validateCurrentStep() {
   
   switch (currentStep) {
     case 1: // Select upload type
-      uploadType = document.querySelector('input[name="upload-type"]:checked')?.value;
-      if (!uploadType) {
+      const mainUploadTypeSelection = document.querySelector('input[name="upload-type"]:checked');
+      if (!mainUploadTypeSelection) {
         showError('Please select an upload type.');
         return false;
       }
+      uploadType = mainUploadTypeSelection.value;
+
+      if (uploadType === 'student-subjects') {
+        const subTypeSelection = document.querySelector('input[name="student-subject-subtype"]:checked');
+        if (!subTypeSelection) {
+          showError('Please select a subject data type (KS4 or KS5).');
+          return false;
+        }
+        uploadType = subTypeSelection.value; // Set the more granular type
+      }
+      debugLog("Upload type selected:", uploadType);
       return true;
       
     case 2: // Select school (super user only) or Upload CSV
@@ -965,20 +976,50 @@ function renderSelectTypeStep() {
         </div>
         
         <div class="vespa-upload-option">
-          <input type="radio" id="upload-student" name="upload-type" value="student">
-          <label for="upload-student">
+          <input type="radio" id="upload-student-onboard" name="upload-type" value="student-onboard">
+          <label for="upload-student-onboard">
             <div class="vespa-option-icon">🎓</div>
-            <div class="vespa-option-title">Student Upload</div>
-            <div class="vespa-option-description">Upload student data to create or update student accounts.</div>
+            <div class="vespa-option-title">Create Student Accounts (Stage 1)</div>
+            <div class="vespa-option-description">Onboard new students using <code>StudentData.csv</code>. Creates accounts and core records.</div>
           </label>
+        </div>
+
+        <div class="vespa-upload-option">
+          <input type="radio" id="upload-student-subjects" name="upload-type" value="student-subjects">
+          <label for="upload-student-subjects">
+            <div class="vespa-option-icon">📚</div>
+            <div class="vespa-option-title">Upload Student Subject Data (Stage 2)</div>
+            <div class="vespa-option-description">Upload KS4 (GCSE) or KS5 (A-Level/L3) subject data for existing students.</div>
+          </label>
+        </div>
+      </div>
+
+      <div id="student-subject-subtypes-container" style="display: none; margin-top: 16px; padding: 16px; background-color: #f0f7ff; border-radius: 8px;">
+        <h4>Select Subject Data Type:</h4>
+        <div class="vespa-upload-options vespa-upload-sub-options">
+          <div class="vespa-upload-option sub-option">
+            <input type="radio" id="upload-student-ks4" name="student-subject-subtype" value="student-ks4">
+            <label for="upload-student-ks4">
+              <div class="vespa-option-icon">📄</div>
+              <div class="vespa-option-title">KS4 Subject Data</div>
+              <div class="vespa-option-description">Upload GCSE subjects using <code>SubjectData_KS4.csv</code>. User provides expected grades.</div>
+            </label>
+          </div>
+          <div class="vespa-upload-option sub-option">
+            <input type="radio" id="upload-student-ks5" name="student-subject-subtype" value="student-ks5">
+            <label for="upload-student-ks5">
+              <div class="vespa-option-icon">📊</div>
+              <div class="vespa-option-title">KS5 Subject Data</div>
+              <div class="vespa-option-description">Upload A-Level/L3 subjects using <code>SubjectData_KS5.csv</code>. User provides Prior Attainment for MEG calculation.</div>
+            </label>
+          </div>
         </div>
       </div>
       
       <div class="vespa-info-box">
         <div class="vespa-info-icon">ℹ️</div>
         <div class="vespa-info-content">
-          <strong>Important:</strong> Staff accounts must be created before student accounts.
-          Make sure to upload your staff data first if you haven't already.
+          <strong>Important:</strong> For "Create Student Accounts", ensure staff (especially Tutors, Heads of Year) are already in the system or included in a staff upload.
         </div>
       </div>
     `;
@@ -1028,26 +1069,59 @@ function renderSelectTypeStep() {
    */
   function renderUploadCsvStep() {
     // Create the button text and requirements outside the template string
-    const buttonText = (uploadType === 'staff') ? 'Staff' : 'Student';
-    
+    let buttonText = 'Template';
     let requirementsHtml = '';
-    if (uploadType === 'staff') {
-      requirementsHtml = `
-        <ul>
-          <li><strong>Required fields:</strong> Title, First Name, Last Name, Email Address, Staff Type</li>
-          <li><strong>Staff Type codes:</strong> admin (Staff Admin), tut (Tutor), sub (Subject Teacher), hoy (Head of Year), hod (Head of Dept), gen (General Staff)</li>
-          <li>Multiple staff types can be assigned using comma-separated values (e.g., "admin,tut")</li>
-        </ul>
-      `;
-    } else {
-      requirementsHtml = `
-        <ul>
-          <li><strong>Required fields:</strong> Lastname, Student Email, Group, Year Gp, Level, Tutor</li>
-          <li><strong>Level values:</strong> Must be either "Level 2" or "Level 3"</li>
-          <li><strong>Tutor field:</strong> Must contain valid email address(es) of existing tutors</li>
-          <li>Optional GCSE data can be included to calculate prior attainment and expected grades</li>
-        </ul>
-      `;
+
+    switch (uploadType) {
+      case 'staff':
+        buttonText = 'Staff';
+        requirementsHtml = `
+          <ul>
+            <li><strong>Required fields:</strong> Title, First Name, Last Name, Email Address, Staff Type</li>
+            <li><strong>Staff Type codes:</strong> admin (Staff Admin), tut (Tutor), sub (Subject Teacher), hoy (Head of Year), hod (Head of Dept), gen (General Staff)</li>
+            <li>Multiple staff types can be assigned using comma-separated values (e.g., "admin,tut")</li>
+          </ul>
+        `;
+        break;
+      case 'student-onboard':
+        buttonText = 'Student Accounts (Stage 1)';
+        requirementsHtml = `
+          <ul>
+            <li><strong>CSV:</strong> <code>StudentData.csv</code></li>
+            <li><strong>Required fields:</strong> ULN, UPN, Firstname, Lastname, Student Email, Gender, DOB, Group, Year Gp, Level, Tutors, Head of Year</li>
+            <li><strong>Level values:</strong> Must be either "Level 2" or "Level 3"</li>
+            <li><strong>Tutors, Head of Year:</strong> Must contain valid email address(es) of existing staff.</li>
+            <li>Ensure staff (Tutors, HoY) exist before this upload.</li>
+          </ul>
+        `;
+        break;
+      case 'student-ks4':
+        buttonText = 'KS4 Subject Data (Stage 2)';
+        requirementsHtml = `
+          <ul>
+            <li><strong>CSV:</strong> <code>SubjectData_KS4.csv</code></li>
+            <li><strong>Required fields:</strong> UPN, Student_Email, sub1, ex1 (and subsequent subX, exX pairs as needed).</li>
+            <li><code>subX</code> is the subject name, <code>exX</code> is the student's expected/target grade for that subject.</li>
+            <li>Ensure student accounts exist (via Stage 1 upload or manually).</li>
+            <li>This process adds/updates subject records; can be run multiple times.</li>
+          </ul>
+        `;
+        break;
+      case 'student-ks5':
+        buttonText = 'KS5 Subject Data (Stage 2)';
+        requirementsHtml = `
+          <ul>
+            <li><strong>CSV:</strong> <code>SubjectData_KS5.csv</code></li>
+            <li><strong>Required fields:</strong> UPN, Student_Email, GCSE_Prior_Attainment, sub1 (and subsequent subX as needed).</li>
+            <li><code>GCSE_Prior_Attainment</code>: User-calculated average GCSE score.</li>
+            <li><code>subX</code> is the A-Level/Level 3 subject name.</li>
+            <li>System calculates MEG for each subject based on Prior Attainment.</li>
+            <li>Ensure student accounts exist (via Stage 1 upload or manually).</li>
+          </ul>
+        `;
+        break;
+      default:
+        requirementsHtml = '<p>Please select an upload type first.</p>';
     }
     
     return `
@@ -1367,10 +1441,20 @@ function downloadTemplateFile() {
     statusMessage.textContent = 'Preparing download...';
     
     // Get the current upload type with fallback
-    const type = uploadType || 'staff';
+    // const type = uploadType || 'staff'; // Old way
+    let templateType = 'staff'; // Default
+    if (uploadType === 'student-onboard') {
+      templateType = 'student-onboard'; // Should map to StudentData.csv
+    } else if (uploadType === 'student-ks4') {
+      templateType = 'student-ks4';   // Should map to SubjectData_KS4.csv
+    } else if (uploadType === 'student-ks5') {
+      templateType = 'student-ks5';   // Should map to SubjectData_KS5.csv
+    } else if (uploadType === 'staff') {
+      templateType = 'staff';
+    }
     
     // Use the correct template type
-    const templateType = type === 'staff' ? 'staff' : 'student';
+    // const templateType = type === 'staff' ? 'staff' : 'student'; // Old way
     debugLog(`Using template type: ${templateType}`);
     
     // Update UI during download
@@ -1628,7 +1712,7 @@ function downloadTemplateFile() {
       return results;
     }
     
-    debugLog(`Validating ${csvData.length} rows locally`, null, 'info');
+    debugLog(`Validating ${csvData.length} rows locally for type: ${uploadType}`, null, 'info');
     
     // Check required fields based on upload type
     csvData.forEach((row, index) => {
@@ -1678,9 +1762,9 @@ function downloadTemplateFile() {
             }
           });
         }
-      } else if (uploadType === 'student') {
-        // Required fields for students
-        const requiredFields = ['Lastname', 'Student Email', 'Group', 'Year Gp', 'Level', 'Tutor'];
+      } else if (uploadType === 'student-onboard') { // Changed from 'student'
+        // Required fields for students (Stage 1 - Onboarding)
+        const requiredFields = ['ULN', 'UPN', 'Firstname', 'Lastname', 'Student Email', 'Gender', 'DOB', 'Group', 'Year Gp', 'Level', 'Tutors', 'Head of Year'];
         
         requiredFields.forEach(field => {
           if (!row[field] || row[field].trim() === '') {
@@ -1689,11 +1773,22 @@ function downloadTemplateFile() {
               row: rowNum,
               type: 'Missing Field',
               field: field,
-              message: `Row ${rowNum}: Required field "${field}" is missing or empty`
+              message: `Row ${rowNum}: Required field "${field}" is missing or empty for Student Onboarding.`
             });
           }
         });
         
+        // Email format check for Student Email
+        if (row['Student Email'] && !/^[\sS@]+@[\sS@]+\.[\sS@]+$/.test(row['Student Email'])) {
+          results.isValid = false;
+          results.errors.push({
+            row: rowNum,
+            type: 'Format Error',
+            field: 'Student Email',
+            message: `Row ${rowNum}: Student Email format is invalid (${row['Student Email']})`
+          });
+        }
+
         // Level value check
         if (row['Level'] && !['Level 2', 'Level 3'].includes(row['Level'])) {
           results.isValid = false;
@@ -1703,6 +1798,55 @@ function downloadTemplateFile() {
             field: 'Level',
             message: `Row ${rowNum}: Level must be "Level 2" or "Level 3", got "${row['Level']}"`
           });
+        }
+      } else if (uploadType === 'student-ks4') {
+        const requiredFields = ['UPN', 'Student_Email', 'sub1', 'ex1'];
+        requiredFields.forEach(field => {
+          if (!row[field] || String(row[field]).trim() === '') { // Convert to string before trim for numeric grades
+            results.isValid = false;
+            results.errors.push({
+              row: rowNum,
+              type: 'Missing Field',
+              field: field,
+              message: `Row ${rowNum}: Required field "${field}" is missing or empty for KS4 Subject Data.`
+            });
+          }
+        });
+        if (row['Student_Email'] && !/^[\sS@]+@[\sS@]+\.[\sS@]+$/.test(row['Student_Email'])) {
+            results.isValid = false;
+            results.errors.push({ row: rowNum, type: 'Format Error', field: 'Student_Email', message: `Row ${rowNum}: Student_Email format is invalid.` });
+        }
+        // Check that for every subX there is an exX up to a reasonable limit (e.g., 10 subjects)
+        for (let i = 1; i <= 10; i++) {
+          if (row[`sub${i}`] && !row[`ex${i}`]) {
+            results.isValid = false;
+            results.errors.push({ row: rowNum, type: 'Missing Field', field: `ex${i}`, message: `Row ${rowNum}: Grade (ex${i}) is missing for subject sub${i}.` });
+          }
+          if (!row[`sub${i}`] && row[`ex${i}`]) {
+            results.isValid = false;
+            results.errors.push({ row: rowNum, type: 'Missing Field', field: `sub${i}`, message: `Row ${rowNum}: Subject (sub${i}) is missing for grade ex${i}.` });
+          }
+        }
+      } else if (uploadType === 'student-ks5') {
+        const requiredFields = ['UPN', 'Student_Email', 'GCSE_Prior_Attainment', 'sub1'];
+        requiredFields.forEach(field => {
+          if (!row[field] || String(row[field]).trim() === '') { // Convert to string before trim
+            results.isValid = false;
+            results.errors.push({
+              row: rowNum,
+              type: 'Missing Field',
+              field: field,
+              message: `Row ${rowNum}: Required field "${field}" is missing or empty for KS5 Subject Data.`
+            });
+          }
+        });
+        if (row['Student_Email'] && !/^[\sS@]+@[\sS@]+\.[\sS@]+$/.test(row['Student_Email'])) {
+            results.isValid = false;
+            results.errors.push({ row: rowNum, type: 'Format Error', field: 'Student_Email', message: `Row ${rowNum}: Student_Email format is invalid.` });
+        }
+        if (row['GCSE_Prior_Attainment'] && isNaN(parseFloat(row['GCSE_Prior_Attainment']))) {
+            results.isValid = false;
+            results.errors.push({ row: rowNum, type: 'Format Error', field: 'GCSE_Prior_Attainment', message: `Row ${rowNum}: GCSE_Prior_Attainment must be a valid number.` });
         }
       }
     });
@@ -1953,9 +2097,26 @@ function downloadTemplateFile() {
     
     if (csvData && csvData.length > 0) {
       // Get field names based on upload type
-      const fields = uploadType === 'staff' ? 
-        ['Title', 'First Name', 'Last Name', 'Email Address', 'Staff Type'] : 
-        ['Lastname', 'Firstname', 'Student Email', 'Group', 'Year Gp', 'Level', 'Tutor'];
+      let fields = [];
+      // const fields = uploadType === 'staff' ? 
+      //   ['Title', 'First Name', 'Last Name', 'Email Address', 'Staff Type'] : 
+      //   ['Lastname', 'Firstname', 'Student Email', 'Group', 'Year Gp', 'Level', 'Tutor'];
+      switch (uploadType) {
+        case 'staff':
+          fields = ['Title', 'First Name', 'Last Name', 'Email Address', 'Staff Type'];
+          break;
+        case 'student-onboard':
+          fields = ['UPN', 'Firstname', 'Lastname', 'Student Email', 'Year Gp', 'Level', 'Tutors'];
+          break;
+        case 'student-ks4':
+          fields = ['UPN', 'Student_Email', 'sub1', 'ex1', 'sub2', 'ex2', 'sub3', 'ex3']; // Show a few example subject/grade pairs
+          break;
+        case 'student-ks5':
+          fields = ['UPN', 'Student_Email', 'GCSE_Prior_Attainment', 'sub1', 'sub2', 'sub3']; // Show a few example subjects
+          break;
+        default:
+          fields = Object.keys(csvData[0] || {}).slice(0, 5); // Fallback to first 5 headers
+      }
       
       // Create rows for first 5 records
       csvData.slice(0, 5).forEach((row, index) => {
@@ -2430,8 +2591,30 @@ function bindStepEvents() {
   
   switch (contentStep) {
     case 1: // Select upload type
-      // No special event binding needed
-      debugLog("Step 1: No special bindings required");
+      const uploadTypeRadios = document.querySelectorAll('input[name="upload-type"]');
+      const subTypesContainer = document.getElementById('student-subject-subtypes-container');
+
+      uploadTypeRadios.forEach(radio => {
+        radio.addEventListener('change', () => {
+          if (document.getElementById('upload-student-subjects')?.checked) {
+            if (subTypesContainer) subTypesContainer.style.display = 'block';
+          } else {
+            if (subTypesContainer) subTypesContainer.style.display = 'none';
+          }
+          // Reset subtype selection if main type changes away from student-subjects
+          if (radio.value !== 'student-subjects') {
+            const subTypeRadios = document.querySelectorAll('input[name="student-subject-subtype"]');
+            subTypeRadios.forEach(subRadio => subRadio.checked = false);
+          }
+        });
+      });
+      // Trigger change once on load to set initial state
+      if (document.getElementById('upload-student-subjects')?.checked) {
+        if (subTypesContainer) subTypesContainer.style.display = 'block';
+      } else {
+        if (subTypesContainer) subTypesContainer.style.display = 'none';
+      }
+      debugLog("Step 1: Event listeners for upload type and sub-type visibility attached.");
       break;
       
     case 2: // Select school
