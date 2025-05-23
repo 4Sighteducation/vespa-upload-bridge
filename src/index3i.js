@@ -1,9 +1,4 @@
-/**
- * VESPA Upload Bridge - Configuration
- * 
- * This file contains global configuration variables, state management,
- * and initialization setup for the VESPA Upload System.
- */
+
 
 // Global configuration variable - will be set by MultiAppLoader
 let VESPA_UPLOAD_CONFIG = null;
