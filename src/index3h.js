@@ -1610,7 +1610,7 @@ function downloadTemplateFile() {
    * @param {File} file - The CSV file to parse
    * @returns {Promise<Array<Object>>} - Promise resolving to array of row objects
    */
-  function parseCSVFile(file) {
+  async function parseCSVFile(file) { // Ensured async
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       
@@ -1709,9 +1709,9 @@ function downloadTemplateFile() {
   /**
    * Local validation of CSV data to catch common errors before sending to API
    * @param {Array} csvData - Parsed CSV data
-   * @returns {Object} Validation results object
+   * @returns {Promise<Object>} Validation results object
    */
-  function validateLocally(csvData) {
+  async function validateLocally(csvData) { // Changed to async
     const results = {
       isValid: true,
       errors: [],
@@ -1868,15 +1868,121 @@ function downloadTemplateFile() {
       }
     });
     
+    // If initial local validation already found errors, no need to call external validation
+    if (!results.isValid) {
+      debugLog("Initial local validation failed, skipping subject name check.", results.errors, 'warn');
+      return results; // Return Promise.resolve(results) if not using async/await for the whole chain
+    }
+
+    // === New: Subject Name Validation for student-ks5 ===
+    if (uploadType === 'student-ks5' && csvData && csvData.length > 0) {
+      debugLog("Starting student-ks5 subject name validation.", null, 'info');
+      let allSubjectNamesFromCsv = [];
+      const subjectColumns = ['sub1', 'sub2', 'sub3', 'sub4', 'sub5'];
+
+      csvData.forEach(row => {
+        subjectColumns.forEach(colName => {
+          if (row[colName] && String(row[colName]).trim() !== '') {
+            allSubjectNamesFromCsv.push(String(row[colName]).trim());
+          }
+        });
+      });
+      const uniqueSubjectNames = [...new Set(allSubjectNamesFromCsv)];
+
+      if (uniqueSubjectNames.length > 0) {
+        debugLog("Unique subject names collected for API validation:", uniqueSubjectNames);
+        
+        // Ensure API_BASE_URL is correctly formed for this call
+        // It should end with '/api/'
+        let validationHelperUrl = API_BASE_URL;
+        if (!validationHelperUrl.endsWith('/')) {
+            validationHelperUrl += '/';
+        }
+        // Check if it already contains /api/ correctly. If not, append 'validation/check-subjects'.
+        // If API_BASE_URL is "https://domain.com/api/", then it becomes "https://domain.com/api/validation/check-subjects"
+        // If API_BASE_URL is "https://domain.com/", it needs to become "https://domain.com/api/validation/check-subjects"
+        
+        // Simpler: ensure API_BASE_URL itself ends with /api/ as per determineApiUrl, then just append.
+        // For this specific endpoint, it's not /api/validation/check-subjects but just validation/check-subjects
+        // if API_BASE_URL is already "https://.../api/"
+        // The route is defined as '/api/validation/check-subjects' in Express,
+        // so if API_BASE_URL = "https://host.com", we need "https://host.com/api/validation/check-subjects"
+        // if API_BASE_URL = "https://host.com/api/", we need "https://host.com/api/validation/check-subjects" (no double /api/)
+
+        let checkSubjectsUrl = '';
+        if (API_BASE_URL.includes('/api')) { // e.g. https://host.com/api/ or https://host.com/api
+            checkSubjectsUrl = API_BASE_URL.replace(/\/api\/?$/, '') + '/api/validation/check-subjects';
+        } else { // e.g. https://host.com or https://host.com/
+            checkSubjectsUrl = API_BASE_URL.replace(/\/$/, '') + '/api/validation/check-subjects';
+        }
+        debugLog("Calling subject check API at:", checkSubjectsUrl);
+
+        try {
+          const response = await $.ajax({
+            url: checkSubjectsUrl,
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ subjectNames: uniqueSubjectNames }),
+            // Add headers if necessary, though this helper might be public
+          });
+
+          debugLog("Response from /api/validation/check-subjects:", response);
+
+          if (response && response.success && response.invalidSubjectNames && response.invalidSubjectNames.length > 0) {
+            const unrecognizedSubjectsFromApi = response.invalidSubjectNames;
+            debugLog("Unrecognized subjects from API:", unrecognizedSubjectsFromApi);
+
+            csvData.forEach((row, rowIndex) => {
+              subjectColumns.forEach(colName => {
+                const cellValue = String(row[colName] || '').trim();
+                if (cellValue !== '' && unrecognizedSubjectsFromApi.includes(cellValue)) {
+                  results.isValid = false; // Mark overall validation as false
+                  results.errors.push({
+                    row: rowIndex + 1, // 1-based for display
+                    type: 'Invalid Subject', // Added type for clarity
+                    field: colName, // Using 'field' to be consistent with other errors
+                    message: `Unrecognized subject: "${cellValue}". Please check spelling or prefix for non-A-Level (e.g., IB HL - Subject).`
+                  });
+                }
+              });
+            });
+            if (!results.isValid) {
+                 debugLog(`Found ${results.errors.filter(e => e.type === 'Invalid Subject').length} unrecognized subjects after API check.`, null, 'warn');
+            }
+          } else if (response && !response.success) {
+            debugLog("API call to /api/validation/check-subjects was not successful.", response.message, 'warn');
+            // Optionally add a general error if the API call itself fails in a known way
+            // results.errors.push({ row: 'N/A', type: 'API Error', message: `Subject validation service error: ${response.message}` });
+            // results.isValid = false;
+          }
+        } catch (error) {
+          console.error("Error calling /api/validation/check-subjects:", error);
+          debugLog("AJAX error validating subjects via API.", {
+             status: error.status, statusText: error.statusText, responseText: error.responseText
+          }, 'error');
+          results.isValid = false; // Mark validation as failed due to API error
+          results.errors.push({
+            row: 'N/A',
+            type: 'API Communication Error',
+            field: 'Subject Validation',
+            message: 'Could not validate subject names with the server. Please try again. Details: ' + (error.statusText || error.message)
+          });
+        }
+      } else {
+        debugLog("No unique subject names found in CSV to validate via API.", null, 'info');
+      }
+    }
+    // === End New: Subject Name Validation ===
+
     // Return the validation results
-    return results;
+    return results; // This will be a promise resolving to results
   }
 
   /**
    * Validate the CSV data
    * This function replaces the previous validation approach that had issues
    */
-  function validateCsvData() {
+  async function validateCsvData() { // Changed to async
     debugLog("Starting CSV validation", null, 'info');
     
     let file = null;
@@ -1901,39 +2007,31 @@ function downloadTemplateFile() {
     // Update UI to show validation in progress
     updateValidationStatus('Validating data...', 'processing');
     
-    // Parse the CSV file
-    parseCSVFile(file)
-      .then(csvData => {
+    try {
+        const csvData = await parseCSVFile(file); // await parseCSVFile
+
         // First validate locally to catch common errors
-        const localValidation = validateLocally(csvData);
+        const localValidation = await validateLocally(csvData); // await validateLocally
         
-        // If we have local validation errors, show those without making API call
+        // If we have local validation errors (including new subject check), show those without making API call
         if (!localValidation.isValid) {
           debugLog(`Local validation found ${localValidation.errors.length} errors`, localValidation.errors, 'warn');
           
-          // Store the validation results
           validationResults = {
             ...localValidation,
-            csvData: csvData,
+            csvData: csvData, 
             source: 'local'
           };
           
-          // Display results in UI
           displayValidationResults(validationResults);
-          
-          // Update status
           updateValidationStatus(`Validation completed with ${localValidation.errors.length} errors`, 'error');
-          
-          // Show a message that we're using local validation
-          showError(`Found ${localValidation.errors.length} validation issues. Fix these before sending to API.`);
-          
-          return Promise.reject(new Error('Local validation failed'));
+          showError(`Found ${localValidation.errors.length} validation issues. Please fix these before proceeding.`);
+          return; 
         }
         
         // No local errors - proceed with API validation
         debugLog("Local validation passed, proceeding with API validation");
         
-        // Determine the correct endpoint based on upload type
         let endpointPath = '';
         switch (uploadType) {
           case 'staff':
@@ -1951,12 +2049,10 @@ function downloadTemplateFile() {
           default:
             showError('Invalid upload type for API validation.');
             debugLog(`validateCsvData: Invalid uploadType "${uploadType}" for API call`, null, 'error');
-            // Reject the promise or handle appropriately if we are in a promise chain that expects it.
-            // For now, this will prevent the fetch call below if the endpointPath is not set.
-            return; // Or throw new Error based on how this function's callers expect errors.
+            updateValidationStatus('Validation failed: Invalid type', 'error'); // Update status
+            return;
         }
 
-        // EXPLICIT URL CONSTRUCTION - now with more logging and safety
         let baseUrl = API_BASE_URL;
         debugLog(`API Base URL (original): "${baseUrl}"`, null, 'info');
         
@@ -1965,7 +2061,6 @@ function downloadTemplateFile() {
           debugLog(`Added trailing slash: "${baseUrl}"`, null, 'info');
         }
         
-        // Ensure /api/ is present correctly, this logic might need review based on determineApiUrl behavior
         if (!baseUrl.includes('/api/')) {
           if (baseUrl.endsWith('/api')) {
             baseUrl += '/';
@@ -1980,7 +2075,6 @@ function downloadTemplateFile() {
         const validationUrl = `${baseUrl}${endpointPath}`;
         debugLog(`Final validation URL: "${validationUrl}"`, null, 'info');
         
-        // Create a formatted log of all CSV data being sent
         let logOutput = '=== CSV DATA BEING SENT TO API ===\n';
         csvData.forEach((row, idx) => {
           logOutput += `Row ${idx+1}: ${JSON.stringify(row)}\n`;
@@ -1988,7 +2082,6 @@ function downloadTemplateFile() {
         logOutput += '==============================';
         console.log(logOutput);
         
-        // Send the parsed CSV data as JSON with detailed request logging
         debugLog(`Sending API validation request to ${validationUrl}`, {
           method: 'POST',
           headers: {
@@ -1999,7 +2092,8 @@ function downloadTemplateFile() {
           rowCount: csvData.length
         }, 'info');
         
-        return fetch(validationUrl, {
+        // Corrected try-catch block for the fetch call
+        const response = await fetch(validationUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -2007,52 +2101,38 @@ function downloadTemplateFile() {
           },
           body: JSON.stringify({ csvData })
         });
-      })
-  .then(response => {
-    debugLog(`Validation response status: ${response.status} ${response.statusText}`);
-    // Always try to get response body for better error details
-    return response.json().then(data => {
-      if (!response.ok) {
-        // If we have error details in the response, use them
-        const errorMessage = data?.message || data?.error || `API error: ${response.status}`;
-        throw new Error(errorMessage);
-      }
-      return data;
-    }).catch(err => {
-      if (!response.ok) {
-        // If we couldn't parse JSON but response is not OK
-        throw new Error(`API responded with status: ${response.status}`);
-      }
-      // If we couldn't parse JSON but response is OK (should not happen)
-      throw new Error(`Could not parse response: ${err.message}`);
-    });
-  })
-  .then(result => {
-    debugLog("Validation result received:", result, 'success');
-    
-    // Store the validation results in the global variable
-    validationResults = result;
-    
-    // Display the results in the UI
-    displayValidationResults(result);
-    
-    // Update the validation status
-    const statusType = result.isValid ? 'success' : 'error';
-    const statusMessage = result.isValid ? 
-      'Validation successful' : 
-      `Validation completed with ${result.errors?.length || 0} errors`;
-    updateValidationStatus(statusMessage, statusType);
-  })
-  .catch(error => {
-    debugLog("Validation error:", error, 'error');
-    
-    // Show error message
-    updateValidationStatus(`Validation failed: ${error.message}`, 'error');
-    showError(`CSV validation failed: ${error.message}`);
-    
-    // Reset validation results
-    validationResults = null;
-  });
+
+        debugLog(`Validation response status: ${response.status} ${response.statusText}`);
+        const resultData = await response.json().catch(err => {
+          if (!response.ok) {
+            throw new Error(`API responded with status: ${response.status}. Response body was not valid JSON or empty.`);
+          }
+          debugLog("Could not parse JSON response from API, but status was OK.", err, 'warn');
+          throw new Error(`Could not parse API response: ${err.message}. Check API format.`);
+        });
+
+        if (!response.ok) {
+          const errorMessage = resultData?.message || resultData?.error || (`API error: ${response.status}` + (resultData?.details ? ` Details: ${JSON.stringify(resultData.details)}` : ''));
+          throw new Error(errorMessage);
+        }
+        
+        // result is now resultData from the successfully parsed JSON
+        debugLog("Validation result received:", resultData, 'success');
+        validationResults = resultData;
+        displayValidationResults(resultData);
+        const statusType = resultData.isValid ? 'success' : 'error';
+        const statusMessage = resultData.isValid ? 
+          'Validation successful' : 
+          `Validation completed with ${resultData.errors?.length || 0} errors`;
+        updateValidationStatus(statusMessage, statusType);
+
+    } catch (error) {
+        // This catch block now handles errors from parseCSVFile, validateLocally, fetch, or response.json()
+        debugLog("Validation error in validateCsvData catch block:", error, 'error');
+        updateValidationStatus(`Validation failed: ${error.message}`, 'error');
+        showError(`CSV validation failed: ${error.message}`);
+        validationResults = null; // Reset validation results on any failure in the try block
+    }
 }
   
   /**
@@ -2244,8 +2324,9 @@ function downloadTemplateFile() {
               <li>Staff Type format - must use commas between multiple types (e.g., "tut,sub" not "tut sub")</li>
               <li>Email format - must be a valid email address</li>
               <li>Missing required fields - First Name, Last Name, Email Address, Staff Type are required</li>
+              <li>For KS5 Subjects: Unrecognized subject name or incorrect prefix.</li>
             </ul>
-            Row ${index + 1} in the preview table may contain the issue.`;
+            Row ${errorRow || index + 1} in the preview table may contain the issue.`;
         }
         
         let errorContent = `
@@ -2256,7 +2337,9 @@ function downloadTemplateFile() {
         if (errorField) {
           errorContent += `<div class="vespa-error-field">Field: ${errorField}</div>`;
         }
-        
+        // If error.column is present (from new subject validation), use it instead of/in addition to errorField
+        // However, the new subject errors already populate 'field' with the column name.
+
         errorContent += `<div class="vespa-error-message">${errorMessage}</div>`;
         
         if (errorData) {
@@ -2895,21 +2978,33 @@ function bindStepEvents() {
   function updateStatusDisplay(message, type = 'info', showSpinner = undefined) {
     let statusDiv;
     // Try to find the status display within the current step's content
-    if (currentStep === 4 && !VESPA_UPLOAD_CONFIG.userRole === 'Super User') { // Processing step for regular user
+    // Adjusted logic for finding the correct status div
+    const isSuperUser = VESPA_UPLOAD_CONFIG?.userRole === 'Super User';
+    const processingStepNumber = isSuperUser ? 5 : 4;
+    const validationStepNumber = isSuperUser ? 4 : 3;
+
+    if (currentStep === processingStepNumber) { 
       statusDiv = document.querySelector('.vespa-processing-status');
-    } else if (currentStep === 5 && VESPA_UPLOAD_CONFIG.userRole === 'Super User') { // Processing step for super user
-      statusDiv = document.querySelector('.vespa-processing-status');
-    } else {
-       // Fallback or if we need a more generic status update location later
+    } else if (currentStep === validationStepNumber) {
+      statusDiv = document.querySelector('.vespa-validation-status');
+    }
+    
+    // Fallback or if we need a more generic status update location later
+    if (!statusDiv) {
       statusDiv = document.getElementById('general-status-display'); 
       if (!statusDiv) {
-          // Create one if it doesn't exist, perhaps at the top of .vespa-upload-content
           const contentArea = document.querySelector('.vespa-upload-content');
           if (contentArea) {
               statusDiv = document.createElement('div');
               statusDiv.id = 'general-status-display';
-              statusDiv.className = 'vespa-status-display-generic'; // Add a class for styling
-              contentArea.prepend(statusDiv);
+              statusDiv.className = 'vespa-status-display-generic'; 
+              // Prepend to current step's content if possible, or a general content area
+              const currentStepContent = contentArea.querySelector(':first-child'); // Assuming step content is wrapped
+              if (currentStepContent) {
+                  currentStepContent.prepend(statusDiv);
+              } else {
+                  contentArea.prepend(statusDiv);
+              }
           }
       }
     }
@@ -2956,8 +3051,18 @@ function bindStepEvents() {
     
     // Update classes: remove old, add new
     statusDiv.className = ''; // Clear existing specific type classes
-    statusDiv.classList.add('vespa-processing-status'); // Keep base class
-    if(document.getElementById('general-status-display') === statusDiv) statusDiv.classList.add('vespa-status-display-generic');
+    
+    // Determine base class based on which div we found/created
+    if (currentStep === processingStepNumber && document.querySelector('.vespa-processing-status') === statusDiv) {
+        statusDiv.classList.add('vespa-processing-status');
+    } else if (currentStep === validationStepNumber && document.querySelector('.vespa-validation-status') === statusDiv) {
+        statusDiv.classList.add('vespa-validation-status');
+    } else if (document.getElementById('general-status-display') === statusDiv) {
+        statusDiv.classList.add('vespa-status-display-generic');
+    } else {
+        // Default base class if none of the above matched perfectly (should be rare)
+        statusDiv.classList.add('vespa-generic-status-area'); 
+    }
 
 
     if (className) {
@@ -2965,4 +3070,5 @@ function bindStepEvents() {
     }
     debugLog(`Status display updated: ${message}`, {type, showSpinner}, 'info');
   }
+
 
