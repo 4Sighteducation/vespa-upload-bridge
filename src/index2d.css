@@ -780,3 +780,11 @@
     justify-content: center; /* If icon is larger than spinner */
 }
 
+/* In copyofindex2.css - Optional style for <code> tags in error messages */
+.vespa-error-item .vespa-error-value code {
+    background-color: #fee; /* Light pink/red background */
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-family: monospace;
+    color: #c00; /* Darker red text for the code */
+  }
