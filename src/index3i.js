@@ -269,7 +269,7 @@ function addStyles() {
   linkElement.id = 'vespa-upload-styles';
   linkElement.rel = 'stylesheet';
   linkElement.type = 'text/css';
-  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2c.css';
+  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2d.css';
   
   document.head.appendChild(linkElement);
   debugLog("Dynamically linked external CSS: " + linkElement.href, null, 'info');
@@ -3070,5 +3070,6 @@ function bindStepEvents() {
     }
     debugLog(`Status display updated: ${message}`, {type, showSpinner}, 'info');
   }
+
 
 
