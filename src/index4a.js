@@ -1,4 +1,9 @@
-
+/**
+ * VESPA Upload Bridge - Configuration
+ * 
+ * This file contains global configuration variables, state management,
+ * and initialization setup for the VESPA Upload System.
+ */
 
 // Global configuration variable - will be set by MultiAppLoader
 let VESPA_UPLOAD_CONFIG = null;
@@ -1156,28 +1161,32 @@ function renderSelectTypeStep() {
   function renderValidationStep() {
     // Create the table headers outside the template literal
     let tableHeaders = '';
-    let colSpan = 6;
+    let colSpan = 6; // Default for staff
     
+    // This logic determines the HEADERS of the preview table
     if (uploadType === 'staff') {
       tableHeaders = `
-        <th>Title</th>
-        <th>First Name</th>
-        <th>Last Name</th>
-        <th>Email Address</th>
-        <th>Staff Type</th>
+        <th>Title</th><th>First Name</th><th>Last Name</th><th>Email Address</th><th>Staff Type</th>
       `;
       colSpan = 6;
-    } else {
+    } else if (uploadType === 'student-onboard') { 
       tableHeaders = `
-        <th>Lastname</th>
-        <th>Firstname</th>
-        <th>Student Email</th>
-        <th>Group</th>
-        <th>Year Gp</th>
-        <th>Level</th>
-        <th>Tutor</th>
+        <th>Lastname</th><th>Firstname</th><th>Student Email</th><th>Group</th><th>Year Gp</th><th>Level</th><th>Tutor</th>
       `;
       colSpan = 8;
+    } else if (uploadType === 'student-ks4') {
+      tableHeaders = `
+        <th>UPN</th><th>Student Email</th><th>Sub1</th><th>Ex1</th><th>Sub2</th><th>Ex2</th>
+      `;
+      colSpan = 7;
+    } else if (uploadType === 'student-ks5') { // Ensure this is correct for student-ks5
+      tableHeaders = `
+        <th>UPN</th><th>Student Email</th><th>GCSE Prior</th><th>Sub1</th><th>Sub2</th><th>Sub3</th>
+      `;
+      colSpan = 7; // # + 6 headers
+    } else { // Fallback if uploadType is unknown at this stage
+      tableHeaders = `<th>Data Column 1</th><th>Data Column 2</th><th>Data Column 3</th><th>Data Column 4</th><th>Data Column 5</th>`;
+      colSpan = 6;
     }
     
     return `
@@ -1887,29 +1896,10 @@ function downloadTemplateFile() {
       if (uniqueSubjectNames.length > 0) {
         debugLog("Unique subject names collected for API validation:", uniqueSubjectNames);
         
-        // Ensure API_BASE_URL is correctly formed for this call
-        // It should end with '/api/'
-        let validationHelperUrl = API_BASE_URL;
-        if (!validationHelperUrl.endsWith('/')) {
-            validationHelperUrl += '/';
-        }
-        // Check if it already contains /api/ correctly. If not, append 'validation/check-subjects'.
-        // If API_BASE_URL is "https://domain.com/api/", then it becomes "https://domain.com/api/validation/check-subjects"
-        // If API_BASE_URL is "https://domain.com/", it needs to become "https://domain.com/api/validation/check-subjects"
-        
-        // Simpler: ensure API_BASE_URL itself ends with /api/ as per determineApiUrl, then just append.
-        // For this specific endpoint, it's not /api/validation/check-subjects but just validation/check-subjects
-        // if API_BASE_URL is already "https://.../api/"
-        // The route is defined as '/api/validation/check-subjects' in Express,
-        // so if API_BASE_URL = "https://host.com", we need "https://host.com/api/validation/check-subjects"
-        // if API_BASE_URL = "https://host.com/api/", we need "https://host.com/api/validation/check-subjects" (no double /api/)
-
-        let checkSubjectsUrl = '';
-        if (API_BASE_URL.includes('/api')) { // e.g. https://host.com/api/ or https://host.com/api
-            checkSubjectsUrl = API_BASE_URL.replace(/\/api\/?$/, '') + '/api/validation/check-subjects';
-        } else { // e.g. https://host.com or https://host.com/
-            checkSubjectsUrl = API_BASE_URL.replace(/\/$/, '') + '/api/validation/check-subjects';
-        }
+        // Simplified and robust URL construction for check-subjects endpoint
+        // determineApiUrl() ensures API_BASE_URL ends with /api/
+        // The target endpoint is registered at /api/validation/check-subjects
+        const checkSubjectsUrl = API_BASE_URL + "validation/check-subjects";
         debugLog("Calling subject check API at:", checkSubjectsUrl);
 
         try {
@@ -2208,21 +2198,18 @@ function downloadTemplateFile() {
     if (csvData && csvData.length > 0) {
       // Get field names based on upload type
       let fields = [];
-      // const fields = uploadType === 'staff' ? 
-      //   ['Title', 'First Name', 'Last Name', 'Email Address', 'Staff Type'] : 
-      //   ['Lastname', 'Firstname', 'Student Email', 'Group', 'Year Gp', 'Level', 'Tutor'];
       switch (uploadType) {
         case 'staff':
           fields = ['Title', 'First Name', 'Last Name', 'Email Address', 'Staff Type'];
           break;
         case 'student-onboard':
-          fields = ['UPN', 'Firstname', 'Lastname', 'Student Email', 'Year Gp', 'Level', 'Tutors'];
+           fields = ['UPN', 'Firstname', 'Lastname', 'Student Email', 'Year Gp', 'Level', 'Tutors'];
           break;
         case 'student-ks4':
-          fields = ['UPN', 'Student_Email', 'sub1', 'ex1', 'sub2', 'ex2', 'sub3', 'ex3']; // Show a few example subject/grade pairs
+          fields = ['UPN', 'Student_Email', 'sub1', 'ex1', 'sub2', 'ex2', 'sub3', 'ex3'];
           break;
-        case 'student-ks5':
-          fields = ['UPN', 'Student_Email', 'GCSE_Prior_Attainment', 'sub1', 'sub2', 'sub3']; // Show a few example subjects
+        case 'student-ks5': // Ensure this matches the headers in renderValidationStep for student-ks5
+          fields = ['UPN', 'Student_Email', 'GCSE_Prior_Attainment', 'sub1', 'sub2', 'sub3'];
           break;
         default:
           fields = Object.keys(csvData[0] || {}).slice(0, 5); // Fallback to first 5 headers
@@ -3065,6 +3052,5 @@ function bindStepEvents() {
     }
     debugLog(`Status display updated: ${message}`, {type, showSpinner}, 'info');
   }
-
 
 
