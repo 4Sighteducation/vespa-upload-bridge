@@ -1796,7 +1796,7 @@ function downloadTemplateFile() {
         });
         
         // Email format check for Student Email
-        if (row['Student Email'] && !/^[^\s@]+@[^\s@]+\\.[^\s@]+$/.test(row['Student Email'])) {
+        if (row['Student Email'] && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row['Student Email'])) {
           results.isValid = false;
           results.errors.push({
             row: rowNum,
@@ -1825,11 +1825,11 @@ function downloadTemplateFile() {
               row: rowNum,
               type: 'Missing Field',
               field: field,
-              message: `Row ${rowNum}: Required field "${field}" is missing or empty for KS4 Subject Data.`
+              message: `Row ${rowNum}: Required field \"${field}\" is missing or empty for KS4 Subject Data.`
             });
           }
         });
-        if (row['Student_Email'] && !/^[\sS@]+@[\sS@]+\.[\sS@]+$/.test(row['Student_Email'])) {
+        if (row['Student_Email'] && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row['Student_Email'])) {
             results.isValid = false;
             results.errors.push({ row: rowNum, type: 'Format Error', field: 'Student_Email', message: `Row ${rowNum}: Student_Email format is invalid.` });
         }
@@ -1853,11 +1853,11 @@ function downloadTemplateFile() {
               row: rowNum,
               type: 'Missing Field',
               field: field,
-              message: `Row ${rowNum}: Required field "${field}" is missing or empty for KS5 Subject Data.`
+              message: `Row ${rowNum}: Required field \"${field}\" is missing or empty for KS5 Subject Data.`
             });
           }
         });
-        if (row['Student_Email'] && !/^[^\s@]+@[^\s@]+\\.[^\s@]+$/.test(row['Student_Email'])) {
+        if (row['Student_Email'] && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row['Student_Email'])) {
             results.isValid = false;
             results.errors.push({ row: rowNum, type: 'Format Error', field: 'Student_Email', message: `Row ${rowNum}: Student_Email format is invalid.` });
         }
@@ -2965,3 +2965,4 @@ function bindStepEvents() {
     }
     debugLog(`Status display updated: ${message}`, {type, showSpinner}, 'info');
   }
+
