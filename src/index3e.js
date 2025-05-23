@@ -1857,7 +1857,7 @@ function downloadTemplateFile() {
             });
           }
         });
-        if (row['Student_Email'] && !/^[\sS@]+@[\sS@]+\.[\sS@]+$/.test(row['Student_Email'])) {
+        if (row['Student_Email'] && !/^[^\s@]+@[^\s@]+\\.[^\s@]+$/.test(row['Student_Email'])) {
             results.isValid = false;
             results.errors.push({ row: rowNum, type: 'Format Error', field: 'Student_Email', message: `Row ${rowNum}: Student_Email format is invalid.` });
         }
