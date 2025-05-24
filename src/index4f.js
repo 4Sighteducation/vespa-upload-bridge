@@ -2450,6 +2450,7 @@ function downloadTemplateFile() {
     debugLog(`Data to be sent to /api/${endpointPath}:`, {
       csvData: filteredData,
       options: currentProcessingOptions,
+      uploaderId: uploaderContextForAPI.userId, // Log the uploaderId being sent
       context: uploaderContextForAPI
     });
 
@@ -2468,7 +2469,8 @@ function downloadTemplateFile() {
           data: JSON.stringify({
               csvData: filteredData,
               options: currentProcessingOptions,
-              context: uploaderContextForAPI
+              uploaderId: uploaderContextForAPI.userId, // Send uploaderId directly
+              context: uploaderContextForAPI // Send the full context object as well
           }),
           xhrFields: { withCredentials: true }
       });
