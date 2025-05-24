@@ -2103,10 +2103,10 @@ function downloadTemplateFile() {
         
         // result is now resultData from the successfully parsed JSON
         debugLog("Validation result received:", resultData, 'success');
-        validationResults = resultData;
+        validationResults = resultData; // resultData has .success, not .isValid from API
         displayValidationResults(resultData);
-        const statusType = resultData.isValid ? 'success' : 'error';
-        const statusMessage = resultData.isValid ? 
+        const statusType = resultData.success ? 'success' : 'error'; // Use .success
+        const statusMessage = resultData.success ? 
           'Validation successful' : 
           `Validation completed with ${resultData.errors?.length || 0} errors`;
         updateValidationStatus(statusMessage, statusType);
@@ -2146,9 +2146,9 @@ function downloadTemplateFile() {
       }
       
       if (validRecordsEl) {
-        validRecordsEl.textContent = results.isValid ? 
-          (results.total || results.csvData?.length || 0) : 
-          ((results.total || results.csvData?.length || 0) - (results.errors?.length || 0));
+        validRecordsEl.textContent = results.success ? // Use .success
+          (results.rowCount || results.csvData?.length || 0) : 
+          ((results.rowCount || results.csvData?.length || 0) - (results.errors?.length || 0));
       }
       
       if (errorCountEl) {
@@ -2164,9 +2164,9 @@ function downloadTemplateFile() {
       }
       
       if (validRecordsSummary) {
-        validRecordsSummary.textContent = results.isValid ? 
-          (results.total || results.csvData?.length || 0) : 
-          ((results.total || results.csvData?.length || 0) - (results.errors?.length || 0));
+        validRecordsSummary.textContent = results.success ? // Use .success
+          (results.rowCount || results.csvData?.length || 0) : 
+          ((results.rowCount || results.csvData?.length || 0) - (results.errors?.length || 0));
       }
       
       // Display CSV preview if we're on the validation step
@@ -2842,14 +2842,14 @@ function bindStepEvents() {
       const nextStepValidateButton = document.getElementById('vespa-next-button');
       if (nextStepValidateButton && nextStepValidateButton.textContent === 'Validate') {
         debugLog("Found next step validate button, attaching event");
-        nextStepValidateButton.addEventListener('click', (e) => {
+        nextStepValidateButton.addEventListener('click', (e) => { 
           e.preventDefault();
           debugLog("Next step validate button clicked");
           // If validation was successful, allow moving to the next step
-          if (validationResults && validationResults.isValid) {
+          if (validationResults && validationResults.success) { // Use .success
             debugLog("Validation was successful, proceeding to next step");
-            currentStep++;
-            renderStep(currentStep);
+            currentStep++; 
+            renderStep(currentStep); 
           } else {
             // If not validated yet or validation failed, run validation
             validateCsvData();
