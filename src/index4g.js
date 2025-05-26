@@ -13,13 +13,14 @@ let API_BASE_URL = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api'; //
 const DEBUG_MODE = true;
 const CHECK_INTERVAL = 500; // Check every 500ms
 const MAX_CHECKS = 20; // Give up after 10 seconds (20 checks)
+const SUPER_USER_ROLE_ID = 'object_21'; //  <-- Add this line
 
 // State management
 let currentStep = 1;
 let uploadType = null; // 'staff' or 'student'
 let validationResults = null;
 let processingResults = null;
-let selectedSchool = null; // For super user mode
+let selectedSchool = null; // For super user mode - will store { id, name, schoolIdText, emulatedAdminEmail, emulatedAdminUserId }
 let isProcessing = false;
 let activeModal = null; // Track the active modal
 let selectedFile = null; // Store the selected file between steps
@@ -269,7 +270,7 @@ function addStyles() {
   linkElement.id = 'vespa-upload-styles';
   linkElement.rel = 'stylesheet';
   linkElement.type = 'text/css';
-  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2d.css';
+  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2e.css';
   
   document.head.appendChild(linkElement);
   debugLog("Dynamically linked external CSS: " + linkElement.href, null, 'info');
@@ -285,7 +286,7 @@ function validateCurrentStep() {
     return false;
   }
   
-  const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === 'Super User';
+  const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID; // <-- Modified
   
   switch (currentStep) {
     case 1: // Select upload type
@@ -408,7 +409,7 @@ function initializeUploadBridge() {
   if (VESPA_UPLOAD_CONFIG) {
     debugLog("Configuration received:", VESPA_UPLOAD_CONFIG);
     debugLog(`User role detected: ${VESPA_UPLOAD_CONFIG.userRole}`, null, 'info');
-    debugLog(`Is Super User: ${VESPA_UPLOAD_CONFIG.userRole === 'Super User'}`, null, 'info');
+    debugLog(`Is Super User: ${VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID}`, null, 'info');
   } else {
     debugLog("No configuration available yet!", null, 'warn');
   }
@@ -519,7 +520,7 @@ function initializeUploadInterface(container) {
   }
   
   // Determine if the user is a super user (needs school selection)
-  const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === 'Super User';
+  const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID; // <-- Modified
   
   // Create the wizard container
   const wizardHTML = `
@@ -804,7 +805,7 @@ function renderStep(step) {
     return;
   }
 // Debug step rendering (PART 6 - Add this block right here)
-const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === 'Super User';
+const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID; // <-- Modified
 debugLog(`Rendering step ${step}, User is SuperUser: ${isSuperUser}`, {
   currentStep: step,
   uploadType: uploadType,
@@ -1031,33 +1032,35 @@ function renderSelectTypeStep() {
    */
   function renderSelectSchoolStep() {
     return `
-      <h2>Select School</h2>
-      <p>Choose the school you want to upload data for.</p>
+      <h2>Select School to Emulate</h2>
+      <p>As a Super User, choose the VESPA Customer account you want to upload data for.</p>
       
       <div class="vespa-school-search">
-        <input type="text" id="school-search" placeholder="Search for a school...">
         <select id="school-select">
-          <option value="">-- Select a school --</option>
-          <!-- Schools will be dynamically populated -->
+          <option value="">-- Loading schools... --</option>
+          <!-- Schools will be dynamically populated by fetchVespaCustomers -->
         </select>
-        <button id="search-button" class="vespa-button secondary">Search</button>
       </div>
       
-      <div id="school-details" class="vespa-school-details" style="display: none;">
-        <h3>Selected School</h3>
+      <div id="emulation-details-container" style="display: none; margin-top: 15px; padding: 10px; background-color: #fff8e1; border: 1px solid #ffecb3; border-radius: 4px;">
+        <h4>Emulation Mode Active</h4>
+        <div id="emulation-school-name"></div>
+        <div id="emulation-admin-email"></div>
+        <div id="emulation-status"></div>
+      </div>
+
+      <div id="school-details" class="vespa-school-details" style="display: none; margin-top:15px;">
+        <h3>Selected School Details (from object_2)</h3>
         <div class="vespa-school-info">
           <div class="vespa-info-row">
-            <div class="vespa-info-label">School Name:</div>
-            <div class="vespa-info-value" id="school-name"></div>
+            <div class="vespa-info-label">Customer Name:</div>
+            <div class="vespa-info-value" id="customer-name-display"></div>
           </div>
           <div class="vespa-info-row">
-            <div class="vespa-info-label">Admin Email:</div>
-            <div class="vespa-info-value" id="admin-email"></div>
+            <div class="vespa-info-label">Customer ID (object_2):</div>
+            <div class="vespa-info-value" id="customer-id-display"></div>
           </div>
-          <div class="vespa-info-row">
-            <div class="vespa-info-label">Account Type:</div>
-            <div class="vespa-info-value" id="account-type"></div>
-          </div>
+          <!-- Add more object_2 details if needed -->
         </div>
       </div>
     `;
@@ -2684,7 +2687,7 @@ function prevStep() {
       return;
     }
     
-    const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === 'Super User';
+    const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID; // <-- Modified
     const maxSteps = isSuperUser ? 6 : 5;
     
     // Validate current step
@@ -2725,7 +2728,7 @@ function bindStepEvents() {
   }
   
   // Determine which step we're on
-  const isSuperUser = VESPA_UPLOAD_CONFIG?.userRole === 'Super User';
+  const isSuperUser = VESPA_UPLOAD_CONFIG?.userRole === SUPER_USER_ROLE_ID; // <-- Modified
   const contentStep = !isSuperUser && currentStep > 1 ? currentStep + 1 : currentStep;
   
   debugLog(`Binding events for content step ${contentStep}, isSuperUser: ${isSuperUser}`);
@@ -2758,33 +2761,46 @@ function bindStepEvents() {
       debugLog("Step 1: Event listeners for upload type and sub-type visibility attached.");
       break;
       
-    case 2: // Select school
-      const searchButton = document.getElementById('search-button');
+    case 2: // Select school (Super User Only)
+      // This case is only hit if isSuperUser is true due to contentStep calculation
+      debugLog("Binding events for Super User - School Selection (contentStep 2)");
+      fetchVespaCustomers(); // Populate dropdown when step is rendered
+
       const schoolSelect = document.getElementById('school-select');
-      
-      if (searchButton) {
-        debugLog("Found search button, attaching event");
-        searchButton.addEventListener('click', () => {
-          const searchTerm = document.getElementById('school-search')?.value || '';
-          debugLog(`Search button clicked with term: ${searchTerm}`);
-          searchSchools(searchTerm);
-        });
-      }
+      const emulationDetailsContainer = document.getElementById('emulation-details-container');
+      const schoolDetailsContainer = document.getElementById('school-details');
       
       if (schoolSelect) {
-        debugLog("Found school select, attaching event");
+        debugLog("Found school select, attaching event for emulation details");
         schoolSelect.addEventListener('change', () => {
-          const selected = schoolSelect.options[schoolSelect.selectedIndex];
-          debugLog(`School selected: ${selected.text}`);
-          if (selected.value) {
-            document.getElementById('school-details').style.display = 'block';
-            document.getElementById('school-name').textContent = selected.text;
-            document.getElementById('admin-email').textContent = selected.dataset.email || 'N/A';
-            document.getElementById('account-type').textContent = selected.dataset.type || 'N/A';
+          const selectedOption = schoolSelect.options[schoolSelect.selectedIndex];
+          if (selectedOption.value) {
+            selectedSchool = {
+              id: selectedOption.value, // This is object_2 ID
+              name: selectedOption.dataset.name,
+              schoolIdText: selectedOption.dataset.schoolIdText || '' // Text school ID
+              // emulatedAdminEmail and emulatedAdminUserId will be populated by fetchEmulationAdminDetails
+            };
+            debugLog("School selected for emulation:", selectedSchool);
+            
+            document.getElementById('customer-name-display').textContent = selectedSchool.name;
+            document.getElementById('customer-id-display').textContent = selectedSchool.id;
+            if (schoolDetailsContainer) schoolDetailsContainer.style.display = 'block';
+
+            document.getElementById('emulation-school-name').textContent = `Selected Customer: ${selectedSchool.name}`;
+            document.getElementById('emulation-admin-email').textContent = 'Fetching admin details...';
+            if (emulationDetailsContainer) emulationDetailsContainer.style.display = 'block';
+            
+            fetchEmulationAdminDetails(selectedSchool.id);
           } else {
-            document.getElementById('school-details').style.display = 'none';
+            selectedSchool = null; // Clear selection
+            if (schoolDetailsContainer) schoolDetailsContainer.style.display = 'none';
+            if (emulationDetailsContainer) emulationDetailsContainer.style.display = 'none';
+            debugLog("School selection cleared for emulation.");
           }
         });
+      } else {
+        debugLog("School select element not found in contentStep 2", null, "warn");
       }
       break;
       
@@ -2963,7 +2979,7 @@ function bindStepEvents() {
     let statusDiv;
     // Try to find the status display within the current step's content
     // Adjusted logic for finding the correct status div
-    const isSuperUser = VESPA_UPLOAD_CONFIG?.userRole === 'Super User';
+    const isSuperUser = VESPA_UPLOAD_CONFIG?.userRole === SUPER_USER_ROLE_ID; // <-- Modified
     const processingStepNumber = isSuperUser ? 5 : 4;
     const validationStepNumber = isSuperUser ? 4 : 3;
 
@@ -3054,6 +3070,127 @@ function bindStepEvents() {
     }
     debugLog(`Status display updated: ${message}`, {type, showSpinner}, 'info');
   }
+
+  /**
+   * Fetches all VESPA Customer (object_2) records and populates the school select dropdown.
+   */
+  async function fetchVespaCustomers() {
+    debugLog("Fetching VESPA Customers (object_2)...");
+    const schoolSelect = document.getElementById('school-select');
+    if (!schoolSelect) {
+      debugLog("School select dropdown not found.", null, "error");
+      return;
+    }
+    schoolSelect.disabled = true;
+    schoolSelect.innerHTML = '<option value="">-- Loading schools... --</option>';
+
+    try {
+      // Placeholder for API call
+      // const response = await $.ajax({
+      //   url: `${API_BASE_URL}vespa-customers`, // New endpoint: /api/vespa-customers
+      //   type: 'GET',
+      //   xhrFields: { withCredentials: true }
+      // });
+      // debugLog("VESPA Customers API response:", response);
+
+      // MOCK RESPONSE FOR NOW
+      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
+      const response = {
+        success: true,
+        customers: [
+          { id: 'obj2_id_1', name: 'Sample Academy Alpha', schoolIdText: 'ALPHA_SCH', field_44: 'Sample Academy Alpha (obj2_id_1)' },
+          { id: 'obj2_id_2', name: 'Test High Beta', schoolIdText: 'BETA_HS', field_44: 'Test High Beta (obj2_id_2)' },
+          { id: 'obj2_id_3', name: 'Another School Gamma', schoolIdText: 'GAMMA_EDU', field_44: 'Another School Gamma (obj2_id_3)' }
+        ]
+      };
+      // END MOCK
+
+      if (response.success && response.customers && response.customers.length > 0) {
+        schoolSelect.innerHTML = '<option value="">-- Select a school --</option>'; // Clear loading message
+        response.customers.forEach(customer => {
+          const option = document.createElement('option');
+          option.value = customer.id; // Store object_2 ID
+          option.textContent = customer.field_44 || customer.name; // Display name
+          option.dataset.name = customer.field_44 || customer.name;
+          option.dataset.schoolIdText = customer.schoolIdText || ''; // Store schoolIdText if available
+          schoolSelect.appendChild(option);
+        });
+        showSuccess(`Found ${response.customers.length} VESPA Customer accounts.`);
+      } else {
+        schoolSelect.innerHTML = '<option value="">-- No schools found --</option>';
+        showError(response.message || "Could not load schools.");
+      }
+    } catch (error) {
+      debugLog("Error fetching VESPA customers:", error, 'error');
+      schoolSelect.innerHTML = '<option value="">-- Error loading schools --</option>';
+      showError(`Failed to fetch schools: ${error.message || error.statusText || 'Unknown error'}`);
+    } finally {
+      schoolSelect.disabled = false;
+    }
+  }
+
+  /**
+   * Fetches primary admin details for the selected VESPA Customer for emulation.
+   * @param {string} customerId - The ID of the selected VESPA Customer (object_2).
+   */
+  async function fetchEmulationAdminDetails(customerId) {
+    debugLog("Fetching emulation admin details for customer ID:", customerId);
+    const emulationStatusDiv = document.getElementById('emulation-status');
+    if (emulationStatusDiv) emulationStatusDiv.textContent = 'Fetching admin details...';
+
+    try {
+      // Placeholder for API call
+      // const response = await $.ajax({
+      //   url: `${API_BASE_URL}customer-admin-details?customerId=${customerId}`, // New endpoint
+      //   type: 'GET',
+      //   xhrFields: { withCredentials: true }
+      // });
+      // debugLog("Customer Admin Details API response:", response);
+
+      // MOCK RESPONSE FOR NOW
+      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate delay
+      let mockAdminEmail = 'emulated.admin@sample.com';
+      let mockAdminUserId = 'emulated_user_obj3_id_1';
+      let mockSchoolIdText = 'MOCK_SCH_ID';
+      if (customerId === 'obj2_id_2') {
+          mockAdminEmail = 'beta.admin@test.net';
+          mockAdminUserId = 'emulated_user_obj3_id_2';
+          mockSchoolIdText = 'BETA_HS_TEXT';
+      }
+      const response = {
+        success: true,
+        adminEmail: mockAdminEmail,
+        adminUserId: mockAdminUserId, // object_3 ID of the admin
+        schoolIdText: mockSchoolIdText // Text school ID (e.g., from object_5.field_112 or object_3.field_126)
+      };
+      // END MOCK
+
+      if (response.success && response.adminEmail && response.adminUserId) {
+        selectedSchool.emulatedAdminEmail = response.adminEmail;
+        selectedSchool.emulatedAdminUserId = response.adminUserId;
+        // If schoolIdText is returned by this endpoint, prioritize it. Otherwise, keep what we had.
+        selectedSchool.schoolIdText = response.schoolIdText || selectedSchool.schoolIdText || 'N/A'; 
+        
+        document.getElementById('emulation-admin-email').textContent = `Emulating as Admin: ${response.adminEmail}`;
+        if (emulationStatusDiv) emulationStatusDiv.textContent = 'Emulation ready.';
+        showSuccess(`Emulation configured for ${selectedSchool.name} (Admin: ${response.adminEmail})`);
+      } else {
+        selectedSchool.emulatedAdminEmail = null;
+        selectedSchool.emulatedAdminUserId = null;
+        document.getElementById('emulation-admin-email').textContent = 'Could not find primary admin for emulation.';
+        if (emulationStatusDiv) emulationStatusDiv.textContent = 'Emulation setup failed.';
+        showError(response.message || "Could not fetch admin details for emulation.");
+      }
+    } catch (error) {
+      debugLog("Error fetching emulation admin details:", error, 'error');
+      selectedSchool.emulatedAdminEmail = null;
+      selectedSchool.emulatedAdminUserId = null;
+      document.getElementById('emulation-admin-email').textContent = 'Error fetching admin details.';
+      if (emulationStatusDiv) emulationStatusDiv.textContent = 'Error.';
+      showError(`Failed to fetch admin details: ${error.message || error.statusText || 'Unknown error'}`);
+    }
+  }
+
 
 
 
