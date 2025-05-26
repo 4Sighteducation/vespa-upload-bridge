@@ -13,18 +13,20 @@ let API_BASE_URL = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api'; //
 const DEBUG_MODE = true;
 const CHECK_INTERVAL = 500; // Check every 500ms
 const MAX_CHECKS = 20; // Give up after 10 seconds (20 checks)
-const SUPER_USER_ROLE_ID = 'object_21'; //  <-- Add this line
+const SUPER_USER_ROLE_ID = 'object_21';
 
 // State management
 let currentStep = 1;
 let uploadType = null; // 'staff' or 'student'
 let validationResults = null;
 let processingResults = null;
-let selectedSchool = null; // For super user mode - will store { id, name, schoolIdText, emulatedAdminEmail, emulatedAdminUserId }
+let selectedSchool = null; // For super user mode
 let isProcessing = false;
 let activeModal = null; // Track the active modal
 let selectedFile = null; // Store the selected file between steps
-let userContext = null;  // NEW: Store user context data
+let userContext = null;
+let selectedPercentile = 75; // Default percentile
+let selectedPercentileName = '75th (Default & Recommended)'; // For display
 
 /**
  * Debug logging helper
@@ -270,7 +272,7 @@ function addStyles() {
   linkElement.id = 'vespa-upload-styles';
   linkElement.rel = 'stylesheet';
   linkElement.type = 'text/css';
-  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2e.css';
+  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2f.css';
   
   document.head.appendChild(linkElement);
   debugLog("Dynamically linked external CSS: " + linkElement.href, null, 'info');
@@ -520,7 +522,7 @@ function initializeUploadInterface(container) {
   }
   
   // Determine if the user is a super user (needs school selection)
-  const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID; // <-- Modified
+  const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID;
   
   // Create the wizard container
   const wizardHTML = `
@@ -528,6 +530,9 @@ function initializeUploadInterface(container) {
       <div class="vespa-upload-header">
         <h1>VESPA Data Upload</h1>
         <p>Upload staff and student data to your VESPA account</p>
+        <div class="vespa-header-actions">
+          <button id="select-percentile-button" class="vespa-button secondary small-button">Target: ${selectedPercentileName}</button>
+        </div>
       </div>
       
       <div class="vespa-upload-steps">
@@ -576,6 +581,7 @@ function initializeUploadInterface(container) {
   // Set up event listeners
   document.getElementById('vespa-prev-button').addEventListener('click', prevStep);
   document.getElementById('vespa-next-button').addEventListener('click', nextStep);
+  document.getElementById('select-percentile-button').addEventListener('click', showPercentileModal);
   
   // Render the first step
   renderStep(currentStep);
@@ -2420,6 +2426,7 @@ function downloadTemplateFile() {
     const currentProcessingOptions = {
       sendNotifications: sendNotifications,
       notificationEmail: notificationEmail,
+      percentile: selectedPercentile // Add selected percentile here
     };
 
     if (uploadType === 'student-ks4' || uploadType === 'student-ks5') {
@@ -3191,6 +3198,86 @@ function bindStepEvents() {
     }
   }
 
+  /**
+   * Shows the percentile selection modal.
+   */
+  function showPercentileModal() {
+    const modalContent = `
+      <div class="vespa-percentile-modal-content">
+        <p>Select the ALPS percentile benchmark to be used for calculations. This will affect the Minimum Expected Grades (MEGs) and Subject Adjusted Grades (SAGs).</p>
+        
+        <div class="vespa-percentile-options">
+          <div class="vespa-percentile-option">
+            <input type="radio" id="percentile-60" name="percentile-select" value="60" ${selectedPercentile === 60 ? 'checked' : ''}>
+            <label for="percentile-60">60th Percentile</label>
+          </div>
+          <div class="vespa-percentile-option">
+            <input type="radio" id="percentile-75" name="percentile-select" value="75" ${selectedPercentile === 75 ? 'checked' : ''}>
+            <label for="percentile-75">75th Percentile (Default & Recommended)</label>
+          </div>
+          <div class="vespa-percentile-option">
+            <input type="radio" id="percentile-90" name="percentile-select" value="90" ${selectedPercentile === 90 ? 'checked' : ''}>
+            <label for="percentile-90">90th Percentile</label>
+          </div>
+          <div class="vespa-percentile-option">
+            <input type="radio" id="percentile-100" name="percentile-select" value="100" ${selectedPercentile === 100 ? 'checked' : ''}>
+            <label for="percentile-100">100th Percentile</label>
+          </div>
+        </div>
+        
+        <div class="vespa-percentile-info-trigger">
+          <button id="percentile-info-btn" class="vespa-info-btn">ⓘ What do these percentiles mean?</button>
+        </div>
+
+        <div class="vespa-modal-actions">
+          <button id="cancel-percentile-btn" class="vespa-button secondary">Cancel</button>
+          <button id="save-percentile-btn" class="vespa-button primary">Save Selection</button>
+        </div>
+      </div>
+    `;
+
+    showModal('Select ALPS Percentile Target', modalContent);
+
+    // Add event listeners for the new modal's buttons
+    document.getElementById('percentile-info-btn').addEventListener('click', showPercentileInfoModal);
+    document.getElementById('save-percentile-btn').addEventListener('click', () => {
+      const selectedValue = document.querySelector('input[name="percentile-select"]:checked');
+      if (selectedValue) {
+        selectedPercentile = parseInt(selectedValue.value);
+        // Update display name
+        switch(selectedPercentile) {
+          case 60: selectedPercentileName = '60th Percentile'; break;
+          case 75: selectedPercentileName = '75th (Default & Recommended)'; break;
+          case 90: selectedPercentileName = '90th Percentile'; break;
+          case 100: selectedPercentileName = '100th Percentile'; break;
+          default: selectedPercentileName = `${selectedPercentile}th Percentile`;
+        }
+        document.getElementById('select-percentile-button').textContent = `Target: ${selectedPercentileName}`;
+        debugLog("Percentile selected:", selectedPercentile, 'info');
+        showSuccess(`Percentile target set to ${selectedPercentileName}.`);
+      }
+      closeModal();
+    });
+    document.getElementById('cancel-percentile-btn').addEventListener('click', closeModal);
+  }
+
+  /**
+   * Shows the percentile information modal.
+   */
+  function showPercentileInfoModal() {
+    const infoContent = `
+      <h4>Understanding ALPS Percentile Benchmarks:</h4>
+      <p>Selecting a percentile benchmark determines the aspirational target grades (MEGs) and the baseline for Subject Adjusted Grades (SAGs). Here's a general guide:</p>
+      <ul>
+        <li><strong>100th Percentile:</strong> Targets based on the performance of the top 1% of students/schools nationally. This is a highly aspirational target, typically for outstanding providers aiming for elite performance.</li>
+        <li><strong>90th Percentile:</strong> Targets based on the performance of the top 10% of students/schools nationally. This represents a very strong, aspirational target for high-performing providers.</li>
+        <li><strong>75th Percentile (Default & Recommended):</strong> Targets based on the performance of the top 25% of students/schools nationally. This is the standard ALPS benchmark and represents excellent performance. It is generally recommended for most schools.</li>
+        <li><strong>60th Percentile:</strong> Targets based on the performance of the top 40% of students/schools nationally. This can be a useful interim target for schools on an improvement journey, aiming to move towards national average and above.</li>
+      </ul>
+      <p>The chosen percentile will influence which set of benchmark data is used for A-Level expected points/grades and the VA (Value Added) factors applied to all qualifications.</p>
+    `;
+    showModal('ALPS Percentile Information', infoContent);
+  }
 
 
 
