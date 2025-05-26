@@ -13,12 +13,89 @@
 .vespa-upload-header {
   text-align: center;
   margin-bottom: 24px;
+  position: relative; /* For positioning header actions */
 }
 
 .vespa-upload-header h1 {
   color: #007bff;
   margin: 0 0 8px 0;
   font-size: 28px;
+}
+
+.vespa-header-actions {
+  margin-top: 10px;
+  /* Removed absolute positioning to allow button to flow naturally */
+}
+
+.vespa-button.small-button {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+/* Percentile Modal Specific Styles */
+.vespa-percentile-modal-content p {
+  margin-bottom: 16px;
+  line-height: 1.6;
+}
+
+.vespa-percentile-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.vespa-percentile-option {
+  display: flex;
+  align-items: center;
+}
+
+.vespa-percentile-option input[type="radio"] {
+  margin-right: 10px;
+  transform: scale(1.2); /* Slightly larger radio buttons */
+}
+
+.vespa-percentile-option label {
+  font-size: 1em;
+  cursor: pointer;
+}
+
+.vespa-percentile-info-trigger {
+  margin-bottom: 20px;
+  text-align: left; 
+}
+
+.vespa-info-btn {
+  background: none;
+  border: none;
+  color: #007bff;
+  cursor: pointer;
+  font-size: 0.9em;
+  padding: 5px;
+}
+
+.vespa-info-btn:hover {
+  text-decoration: underline;
+}
+
+.vespa-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid #eee;
+}
+
+/* Styles for the info modal within another modal */
+.vespa-modal .vespa-modal-body ul {
+  padding-left: 20px;
+  margin-top: 10px;
+}
+
+.vespa-modal .vespa-modal-body li {
+  margin-bottom: 8px;
+  line-height: 1.5;
 }
 
 .vespa-upload-steps {
