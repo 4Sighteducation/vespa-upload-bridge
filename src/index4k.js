@@ -527,6 +527,7 @@ function initializeUploadInterface(container) {
   // Create the wizard container
   const wizardHTML = `
     <div id="vespa-upload-wizard" class="vespa-upload-wizard">
+      <div id="emulation-status-bar" style="display: none;"></div>
       <div class="vespa-upload-header">
         <h1>VESPA Data Upload</h1>
         <p>Upload staff and student data to your VESPA account</p>
@@ -941,6 +942,13 @@ debugLog(`Rendering step ${step}, User is SuperUser: ${isSuperUser}`, {
         const newUploadBtn = document.getElementById('start-new-upload');
         if (newUploadBtn) {
           newUploadBtn.addEventListener('click', function() {
+            // Hide the emulation status bar
+            const statusBar = document.getElementById('emulation-status-bar');
+            if (statusBar) {
+              statusBar.style.display = 'none';
+              statusBar.innerHTML = '';
+            }
+            
             // Reset the wizard and go back to step 1
             currentStep = 1;
             uploadType = null;
@@ -1042,6 +1050,7 @@ function renderSelectTypeStep() {
       <p>As a Super User, choose the VESPA Customer account you want to upload data for.</p>
       
       <div class="vespa-school-search">
+        <input type="text" id="school-search-input" placeholder="Type to search for a school..." style="margin-bottom: 10px; width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
         <select id="school-select">
           <option value="">-- Loading schools... --</option>
           <!-- Schools will be dynamically populated by fetchVespaCustomers -->
@@ -2781,9 +2790,31 @@ function bindStepEvents() {
       fetchVespaCustomers(); // Populate dropdown when step is rendered
 
       const schoolSelect = document.getElementById('school-select');
+      const schoolSearchInput = document.getElementById('school-search-input');
       const emulationDetailsContainer = document.getElementById('emulation-details-container');
       const schoolDetailsContainer = document.getElementById('school-details');
       
+      if (schoolSearchInput && schoolSelect) {
+        schoolSearchInput.addEventListener('input', () => {
+          const searchTerm = schoolSearchInput.value.toLowerCase();
+          const options = schoolSelect.options;
+          for (let i = 0; i < options.length; i++) {
+            const option = options[i];
+            // Always show the placeholder "-- Select a school --" option
+            if (option.value === "") {
+                option.style.display = "";
+                continue;
+            }
+            const optionText = option.text.toLowerCase();
+            if (optionText.includes(searchTerm)) {
+              option.style.display = '';
+            } else {
+              option.style.display = 'none';
+            }
+          }
+        });
+      }
+
       if (schoolSelect) {
         debugLog("Found school select, attaching event for emulation details");
         schoolSelect.addEventListener('change', () => {
@@ -2808,6 +2839,7 @@ function bindStepEvents() {
             fetchEmulationAdminDetails(selectedSchool.id);
           } else {
             selectedSchool = null; // Clear selection
+            document.getElementById('emulation-status-bar').style.display = 'none'; // Hide status bar
             if (schoolDetailsContainer) schoolDetailsContainer.style.display = 'none';
             if (emulationDetailsContainer) emulationDetailsContainer.style.display = 'none';
             debugLog("School selection cleared for emulation.");
@@ -2918,6 +2950,14 @@ function bindStepEvents() {
         debugLog("Found new upload button, attaching event");
         newUploadBtn.addEventListener('click', (e) => {
           e.preventDefault();
+
+          // Hide the emulation status bar
+          const statusBar = document.getElementById('emulation-status-bar');
+          if (statusBar) {
+            statusBar.style.display = 'none';
+            statusBar.innerHTML = '';
+          }
+          
           // Reset the wizard and go back to step 1
           currentStep = 1;
           uploadType = null;
@@ -3152,7 +3192,16 @@ function bindStepEvents() {
       if (response.success && response.admins && response.admins.length > 0) {
         selectedSchool.emulatedAdmins = response.admins; // Store array of admins
         
-        // Display list of admin emails
+        // --- Update the main emulation status bar ---
+        const statusBar = document.getElementById('emulation-status-bar');
+        const adminEmailsList = response.admins.map(admin => `<li>${admin.email}</li>`).join('');
+        statusBar.innerHTML = `
+          <strong>Emulating:</strong> ${selectedSchool.name} | 
+          <strong>Admin(s):</strong> <ul>${adminEmailsList}</ul>
+        `;
+        statusBar.style.display = 'block';
+
+        // --- Update the in-step details (for clarity within the step) ---
         const adminEmailsHtml = response.admins.map(admin => `<li>${admin.email}</li>`).join('');
         emulationAdminEmailDiv.innerHTML = `<strong>Emulating as Admins:</strong><ul>${adminEmailsHtml}</ul>`;
         
@@ -3160,6 +3209,7 @@ function bindStepEvents() {
         showSuccess(`Emulation configured for ${selectedSchool.name} with ${response.admins.length} admin(s).`);
       } else {
         selectedSchool.emulatedAdmins = [];
+        document.getElementById('emulation-status-bar').style.display = 'none'; // Hide status bar on failure
         emulationAdminEmailDiv.innerHTML = '<strong>No primary admins found for emulation.</strong>';
         if (emulationStatusDiv) emulationStatusDiv.textContent = 'Emulation setup failed.';
         showError(response.message || "Could not fetch admin details for emulation.");
@@ -3167,6 +3217,7 @@ function bindStepEvents() {
     } catch (error) {
       debugLog("Error fetching emulation admin details:", error, 'error');
       selectedSchool.emulatedAdmins = [];
+      document.getElementById('emulation-status-bar').style.display = 'none'; // Hide status bar on error
       if (emulationAdminEmailDiv) emulationAdminEmailDiv.innerHTML = '<strong>Error fetching admin details.</strong>';
       if (emulationStatusDiv) emulationStatusDiv.textContent = 'Error.';
       showError(`Failed to fetch admin details: ${error.message || error.statusText || 'Unknown error'}`);
