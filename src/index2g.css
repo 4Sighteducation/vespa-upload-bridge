@@ -8,6 +8,36 @@
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   padding: 24px;
   color: #333;
+  position: relative; /* Added for positioning the status bar */
+}
+
+#emulation-status-bar {
+  background-color: #fff8e1; /* A light yellow */
+  color: #856404;
+  padding: 12px 20px;
+  margin: -24px -24px 24px -24px; /* Extend to the edges of the parent padding */
+  border-bottom: 1px solid #ffeeba;
+  border-radius: 8px 8px 0 0; /* Match parent container's top radius */
+  font-size: 14px;
+}
+
+#emulation-status-bar strong {
+  color: #664d03;
+}
+
+#emulation-status-bar ul {
+  list-style-type: none;
+  padding-left: 0;
+  margin: 8px 0 0 0;
+  display: inline-block;
+}
+
+#emulation-status-bar li {
+  display: inline;
+  margin-right: 8px;
+  background-color: #fff0c2;
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 .vespa-upload-header {
