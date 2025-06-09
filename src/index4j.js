@@ -2449,18 +2449,26 @@ function downloadTemplateFile() {
 
     isProcessing = true;
 
+    // Determine the context: either the logged-in user or the emulated school/admins
+    const isEmulating = VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID && selectedSchool && selectedSchool.emulatedAdmins;
+
     const uploaderContextForAPI = {
-        userId: userContext?.userId || null,
-        userEmail: userContext?.userEmail || null,
-        schoolId: selectedSchool?.schoolId || userContext?.schoolId || null,
-        customerId: selectedSchool?.customerId || userContext?.customerId || null,
-        userRole: userContext?.userRole || null
+        isEmulating: isEmulating,
+        loggedInUser: { // Always send the actual logged-in user
+            userId: userContext?.userId || null,
+            userEmail: userContext?.userEmail || null,
+            userRole: userContext?.userRole || null,
+        },
+        emulatedSchool: isEmulating ? {
+            customerId: selectedSchool.id, // object_2 ID
+            customerName: selectedSchool.name,
+            admins: selectedSchool.emulatedAdmins // The array of admin objects
+        } : null
     };
 
     debugLog(`Data to be sent to /api/${endpointPath}:`, {
       csvData: filteredData,
       options: currentProcessingOptions,
-      uploaderId: uploaderContextForAPI.userId, // Log the uploaderId being sent
       context: uploaderContextForAPI
     });
 
@@ -2479,8 +2487,7 @@ function downloadTemplateFile() {
           data: JSON.stringify({
               csvData: filteredData,
               options: currentProcessingOptions,
-              uploaderId: uploaderContextForAPI.userId, // Send uploaderId directly
-              context: uploaderContextForAPI // Send the full context object as well
+              context: uploaderContextForAPI // Send the full context object
           }),
           xhrFields: { withCredentials: true }
       });
@@ -3092,33 +3099,20 @@ function bindStepEvents() {
     schoolSelect.innerHTML = '<option value="">-- Loading schools... --</option>';
 
     try {
-      // Placeholder for API call
-      // const response = await $.ajax({
-      //   url: `${API_BASE_URL}vespa-customers`, // New endpoint: /api/vespa-customers
-      //   type: 'GET',
-      //   xhrFields: { withCredentials: true }
-      // });
-      // debugLog("VESPA Customers API response:", response);
-
-      // MOCK RESPONSE FOR NOW
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
-      const response = {
-        success: true,
-        customers: [
-          { id: 'obj2_id_1', name: 'Sample Academy Alpha', schoolIdText: 'ALPHA_SCH', field_44: 'Sample Academy Alpha (obj2_id_1)' },
-          { id: 'obj2_id_2', name: 'Test High Beta', schoolIdText: 'BETA_HS', field_44: 'Test High Beta (obj2_id_2)' },
-          { id: 'obj2_id_3', name: 'Another School Gamma', schoolIdText: 'GAMMA_EDU', field_44: 'Another School Gamma (obj2_id_3)' }
-        ]
-      };
-      // END MOCK
+      const response = await $.ajax({
+        url: `${API_BASE_URL}vespa-customers`, // New endpoint: /api/vespa-customers
+        type: 'GET',
+        xhrFields: { withCredentials: true }
+      });
+      debugLog("VESPA Customers API response:", response);
 
       if (response.success && response.customers && response.customers.length > 0) {
         schoolSelect.innerHTML = '<option value="">-- Select a school --</option>'; // Clear loading message
         response.customers.forEach(customer => {
           const option = document.createElement('option');
           option.value = customer.id; // Store object_2 ID
-          option.textContent = customer.field_44 || customer.name; // Display name
-          option.dataset.name = customer.field_44 || customer.name;
+          option.textContent = customer.name; // Display name
+          option.dataset.name = customer.name;
           option.dataset.schoolIdText = customer.schoolIdText || ''; // Store schoolIdText if available
           schoolSelect.appendChild(option);
         });
@@ -3137,62 +3131,43 @@ function bindStepEvents() {
   }
 
   /**
-   * Fetches primary admin details for the selected VESPA Customer for emulation.
+   * Fetches admin details for the selected VESPA Customer for emulation.
    * @param {string} customerId - The ID of the selected VESPA Customer (object_2).
    */
   async function fetchEmulationAdminDetails(customerId) {
     debugLog("Fetching emulation admin details for customer ID:", customerId);
+    const emulationAdminEmailDiv = document.getElementById('emulation-admin-email');
     const emulationStatusDiv = document.getElementById('emulation-status');
-    if (emulationStatusDiv) emulationStatusDiv.textContent = 'Fetching admin details...';
+    if (emulationAdminEmailDiv) emulationAdminEmailDiv.innerHTML = 'Fetching admin details...';
+    if (emulationStatusDiv) emulationStatusDiv.textContent = 'Fetching...';
 
     try {
-      // Placeholder for API call
-      // const response = await $.ajax({
-      //   url: `${API_BASE_URL}customer-admin-details?customerId=${customerId}`, // New endpoint
-      //   type: 'GET',
-      //   xhrFields: { withCredentials: true }
-      // });
-      // debugLog("Customer Admin Details API response:", response);
+      const response = await $.ajax({
+        url: `${API_BASE_URL}customer-admin-details?customerId=${customerId}`, // Use the updated endpoint
+        type: 'GET',
+        xhrFields: { withCredentials: true }
+      });
+      debugLog("Customer Admin Details API response:", response);
 
-      // MOCK RESPONSE FOR NOW
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate delay
-      let mockAdminEmail = 'emulated.admin@sample.com';
-      let mockAdminUserId = 'emulated_user_obj3_id_1';
-      let mockSchoolIdText = 'MOCK_SCH_ID';
-      if (customerId === 'obj2_id_2') {
-          mockAdminEmail = 'beta.admin@test.net';
-          mockAdminUserId = 'emulated_user_obj3_id_2';
-          mockSchoolIdText = 'BETA_HS_TEXT';
-      }
-      const response = {
-        success: true,
-        adminEmail: mockAdminEmail,
-        adminUserId: mockAdminUserId, // object_3 ID of the admin
-        schoolIdText: mockSchoolIdText // Text school ID (e.g., from object_5.field_112 or object_3.field_126)
-      };
-      // END MOCK
-
-      if (response.success && response.adminEmail && response.adminUserId) {
-        selectedSchool.emulatedAdminEmail = response.adminEmail;
-        selectedSchool.emulatedAdminUserId = response.adminUserId;
-        // If schoolIdText is returned by this endpoint, prioritize it. Otherwise, keep what we had.
-        selectedSchool.schoolIdText = response.schoolIdText || selectedSchool.schoolIdText || 'N/A'; 
+      if (response.success && response.admins && response.admins.length > 0) {
+        selectedSchool.emulatedAdmins = response.admins; // Store array of admins
         
-        document.getElementById('emulation-admin-email').textContent = `Emulating as Admin: ${response.adminEmail}`;
+        // Display list of admin emails
+        const adminEmailsHtml = response.admins.map(admin => `<li>${admin.email}</li>`).join('');
+        emulationAdminEmailDiv.innerHTML = `<strong>Emulating as Admins:</strong><ul>${adminEmailsHtml}</ul>`;
+        
         if (emulationStatusDiv) emulationStatusDiv.textContent = 'Emulation ready.';
-        showSuccess(`Emulation configured for ${selectedSchool.name} (Admin: ${response.adminEmail})`);
+        showSuccess(`Emulation configured for ${selectedSchool.name} with ${response.admins.length} admin(s).`);
       } else {
-        selectedSchool.emulatedAdminEmail = null;
-        selectedSchool.emulatedAdminUserId = null;
-        document.getElementById('emulation-admin-email').textContent = 'Could not find primary admin for emulation.';
+        selectedSchool.emulatedAdmins = [];
+        emulationAdminEmailDiv.innerHTML = '<strong>No primary admins found for emulation.</strong>';
         if (emulationStatusDiv) emulationStatusDiv.textContent = 'Emulation setup failed.';
         showError(response.message || "Could not fetch admin details for emulation.");
       }
     } catch (error) {
       debugLog("Error fetching emulation admin details:", error, 'error');
-      selectedSchool.emulatedAdminEmail = null;
-      selectedSchool.emulatedAdminUserId = null;
-      document.getElementById('emulation-admin-email').textContent = 'Error fetching admin details.';
+      selectedSchool.emulatedAdmins = [];
+      if (emulationAdminEmailDiv) emulationAdminEmailDiv.innerHTML = '<strong>Error fetching admin details.</strong>';
       if (emulationStatusDiv) emulationStatusDiv.textContent = 'Error.';
       showError(`Failed to fetch admin details: ${error.message || error.statusText || 'Unknown error'}`);
     }
@@ -3278,6 +3253,5 @@ function bindStepEvents() {
     `;
     showModal('ALPS Percentile Information', infoContent);
   }
-
 
 
