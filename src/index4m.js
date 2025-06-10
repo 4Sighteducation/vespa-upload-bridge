@@ -365,8 +365,8 @@ async function fetchUserContext() {
       userName: null,
       userEmail: null,
       userRole: VESPA_UPLOAD_CONFIG.userRole || null,
-      schoolId: null,
-      customerId: null
+      schoolId: null, // This is the School ID Text, e.g., from field_126
+      customerId: null // This is the VESPA Customer Record ID, e.g., from field_122
     };
 
     // Get current user ID from Knack if available
@@ -378,8 +378,12 @@ async function fetchUserContext() {
         context.userEmail = userAttrs.email;
         
         // Try to get the customer and school ID from custom fields if available
+        // field_122 is the connection to object_2 (VESPA Customer)
+        // We need the ID from this connection.
+        if (userAttrs.values?.field_122_raw && userAttrs.values.field_122_raw.length > 0) {
+            context.customerId = userAttrs.values.field_122_raw[0].id;
+        }
         context.schoolId = userAttrs.values?.field_126 || null;
-        context.customerId = userAttrs.values?.field_122 || null;
       }
     }
 
@@ -2467,12 +2471,15 @@ function downloadTemplateFile() {
             userId: userContext?.userId || null,
             userEmail: userContext?.userEmail || null,
             userRole: userContext?.userRole || null,
+            customerId: userContext?.customerId || null
         },
         emulatedSchool: isEmulating ? {
             customerId: selectedSchool.id, // object_2 ID
             customerName: selectedSchool.name,
             admins: selectedSchool.emulatedAdmins // The array of admin objects
-        } : null
+        } : null,
+        // Pass the direct customer ID when not emulating
+        customerId: !isEmulating ? userContext?.customerId : null
     };
 
     debugLog(`Data to be sent to /api/${endpointPath}:`, {
@@ -3304,5 +3311,6 @@ function bindStepEvents() {
     `;
     showModal('ALPS Percentile Information', infoContent);
   }
+
 
 
