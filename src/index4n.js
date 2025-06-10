@@ -312,8 +312,7 @@ function validateCurrentStep() {
       
     case 2: // Select school (super user only) or Upload CSV
       if (isSuperUser) {
-        selectedSchool = document.getElementById('school-select')?.value;
-        if (!selectedSchool) {
+        if (!selectedSchool || !selectedSchool.id) {
           showError('Please select a school.');
           return false;
         }
@@ -3311,6 +3310,5 @@ function bindStepEvents() {
     `;
     showModal('ALPS Percentile Information', infoContent);
   }
-
 
 
