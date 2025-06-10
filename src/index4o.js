@@ -272,7 +272,7 @@ function addStyles() {
   linkElement.id = 'vespa-upload-styles';
   linkElement.rel = 'stylesheet';
   linkElement.type = 'text/css';
-  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2g.css';
+  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2h.css';
   
   document.head.appendChild(linkElement);
   debugLog("Dynamically linked external CSS: " + linkElement.href, null, 'info');
@@ -1323,12 +1323,12 @@ function renderSelectTypeStep() {
 
     return `
       <h2>Process Upload</h2>
-      <p>Your data is ready to be processed. Click "Process" to continue.</p>
+      <p>Review your data and processing options before submitting.</p>
       
       <div class="vespa-processing-container">
         <div class="vespa-processing-status">
           <div class="vespa-status-icon">⏳</div>
-          <div class="vespa-status-text">Ready to process</div>
+          <div class="vespa-status-text">Ready to submit for processing</div>
         </div>
         
         <div class="vespa-processing-summary">
@@ -1368,16 +1368,15 @@ function renderSelectTypeStep() {
         </div>
       </div>
       
-      <div class="vespa-info-box warning">
-        <div class="vespa-info-icon">⚠️</div>
+      <div class="vespa-info-box">
+        <div class="vespa-info-icon">ℹ️</div>
         <div class="vespa-info-content">
-          <strong>Warning:</strong> This process may take several minutes depending on the number of records.
-          Do not close this page until the process is complete.
+          <strong>Important:</strong> Your data will be queued for background processing. You will receive an email with the results once processing is complete.
         </div>
       </div>
       
       <div class="vespa-button-container">
-        <button id="process-button" class="vespa-button primary">Process Data</button>
+        <button id="process-button" class="vespa-button primary">Submit for Processing</button>
       </div>
     `;
   }
@@ -1387,38 +1386,84 @@ function renderSelectTypeStep() {
    * @returns {string} HTML for the step
    */
   function renderResultsStep() {
-    let statusText = 'Processing Complete';
+    let statusText = 'Processing Status';
     let statusClass = 'info'; // Default to info
     let statusIcon = 'ℹ️';
-    let summaryHtml = '<p>Your upload is being processed in the background. You will receive an email with the detailed results shortly.</p>';
+    let summaryHtml = '<p>Your upload has been submitted for processing.</p>';
+    let detailsHtml = '';
 
     if (processingResults) {
         if (processingResults.status === 'queued') {
-            statusText = 'Upload Queued for Background Processing';
+            statusText = 'Upload Queued Successfully';
             statusClass = 'success';
             statusIcon = '✅';
             summaryHtml = `
-                <p>Your data upload (Job ID: <strong>${processingResults.jobId || 'N/A'}</strong>) has been successfully queued.</p>
-                <p>It will be processed in the background. You will receive a confirmation email with the detailed results once it's complete.</p>
-                <p>You can safely close this window.</p>
+                <p><strong>Your data has been successfully queued for processing.</strong></p>
+                <p>Job ID: <code>${processingResults.jobId || 'N/A'}</code></p>
+                <p>You will receive an email at <strong>${processingResults.notificationEmail || 'your registered email'}</strong> with detailed results once processing is complete.</p>
+                <p class="vespa-success-message" style="margin-top: 20px;">✓ You can safely close this window now.</p>
             `;
         } else if (processingResults.status === 'submission_failed') {
             statusText = 'Upload Submission Failed';
             statusClass = 'error';
             statusIcon = '❌';
             summaryHtml = `
-                <p>There was an error submitting your upload for processing.</p>
-                <p><strong>Error:</strong> ${processingResults.message || 'Unknown submission error.'}</p>
+                <p><strong>There was an error submitting your upload for processing.</strong></p>
+                <p class="vespa-error-message">Error: ${processingResults.message || 'Unknown submission error.'}</p>
                 <p>Please try submitting the upload again. If the problem persists, contact support.</p>
             `;
+        } else if (processingResults.status === 'completed_with_errors') {
+            statusText = 'Processing Completed with Errors';
+            statusClass = 'warning';
+            statusIcon = '⚠️';
+            summaryHtml = `
+                <p><strong>Your upload was processed but encountered some errors.</strong></p>
+                <p>${processingResults.finalMessage || 'Some records could not be processed successfully.'}</p>
+            `;
+            
+            // Show error details if available
+            if (processingResults.processingErrors && processingResults.processingErrors.length > 0) {
+                detailsHtml = `
+                    <div class="vespa-error-details" style="margin-top: 20px;">
+                        <h4>Error Details:</h4>
+                        <div class="vespa-errors-list">
+                `;
+                processingResults.processingErrors.forEach((error, index) => {
+                    if (index < 5) { // Show first 5 errors
+                        detailsHtml += `
+                            <div class="vespa-error-item">
+                                <strong>Row ${error.row || 'N/A'}:</strong> ${error.message || error.type || 'Unknown error'}
+                            </div>
+                        `;
+                    }
+                });
+                if (processingResults.processingErrors.length > 5) {
+                    detailsHtml += `<p><em>...and ${processingResults.processingErrors.length - 5} more errors. Check your email for full details.</em></p>`;
+                }
+                detailsHtml += `
+                        </div>
+                    </div>
+                `;
+            }
+        } else if (processingResults.status === 'completed') {
+            statusText = 'Processing Completed Successfully';
+            statusClass = 'success';
+            statusIcon = '✅';
+            summaryHtml = `
+                <p><strong>Your upload has been processed successfully!</strong></p>
+                <p>${processingResults.finalMessage || 'All records were processed without errors.'}</p>
+                <p>Check your email for detailed results.</p>
+            `;
         } else {
-            // This case would be if we somehow got here with old, non-queued results structure
-            // For now, keep a simplified message for unexpected states.
-            statusText = processingResults.overallSuccess ? 'Upload Processed (Details in Email)' : 'Upload Processed with Issues (Details in Email)';
-            statusClass = processingResults.overallSuccess ? 'success' : 'warning';
-            statusIcon = processingResults.overallSuccess ? '✅' : '⚠️';
-            summaryHtml = `<p>The upload process has finished. Please check your email for a detailed summary of the results.</p>`;
+            // Fallback for unexpected states
+            statusText = 'Processing Status Unknown';
+            statusClass = 'info';
+            statusIcon = 'ℹ️';
+            summaryHtml = `<p>The upload process status is unclear. Please check your email for results or contact support if you don't receive an update.</p>`;
         }
+    } else {
+        // No processing results yet
+        summaryHtml = `<p>No processing results available. If you just submitted an upload, please wait for the email confirmation.</p>`;
     }
     
     return `
@@ -1430,16 +1475,14 @@ function renderSelectTypeStep() {
           <div class="vespa-status-text">${statusText}</div>
         </div>
         
-        <div class="vespa-results-summary centered-summary">
+        <div class="vespa-results-summary">
           ${summaryHtml}
+          ${detailsHtml}
         </div>
         
         <div class="vespa-results-actions">
-          <!-- Download results button might be removed or disabled as results are emailed -->
-          <!-- <button class="vespa-button secondary" id="download-results" style="display: none;">Download Results CSV</button> -->
           <button class="vespa-button primary" id="start-new-upload">Start New Upload</button>
         </div>
-        
       </div>
     `;
   }
@@ -2518,7 +2561,8 @@ function downloadTemplateFile() {
             jobId: response.jobId,
             status: 'queued',
             message: response.message,
-            total: filteredData.length
+            total: filteredData.length,
+            notificationEmail: notificationEmail // Add this line
         };
         
         if (processButton) {
