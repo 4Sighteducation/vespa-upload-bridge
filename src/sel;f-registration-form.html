@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VESPA Student Self-Registration</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+        
+        .registration-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #007bff;
+            margin-bottom: 10px;
+        }
+        
+        .school-name {
+            font-size: 18px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+        
+        .custom-message {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        .help-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .error-text {
+            font-size: 12px;
+            color: #dc3545;
+            margin-top: 5px;
+            display: none;
+        }
+        
+        .multi-select {
+            position: relative;
+        }
+        
+        .multi-select-display {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            background: white;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+        
+        .multi-select-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .multi-select-dropdown.open {
+            display: block;
+        }
+        
+        .multi-select-option {
+            padding: 8px 12px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .multi-select-option:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .multi-select-option.selected {
+            background-color: #e3f2fd;
+            font-weight: 600;
+        }
+        
+        .selected-tag {
+            background: #007bff;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .selected-tag .remove {
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .submit-button {
+            width: 100%;
+            padding: 12px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .submit-button:hover {
+            background: #0056b3;
+        }
+        
+        .submit-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .success-message {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .error-message {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .expired-message {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                margin: 20px;
+                padding: 10px;
+            }
+            
+            .registration-card {
+                padding: 20px;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="registration-card">
+            <div class="header">
+                <h1>VESPA Student Registration</h1>
+                <div class="school-name" id="school-name">Loading...</div>
+            </div>
+            
+            <div id="custom-message" class="custom-message" style="display: none;"></div>
+            
+            <div id="expired-message" class="expired-message" style="display: none;">
+                <h2>Registration Link Expired</h2>
+                <p>This registration link has expired. Please contact your school administrator for a new link.</p>
+            </div>
+            
+            <div id="success-message" class="success-message"></div>
+            <div id="error-message" class="error-message"></div>
+            
+            <form id="registration-form" style="display: none;">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="firstname">First Name *</label>
+                        <input type="text" id="firstname" name="firstname" required>
+                        <div class="error-text" id="firstname-error"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="lastname">Last Name *</label>
+                        <input type="text" id="lastname" name="lastname" required>
+                        <div class="error-text" id="lastname-error"></div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email Address *</label>
+                    <input type="email" id="email" name="email" required placeholder="Use your school email address">
+                    <div class="help-text">Please use your official school/college email address only</div>
+                    <div class="error-text" id="email-error"></div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="year-group">Current Year Group *</label>
+                        <select id="year-group" name="yearGroup" required>
+                            <option value="">Select year group</option>
+                            <option value="9">Year 9</option>
+                            <option value="10">Year 10</option>
+                            <option value="11">Year 11</option>
+                            <option value="12">Year 12</option>
+                            <option value="13">Year 13</option>
+                            <option value="UGrad">Undergraduate</option>
+                        </select>
+                        <div class="error-text" id="year-group-error"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="tutor-group">Tutor Group</label>
+                        <select id="tutor-group" name="tutorGroup">
+                            <option value="">Select tutor group</option>
+                        </select>
+                        <div class="help-text">Select your year group first</div>
+                        <div class="error-text" id="tutor-group-error"></div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="tutors">Tutor(s)</label>
+                    <div class="multi-select" id="tutors-select">
+                        <div class="multi-select-display" id="tutors-display">
+                            <span style="color: #999;">Select your tutor(s)</span>
+                        </div>
+                        <div class="multi-select-dropdown" id="tutors-dropdown"></div>
+                    </div>
+                    <div class="help-text">Select your year and tutor group first</div>
+                    <div class="error-text" id="tutors-error"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="head-of-year">Head(s) of Year</label>
+                    <div class="multi-select" id="hoy-select">
+                        <div class="multi-select-display" id="hoy-display">
+                            <span style="color: #999;">Select your head(s) of year</span>
+                        </div>
+                        <div class="multi-select-dropdown" id="hoy-dropdown"></div>
+                    </div>
+                    <div class="error-text" id="hoy-error"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="subject-teachers">Subject Teachers</label>
+                    <div class="multi-select" id="teachers-select">
+                        <div class="multi-select-display" id="teachers-display">
+                            <span style="color: #999;">Select your subject teachers</span>
+                        </div>
+                        <div class="multi-select-dropdown" id="teachers-dropdown"></div>
+                    </div>
+                    <div class="help-text">You can select multiple teachers</div>
+                    <div class="error-text" id="teachers-error"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="gender">Gender *</label>
+                    <select id="gender" name="gender" required>
+                        <option value="">Select gender</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Prefer not to say">Prefer not to say</option>
+                    </select>
+                    <div class="error-text" id="gender-error"></div>
+                </div>
+                
+                <button type="submit" class="submit-button" id="submit-button">Register</button>
+            </form>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Processing your registration...</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Global variables
+        let linkData = null;
+        let staffData = {
+            tutors: [],
+            headsOfYear: [],
+            subjectTeachers: [],
+            tutorGroups: []
+        };
+        let selectedData = {
+            tutors: [],
+            headsOfYear: [],
+            subjectTeachers: []
+        };
+        
+        // Free email domains to block
+        const freeEmailDomains = [
+            'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com',
+            'icloud.com', 'mail.com', 'protonmail.com', 'yandex.com', 'zoho.com'
+        ];
+        
+        // Initialize the form
+        document.addEventListener('DOMContentLoaded', function() {
+            // Parse URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const encodedData = urlParams.get('data');
+            
+            if (!encodedData) {
+                showError('Invalid registration link. Please contact your school administrator.');
+                return;
+            }
+            
+            try {
+                // Decode the link data
+                linkData = JSON.parse(atob(encodedData));
+                
+                // Check if link is expired
+                if (new Date(linkData.expiresAt) < new Date()) {
+                    document.getElementById('expired-message').style.display = 'block';
+                    return;
+                }
+                
+                // Set school name
+                document.getElementById('school-name').textContent = linkData.customerName || 'Your School';
+                
+                // Show custom message if provided
+                if (linkData.customMessage) {
+                    document.getElementById('custom-message').textContent = linkData.customMessage;
+                    document.getElementById('custom-message').style.display = 'block';
+                }
+                
+                // Show the form
+                document.getElementById('registration-form').style.display = 'block';
+                
+                // Load staff data
+                loadStaffData();
+                
+                // Set up event listeners
+                setupEventListeners();
+                
+            } catch (error) {
+                console.error('Error parsing link data:', error);
+                showError('Invalid registration link. Please contact your school administrator.');
+            }
+        });
+        
+        // Load staff data from API
+        async function loadStaffData() {
+            try {
+                // This would be an API call to fetch staff based on customerId
+                // For now, we'll simulate with placeholder data
+                // In production, this would be:
+                // const response = await fetch(`${API_URL}/staff/list?customerId=${linkData.customerId}`);
+                // staffData = await response.json();
+                
+                // Placeholder - this would come from API
+                console.log('Loading staff data for customer:', linkData.customerId);
+                
+            } catch (error) {
+                console.error('Error loading staff data:', error);
+            }
+        }
+        
+        // Set up event listeners
+        function setupEventListeners() {
+            // Form submission
+            document.getElementById('registration-form').addEventListener('submit', handleSubmit);
+            
+            // Year group change
+            document.getElementById('year-group').addEventListener('change', handleYearGroupChange);
+            
+            // Tutor group change
+            document.getElementById('tutor-group').addEventListener('change', handleTutorGroupChange);
+            
+            // Multi-select handlers
+            setupMultiSelect('tutors');
+            setupMultiSelect('hoy');
+            setupMultiSelect('teachers');
+            
+            // Email validation
+            document.getElementById('email').addEventListener('blur', validateEmail);
+        }
+        
+        // Handle year group change
+        function handleYearGroupChange(e) {
+            const yearGroup = e.target.value;
+            const tutorGroupSelect = document.getElementById('tutor-group');
+            
+            // Clear tutor group
+            tutorGroupSelect.innerHTML = '<option value="">Select tutor group</option>';
+            
+            if (yearGroup) {
+                // Filter tutor groups based on year
+                // This would come from the API data
+                const groups = staffData.tutorGroups.filter(g => g.yearGroup === yearGroup);
+                
+                groups.forEach(group => {
+                    const option = document.createElement('option');
+                    option.value = group.id;
+                    option.textContent = group.name;
+                    tutorGroupSelect.appendChild(option);
+                });
+                
+                // Update help text
+                tutorGroupSelect.nextElementSibling.textContent = groups.length ? 'Select your tutor group' : 'No tutor groups available for this year';
+            }
+            
+            // Reset dependent fields
+            handleTutorGroupChange({ target: { value: '' } });
+        }
+        
+        // Handle tutor group change
+        function handleTutorGroupChange(e) {
+            const tutorGroup = e.target.value;
+            const yearGroup = document.getElementById('year-group').value;
+            
+            if (yearGroup && tutorGroup) {
+                // Filter tutors based on year and group
+                const filteredTutors = staffData.tutors.filter(t => 
+                    t.yearGroups.includes(yearGroup) && t.tutorGroups.includes(tutorGroup)
+                );
+                
+                // Update tutors dropdown
+                updateMultiSelectOptions('tutors', filteredTutors);
+                
+                // Show warning if tutor doesn't match but allow selection
+                // This is handled in the multi-select logic
+            }
+        }
+        
+        // Setup multi-select dropdown
+        function setupMultiSelect(id) {
+            const display = document.getElementById(`${id}-display`);
+            const dropdown = document.getElementById(`${id}-dropdown`);
+            
+            display.addEventListener('click', () => {
+                dropdown.classList.toggle('open');
+            });
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest(`#${id}-select`)) {
+                    dropdown.classList.remove('open');
+                }
+            });
+        }
+        
+        // Update multi-select options
+        function updateMultiSelectOptions(id, options) {
+            const dropdown = document.getElementById(`${id}-dropdown`);
+            dropdown.innerHTML = '';
+            
+            options.forEach(option => {
+                const div = document.createElement('div');
+                div.className = 'multi-select-option';
+                div.textContent = option.name;
+                div.dataset.value = option.id;
+                
+                if (selectedData[id].includes(option.id)) {
+                    div.classList.add('selected');
+                }
+                
+                div.addEventListener('click', () => {
+                    toggleMultiSelectOption(id, option);
+                });
+                
+                dropdown.appendChild(div);
+            });
+        }
+        
+        // Toggle multi-select option
+        function toggleMultiSelectOption(id, option) {
+            const index = selectedData[id].indexOf(option.id);
+            
+            if (index > -1) {
+                selectedData[id].splice(index, 1);
+            } else {
+                selectedData[id].push(option.id);
+            }
+            
+            updateMultiSelectDisplay(id);
+            updateMultiSelectOptions(id, staffData[id]);
+        }
+        
+        // Update multi-select display
+        function updateMultiSelectDisplay(id) {
+            const display = document.getElementById(`${id}-display`);
+            display.innerHTML = '';
+            
+            if (selectedData[id].length === 0) {
+                display.innerHTML = '<span style="color: #999;">Select...</span>';
+            } else {
+                selectedData[id].forEach(selectedId => {
+                    const item = staffData[id].find(s => s.id === selectedId);
+                    if (item) {
+                        const tag = document.createElement('span');
+                        tag.className = 'selected-tag';
+                        tag.innerHTML = `${item.name} <span class="remove" data-id="${selectedId}">&times;</span>`;
+                        
+                        tag.querySelector('.remove').addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            toggleMultiSelectOption(id, item);
+                        });
+                        
+                        display.appendChild(tag);
+                    }
+                });
+            }
+        }
+        
+        // Validate email
+        function validateEmail() {
+            const email = document.getElementById('email').value.trim();
+            const emailError = document.getElementById('email-error');
+            
+            if (!email) {
+                emailError.style.display = 'none';
+                return true;
+            }
+            
+            // Check if it's a valid email format
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                emailError.textContent = 'Please enter a valid email address';
+                emailError.style.display = 'block';
+                return false;
+            }
+            
+            // Check if it's a free email domain
+            const domain = email.split('@')[1].toLowerCase();
+            if (linkData.requireSchoolEmail && freeEmailDomains.includes(domain)) {
+                emailError.textContent = 'Please use your school email address, not a personal email';
+                emailError.style.display = 'block';
+                return false;
+            }
+            
+            emailError.style.display = 'none';
+            return true;
+        }
+        
+        // Handle form submission
+        async function handleSubmit(e) {
+            e.preventDefault();
+            
+            // Clear previous messages
+            document.getElementById('success-message').style.display = 'none';
+            document.getElementById('error-message').style.display = 'none';
+            
+            // Validate form
+            if (!validateForm()) {
+                return;
+            }
+            
+            // Show loading
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('submit-button').disabled = true;
+            
+            // Prepare form data
+            const formData = {
+                firstname: document.getElementById('firstname').value.trim(),
+                lastname: document.getElementById('lastname').value.trim(),
+                email: document.getElementById('email').value.trim(),
+                yearGroup: document.getElementById('year-group').value,
+                tutorGroup: document.getElementById('tutor-group').value,
+                tutors: selectedData.tutors,
+                headsOfYear: selectedData.headsOfYear,
+                subjectTeachers: selectedData.subjectTeachers,
+                gender: document.getElementById('gender').value,
+                linkData: linkData
+            };
+            
+            try {
+                // Submit to API
+                // In production, this would be:
+                // const response = await fetch(`${API_URL}/students/self-register`, {
+                //     method: 'POST',
+                //     headers: { 'Content-Type': 'application/json' },
+                //     body: JSON.stringify(formData)
+                // });
+                
+                // Simulate API call
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                // Show success
+                showSuccess('Registration successful! You will receive an email with your login details shortly.');
+                
+                // Reset form
+                document.getElementById('registration-form').reset();
+                selectedData = { tutors: [], headsOfYear: [], subjectTeachers: [] };
+                updateMultiSelectDisplay('tutors');
+                updateMultiSelectDisplay('hoy');
+                updateMultiSelectDisplay('teachers');
+                
+            } catch (error) {
+                console.error('Registration error:', error);
+                showError('Registration failed. Please try again or contact your school administrator.');
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('submit-button').disabled = false;
+            }
+        }
+        
+        // Validate form
+        function validateForm() {
+            let isValid = true;
+            
+            // Required fields
+            const requiredFields = ['firstname', 'lastname', 'email', 'year-group', 'gender'];
+            
+            requiredFields.forEach(fieldId => {
+                const field = document.getElementById(fieldId);
+                const errorElement = document.getElementById(`${fieldId}-error`);
+                
+                if (!field.value.trim()) {
+                    errorElement.textContent = 'This field is required';
+                    errorElement.style.display = 'block';
+                    isValid = false;
+                } else {
+                    errorElement.style.display = 'none';
+                }
+            });
+            
+            // Validate email separately
+            if (!validateEmail()) {
+                isValid = false;
+            }
+            
+            return isValid;
+        }
+        
+        // Show success message
+        function showSuccess(message) {
+            const successDiv = document.getElementById('success-message');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            
+            // Scroll to top
+            window.scrollTo(0, 0);
+        }
+        
+        // Show error message
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            
+            // Scroll to top
+            window.scrollTo(0, 0);
+        }
+    </script>
+</body>
+</html>
