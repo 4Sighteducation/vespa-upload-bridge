@@ -3612,7 +3612,7 @@ function bindStepEvents() {
       const encodedData = btoa(JSON.stringify(linkData));
       
       // Create the registration URL using jsDelivr CDN
-      const registrationUrl = `https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/self-registration-form.html?data=${encodedData}`;
+      const registrationUrl = `https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/self-registration-form.html1a?data=${encodedData}`;
       
       // Generate QR code
       const qrCanvas = document.createElement('canvas');
