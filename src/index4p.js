@@ -27,6 +27,8 @@ let selectedFile = null; // Store the selected file between steps
 let userContext = null;
 let selectedPercentile = 75; // Default percentile
 let selectedPercentileName = '75th (Default & Recommended)'; // For display
+let universalPassword = null; // For student universal password feature
+let useUniversalPassword = false; // Flag to track if universal password is being used
 
 /**
  * Debug logging helper
@@ -536,6 +538,8 @@ function initializeUploadInterface(container) {
         <p>Upload staff and student data to your VESPA account</p>
         <div class="vespa-header-actions">
           <button id="select-percentile-button" class="vespa-button secondary small-button">Target: ${selectedPercentileName}</button>
+          <button id="universal-password-button" class="vespa-button secondary small-button" style="display: none;">Set Universal Password</button>
+          <button id="self-registration-button" class="vespa-button secondary small-button">Generate Self-Registration Link</button>
         </div>
       </div>
       
@@ -586,6 +590,8 @@ function initializeUploadInterface(container) {
   document.getElementById('vespa-prev-button').addEventListener('click', prevStep);
   document.getElementById('vespa-next-button').addEventListener('click', nextStep);
   document.getElementById('select-percentile-button').addEventListener('click', showPercentileModal);
+  document.getElementById('universal-password-button').addEventListener('click', showUniversalPasswordModal);
+  document.getElementById('self-registration-button').addEventListener('click', showSelfRegistrationModal);
   
   // Render the first step
   renderStep(currentStep);
@@ -835,6 +841,16 @@ debugLog(`Rendering step ${step}, User is SuperUser: ${isSuperUser}`, {
 
   });
 
+  // Show/hide universal password button based on upload type
+  const universalPasswordBtn = document.getElementById('universal-password-button');
+  if (universalPasswordBtn) {
+    if (uploadType && (uploadType === 'student-onboard' || uploadType === 'student-ks4' || uploadType === 'student-ks5')) {
+      universalPasswordBtn.style.display = 'inline-block';
+    } else {
+      universalPasswordBtn.style.display = 'none';
+    }
+  }
+
   setTimeout(() => {
     debugLog("Binding events after render");
     bindStepEvents();
@@ -959,6 +975,17 @@ debugLog(`Rendering step ${step}, User is SuperUser: ${isSuperUser}`, {
             processingResults = null;
             selectedSchool = null;
             isProcessing = false;
+            universalPassword = null;
+            useUniversalPassword = false;
+            
+            // Reset universal password button
+            const universalPwdBtn = document.getElementById('universal-password-button');
+            if (universalPwdBtn) {
+              universalPwdBtn.textContent = 'Set Universal Password';
+              universalPwdBtn.style.backgroundColor = '';
+              universalPwdBtn.style.borderColor = '';
+              universalPwdBtn.style.color = '';
+            }
             
             renderStep(1);
           });
@@ -1347,6 +1374,14 @@ function renderSelectTypeStep() {
               <div class="vespa-summary-value" id="valid-records-summary">${validationResults?.isValid ? (validationResults?.total || validationResults?.csvData?.length || 0) : ((validationResults?.total || validationResults?.csvData?.length || 0) - (validationResults?.errors?.length || 0))}</div>
             </div>
             ${validationStatusHtml}
+            ${(uploadType === 'student-onboard' || uploadType === 'student-ks4' || uploadType === 'student-ks5') && useUniversalPassword ? `
+            <div class="vespa-summary-item">
+              <div class="vespa-summary-label">Password Setting:</div>
+              <div class="vespa-summary-value">
+                <span class="vespa-validation-badge success">Universal Password Set</span>
+              </div>
+            </div>
+            ` : ''}
           </div>
         </div>
         
@@ -2488,6 +2523,13 @@ function downloadTemplateFile() {
         currentProcessingOptions.runCalculators = runCalculators;
     }
 
+    // Add universal password if set for student uploads
+    if ((uploadType === 'student-onboard' || uploadType === 'student-ks4' || uploadType === 'student-ks5') && useUniversalPassword && universalPassword) {
+        currentProcessingOptions.universalPassword = universalPassword;
+        currentProcessingOptions.useUniversalPassword = true;
+        debugLog("Universal password will be used for this upload", null, 'info');
+    }
+
     // Update UI to show processing request is being submitted
     updateStatusDisplay('Submitting your data for background processing... Please wait.', 'processing', true);
 
@@ -3353,6 +3395,298 @@ function bindStepEvents() {
       <p>The chosen percentile will influence which set of benchmark data is used for A-Level expected points/grades and the VA (Value Added) factors applied to all qualifications.</p>
     `;
     showModal('ALPS Percentile Information', infoContent);
+  }
+
+  /**
+   * Shows the universal password modal for student uploads.
+   */
+  function showUniversalPasswordModal() {
+    const modalContent = `
+      <div class="vespa-universal-password-content">
+        <p>Set a universal password for all students in this upload. This will override the automatic password generation.</p>
+        
+        <div class="vespa-password-input-group">
+          <label for="universal-password-input">Universal Password:</label>
+          <input type="password" id="universal-password-input" placeholder="Enter password" value="${universalPassword || ''}" style="width: 100%; padding: 8px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px;">
+          <div class="vespa-password-requirements" style="font-size: 12px; color: #666; margin-top: 5px;">
+            <p>Password requirements:</p>
+            <ul style="margin: 5px 0; padding-left: 20px;">
+              <li>Minimum 8 characters</li>
+              <li>At least one uppercase letter</li>
+              <li>At least one lowercase letter</li>
+              <li>At least one number</li>
+            </ul>
+          </div>
+        </div>
+        
+        <div class="vespa-checkbox-group" style="margin: 15px 0;">
+          <input type="checkbox" id="show-password" onchange="document.getElementById('universal-password-input').type = this.checked ? 'text' : 'password'">
+          <label for="show-password">Show password</label>
+        </div>
+        
+        <div class="vespa-info-box" style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px; margin: 15px 0;">
+          <div class="vespa-info-icon" style="display: inline-block; margin-right: 8px;">⚠️</div>
+          <div class="vespa-info-content" style="display: inline-block; width: calc(100% - 30px); vertical-align: top;">
+            <strong>Important:</strong> You will need to communicate this password to all students. The welcome email will state: "Your password will be supplied by your teacher."
+          </div>
+        </div>
+        
+        <div class="vespa-modal-actions" style="margin-top: 20px; text-align: right;">
+          <button id="cancel-universal-password-btn" class="vespa-button secondary">Cancel</button>
+          <button id="clear-universal-password-btn" class="vespa-button secondary">Clear Password</button>
+          <button id="save-universal-password-btn" class="vespa-button primary">Save Password</button>
+        </div>
+      </div>
+    `;
+
+    showModal('Set Universal Password', modalContent);
+
+    // Add event listeners
+    document.getElementById('save-universal-password-btn').addEventListener('click', () => {
+      const passwordInput = document.getElementById('universal-password-input');
+      const password = passwordInput.value.trim();
+      
+      if (password) {
+        // Validate password
+        const hasUpperCase = /[A-Z]/.test(password);
+        const hasLowerCase = /[a-z]/.test(password);
+        const hasNumbers = /\d/.test(password);
+        const isLongEnough = password.length >= 8;
+        
+        if (!isLongEnough || !hasUpperCase || !hasLowerCase || !hasNumbers) {
+          showError('Password does not meet the requirements. Please check and try again.');
+          return;
+        }
+        
+        universalPassword = password;
+        useUniversalPassword = true;
+        showSuccess('Universal password has been set. Remember to share this with your students.');
+        
+        // Update button text to show it's set
+        const btn = document.getElementById('universal-password-button');
+        if (btn) {
+          btn.textContent = 'Universal Password ✓';
+          btn.style.backgroundColor = '#d4edda';
+          btn.style.borderColor = '#28a745';
+          btn.style.color = '#155724';
+        }
+      } else {
+        showError('Please enter a password.');
+        return;
+      }
+      
+      closeModal();
+    });
+
+    document.getElementById('clear-universal-password-btn').addEventListener('click', () => {
+      universalPassword = null;
+      useUniversalPassword = false;
+      
+      // Reset button appearance
+      const btn = document.getElementById('universal-password-button');
+      if (btn) {
+        btn.textContent = 'Set Universal Password';
+        btn.style.backgroundColor = '';
+        btn.style.borderColor = '';
+        btn.style.color = '';
+      }
+      
+      showSuccess('Universal password has been cleared. Auto-generated passwords will be used.');
+      closeModal();
+    });
+
+    document.getElementById('cancel-universal-password-btn').addEventListener('click', closeModal);
+  }
+
+  /**
+   * Shows the self-registration link generation modal.
+   */
+  function showSelfRegistrationModal() {
+    // First check if we have the necessary context
+    if (!userContext || !userContext.customerId) {
+      showError('Unable to generate registration link. User context not available.');
+      return;
+    }
+
+    const modalContent = `
+      <div class="vespa-self-registration-content">
+        <p>Generate a self-registration link for students to sign up directly. The link will be valid for 1 year.</p>
+        
+        <div class="vespa-registration-options">
+          <h4>Registration Form Settings:</h4>
+          
+          <div class="vespa-checkbox-group" style="margin: 10px 0;">
+            <input type="checkbox" id="require-school-email" checked>
+            <label for="require-school-email">Require school email addresses only (recommended)</label>
+          </div>
+          
+          <div class="vespa-checkbox-group" style="margin: 10px 0;">
+            <input type="checkbox" id="auto-approve-registration" checked>
+            <label for="auto-approve-registration">Auto-approve registrations</label>
+          </div>
+          
+          <div class="vespa-input-group" style="margin: 15px 0;">
+            <label for="registration-message">Custom welcome message (optional):</label>
+            <textarea id="registration-message" placeholder="Enter a message to display on the registration form..." style="width: 100%; padding: 8px; margin: 5px 0; border: 1px solid #ddd; border-radius: 4px; min-height: 60px;"></textarea>
+          </div>
+        </div>
+        
+        <div class="vespa-modal-actions" style="margin-top: 20px; text-align: right;">
+          <button id="cancel-registration-link-btn" class="vespa-button secondary">Cancel</button>
+          <button id="generate-registration-link-btn" class="vespa-button primary">Generate Link</button>
+        </div>
+      </div>
+    `;
+
+    showModal('Generate Self-Registration Link', modalContent);
+
+    // Add event listeners
+    document.getElementById('generate-registration-link-btn').addEventListener('click', async () => {
+      const requireSchoolEmail = document.getElementById('require-school-email').checked;
+      const autoApprove = document.getElementById('auto-approve-registration').checked;
+      const customMessage = document.getElementById('registration-message').value.trim();
+      
+      // Generate the registration link
+      await generateRegistrationLink({
+        requireSchoolEmail,
+        autoApprove,
+        customMessage
+      });
+    });
+
+    document.getElementById('cancel-registration-link-btn').addEventListener('click', closeModal);
+  }
+
+  /**
+   * Generates a self-registration link and displays it with QR code
+   */
+  async function generateRegistrationLink(options) {
+    try {
+      // Close the current modal
+      closeModal();
+      
+      // Show loading
+      showModal('Generating Registration Link', '<div style="text-align: center; padding: 20px;">Generating link and QR code...</div>');
+      
+      // Prepare the data for the link
+      const linkData = {
+        customerId: selectedSchool?.id || userContext.customerId,
+        customerName: selectedSchool?.name || 'Your School',
+        adminId: userContext.userId,
+        adminEmail: userContext.userEmail,
+        requireSchoolEmail: options.requireSchoolEmail,
+        autoApprove: options.autoApprove,
+        customMessage: options.customMessage,
+        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() // 1 year from now
+      };
+      
+      // Encode the data
+      const encodedData = btoa(JSON.stringify(linkData));
+      
+      // Create the registration URL using jsDelivr CDN
+      const registrationUrl = `https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/self-registration-form.html?data=${encodedData}`;
+      
+      // Generate QR code
+      const qrCanvas = document.createElement('canvas');
+      
+      // Load QR code library if not already loaded
+      if (typeof QRCode === 'undefined') {
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js');
+      }
+      
+      // Display the link and QR code
+      const resultContent = `
+        <div class="vespa-registration-link-result">
+          <h4>Self-Registration Link Generated Successfully!</h4>
+          
+          <div class="vespa-link-display" style="margin: 20px 0;">
+            <label>Registration URL:</label>
+            <div style="display: flex; align-items: center; margin-top: 5px;">
+              <input type="text" id="registration-url" value="${registrationUrl}" readonly style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px 0 0 4px;">
+              <button id="copy-url-btn" class="vespa-button primary" style="border-radius: 0 4px 4px 0; margin: 0;">Copy</button>
+            </div>
+          </div>
+          
+          <div class="vespa-qr-code" style="text-align: center; margin: 20px 0;">
+            <div id="qrcode" style="display: inline-block;"></div>
+          </div>
+          
+          <div class="vespa-link-details" style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0;">
+            <h5>Link Details:</h5>
+            <ul style="margin: 10px 0; padding-left: 20px;">
+              <li>Valid until: ${new Date(linkData.expiresAt).toLocaleDateString()}</li>
+              <li>School email required: ${options.requireSchoolEmail ? 'Yes' : 'No'}</li>
+              <li>Auto-approve: ${options.autoApprove ? 'Yes' : 'No'}</li>
+              ${options.customMessage ? `<li>Custom message included</li>` : ''}
+            </ul>
+          </div>
+          
+          <div class="vespa-info-box" style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 12px; margin: 15px 0;">
+            <div class="vespa-info-icon" style="display: inline-block; margin-right: 8px;">ℹ️</div>
+            <div class="vespa-info-content" style="display: inline-block; width: calc(100% - 30px); vertical-align: top;">
+              Share this link or QR code with students. They will be able to self-register with their school email and select their tutors and teachers.
+            </div>
+          </div>
+          
+          <div class="vespa-modal-actions" style="margin-top: 20px; text-align: right;">
+            <button id="download-qr-btn" class="vespa-button secondary">Download QR Code</button>
+            <button id="close-registration-result-btn" class="vespa-button primary">Close</button>
+          </div>
+        </div>
+      `;
+      
+      showModal('Registration Link Generated', resultContent);
+      
+      // Generate the QR code
+      setTimeout(() => {
+        new QRCode(document.getElementById("qrcode"), {
+          text: registrationUrl,
+          width: 256,
+          height: 256,
+          colorDark: "#000000",
+          colorLight: "#ffffff",
+          correctLevel: QRCode.CorrectLevel.H
+        });
+      }, 100);
+      
+      // Add event listeners
+      document.getElementById('copy-url-btn').addEventListener('click', () => {
+        const urlInput = document.getElementById('registration-url');
+        urlInput.select();
+        document.execCommand('copy');
+        showSuccess('Link copied to clipboard!');
+      });
+      
+      document.getElementById('download-qr-btn').addEventListener('click', () => {
+        const canvas = document.querySelector('#qrcode canvas');
+        if (canvas) {
+          const link = document.createElement('a');
+          link.download = 'vespa-registration-qr.png';
+          link.href = canvas.toDataURL();
+          link.click();
+        }
+      });
+      
+      document.getElementById('close-registration-result-btn').addEventListener('click', closeModal);
+      
+    } catch (error) {
+      debugLog('Error generating registration link:', error, 'error');
+      showError('Failed to generate registration link. Please try again.');
+      closeModal();
+    }
+  }
+
+  /**
+   * Helper function to load external scripts
+   */
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
   }
 
 
