@@ -424,10 +424,24 @@ function initializeUploadBridge() {
   // Set the API URL based on config or fallback
   API_BASE_URL = determineApiUrl();
   // Fetch user context information
-fetchUserContext().then(context => {
-  userContext = context;
-  debugLog("User context set:", userContext);
-});
+  fetchUserContext().then(context => {
+    userContext = context;
+    debugLog("User context set:", userContext);
+    
+    // Enable/disable self-registration button based on context
+    const selfRegBtn = document.getElementById('self-registration-button');
+    if (selfRegBtn) {
+      if (!context || !context.customerId) {
+        selfRegBtn.disabled = true;
+        selfRegBtn.title = 'User context not available - please refresh the page';
+      } else {
+        selfRegBtn.disabled = false;
+        selfRegBtn.title = 'Generate a link for students to self-register';
+      }
+    }
+  }).catch(error => {
+    debugLog("Failed to fetch user context:", error, 'error');
+  });
   debugLog("Using API URL:", API_BASE_URL);
   
   // Test API connectivity immediately and show detailed response
@@ -3504,8 +3518,22 @@ function bindStepEvents() {
   function showSelfRegistrationModal() {
     // First check if we have the necessary context
     if (!userContext || !userContext.customerId) {
-      showError('Unable to generate registration link. User context not available.');
-      return;
+      // Try to use VESPA_UPLOAD_CONFIG as fallback
+      if (VESPA_UPLOAD_CONFIG && VESPA_UPLOAD_CONFIG.userRole) {
+        debugLog("Using VESPA_UPLOAD_CONFIG as fallback for user context", VESPA_UPLOAD_CONFIG);
+        // Create a temporary context from config
+        userContext = {
+          userId: 'temp-user-id',
+          userName: 'Current User',
+          userEmail: VESPA_UPLOAD_CONFIG.userEmail || 'user@school.edu',
+          userRole: VESPA_UPLOAD_CONFIG.userRole,
+          customerId: selectedSchool?.id || 'temp-customer-id',
+          schoolId: null
+        };
+      } else {
+        showError('Unable to generate registration link. User context not available. Please refresh the page and try again.');
+        return;
+      }
     }
 
     const modalContent = `
