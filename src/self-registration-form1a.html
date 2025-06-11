@@ -445,14 +445,24 @@
         // Load staff data from API
         async function loadStaffData() {
             try {
-                // This would be an API call to fetch staff based on customerId
-                // For now, we'll simulate with placeholder data
-                // In production, this would be:
-                // const response = await fetch(`${API_URL}/staff/list?customerId=${linkData.customerId}`);
-                // staffData = await response.json();
+                // Fetch staff data from API
+                const API_URL = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api';
+                const response = await fetch(`${API_URL}/self-registration/staff-list?customerId=${linkData.customerId}`);
                 
-                // Placeholder - this would come from API
-                console.log('Loading staff data for customer:', linkData.customerId);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        staffData = data;
+                        console.log('Staff data loaded:', staffData);
+                        
+                        // Initialize the dropdowns with data
+                        updateMultiSelectOptions('tutors', staffData.tutors);
+                        updateMultiSelectOptions('hoy', staffData.headsOfYear);
+                        updateMultiSelectOptions('teachers', staffData.subjectTeachers);
+                    }
+                } else {
+                    console.error('Failed to load staff data');
+                }
                 
             } catch (error) {
                 console.error('Error loading staff data:', error);
@@ -669,15 +679,19 @@
             
             try {
                 // Submit to API
-                // In production, this would be:
-                // const response = await fetch(`${API_URL}/students/self-register`, {
-                //     method: 'POST',
-                //     headers: { 'Content-Type': 'application/json' },
-                //     body: JSON.stringify(formData)
-                // });
+                const API_URL = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api';
+                const response = await fetch(`${API_URL}/self-registration/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
                 
-                // Simulate API call
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Registration failed');
+                }
+                
+                const result = await response.json();
                 
                 // Show success
                 showSuccess('Registration successful! You will receive an email with your login details shortly.');
