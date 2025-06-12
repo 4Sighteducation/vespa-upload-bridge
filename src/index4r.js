@@ -355,11 +355,15 @@ function validateCurrentStep() {
  * @returns {Object} User context information
  */
 async function fetchUserContext() {
-  if (!VESPA_UPLOAD_CONFIG || !Knack) {
+  if (!VESPA_UPLOAD_CONFIG) {
+    debugLog("No VESPA_UPLOAD_CONFIG available for user context", null, 'warn');
     return null;
   }
 
   try {
+    // Wait a bit for Knack to be fully initialized
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     // Extract user information from Knack global object
     let context = {
       userId: null,
@@ -370,25 +374,58 @@ async function fetchUserContext() {
       customerId: null // This is the VESPA Customer Record ID, e.g., from field_122
     };
 
-    // Get current user ID from Knack if available
-    if (Knack && Knack.getUserAttributes) {
-      const userAttrs = Knack.getUserAttributes();
-      if (userAttrs) {
-        context.userId = userAttrs.id;
-        context.userName = userAttrs.name;
-        context.userEmail = userAttrs.email;
+    // Try to get user info from Knack
+    if (typeof Knack !== 'undefined') {
+      debugLog("Knack object found, attempting to get user info");
+      
+      // Method 1: Try getUserAttributes
+      if (Knack.getUserAttributes && typeof Knack.getUserAttributes === 'function') {
+        const userAttrs = Knack.getUserAttributes();
+        debugLog("Raw user attributes from Knack.getUserAttributes():", userAttrs);
         
-        // Try to get the customer and school ID from custom fields if available
-        // field_122 is the connection to object_2 (VESPA Customer)
-        // We need the ID from this connection.
-        if (userAttrs.values?.field_122_raw && userAttrs.values.field_122_raw.length > 0) {
-            context.customerId = userAttrs.values.field_122_raw[0].id;
+        if (userAttrs) {
+          // Try multiple ways to get the user ID
+          context.userId = userAttrs.id || userAttrs.user_id || userAttrs.userId;
+          context.userName = userAttrs.name || userAttrs.user_name || userAttrs.userName;
+          context.userEmail = userAttrs.email || userAttrs.user_email || userAttrs.userEmail;
+          
+          // Try to get the customer and school ID from custom fields if available
+          if (userAttrs.values?.field_122_raw && userAttrs.values.field_122_raw.length > 0) {
+              context.customerId = userAttrs.values.field_122_raw[0].id;
+          }
+          context.schoolId = userAttrs.values?.field_126 || null;
         }
-        context.schoolId = userAttrs.values?.field_126 || null;
       }
+      
+      // Method 2: Try Knack.user object
+      if (!context.userId && Knack.user) {
+        debugLog("Trying Knack.user object:", Knack.user);
+        context.userId = Knack.user.id || Knack.user.user_id;
+        context.userName = context.userName || Knack.user.name;
+        context.userEmail = context.userEmail || Knack.user.email;
+      }
+      
+      // Method 3: Try Knack.session if available
+      if (!context.userId && Knack.session && Knack.session.user) {
+        debugLog("Trying Knack.session.user:", Knack.session.user);
+        context.userId = Knack.session.user.id;
+        context.userName = context.userName || Knack.session.user.name;
+        context.userEmail = context.userEmail || Knack.session.user.email;
+      }
+    } else {
+      debugLog("Knack object not found", null, 'warn');
+    }
+    
+    // If we still don't have a userId, this is a problem
+    if (!context.userId) {
+      debugLog("WARNING: Could not get user ID from any Knack source", {
+        knackExists: typeof Knack !== 'undefined',
+        knackUser: typeof Knack !== 'undefined' ? Knack.user : 'N/A',
+        knackSession: typeof Knack !== 'undefined' ? Knack.session : 'N/A'
+      }, 'error');
     }
 
-    debugLog("User context fetched", context);
+    debugLog("Final user context:", context);
     return context;
   } catch (error) {
     debugLog("Error fetching user context", error, 'error');
@@ -423,10 +460,27 @@ function initializeUploadBridge() {
   
   // Set the API URL based on config or fallback
   API_BASE_URL = determineApiUrl();
-  // Fetch user context information
-  fetchUserContext().then(context => {
+  // Fetch user context information with retry
+  const fetchUserContextWithRetry = async (retries = 3) => {
+    for (let i = 0; i < retries; i++) {
+      const context = await fetchUserContext();
+      if (context && context.userId) {
+        return context;
+      }
+      debugLog(`User context fetch attempt ${i + 1} failed, retrying...`, null, 'warn');
+      await new Promise(resolve => setTimeout(resolve, 500 * (i + 1))); // Exponential backoff
+    }
+    return null;
+  };
+  
+  fetchUserContextWithRetry().then(context => {
     userContext = context;
     debugLog("User context set:", userContext);
+    
+    if (!context || !context.userId) {
+      debugLog("ERROR: Failed to get user context after retries", null, 'error');
+      showError('Unable to load user information. Please refresh the page and try again.');
+    }
     
     // Enable/disable self-registration button based on context
     const selfRegBtn = document.getElementById('self-registration-button');
@@ -441,6 +495,7 @@ function initializeUploadBridge() {
     }
   }).catch(error => {
     debugLog("Failed to fetch user context:", error, 'error');
+    showError('Unable to load user information. Please refresh the page and try again.');
   });
   debugLog("Using API URL:", API_BASE_URL);
   
@@ -2563,13 +2618,33 @@ function downloadTemplateFile() {
     // Determine the context: either the logged-in user or the emulated school/admins
     const isEmulating = VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID && selectedSchool && selectedSchool.emulatedAdmins;
 
+    // Check if we have a valid userId
+    if (!userContext?.userId) {
+        showError('User context not available. Please refresh the page and try again.');
+        debugLog("ERROR: No user ID available in context", userContext, 'error');
+        
+        // Reset processing state
+        isProcessing = false;
+        if (processButton) {
+            processButton.disabled = false;
+            processButton.textContent = 'Submit for Processing';
+        }
+        if (prevButton) prevButton.disabled = false;
+        if (nextButton && nextButton !== processButton) nextButton.disabled = false;
+        
+        return; // Exit early - don't proceed without a valid user ID
+    }
+    
     const uploaderContextForAPI = {
+        // Always include userId at the top level for the API
+        userId: userContext.userId,
+        userEmail: userContext.userEmail || '',
         isEmulating: isEmulating,
         loggedInUser: { // Always send the actual logged-in user
-            userId: userContext?.userId || null,
-            userEmail: userContext?.userEmail || null,
-            userRole: userContext?.userRole || null,
-            customerId: userContext?.customerId || null
+            userId: userContext.userId,
+            userEmail: userContext.userEmail || '',
+            userRole: userContext.userRole || null,
+            customerId: userContext.customerId || null
         },
         emulatedSchool: isEmulating ? {
             customerId: selectedSchool.id, // object_2 ID
@@ -2579,6 +2654,8 @@ function downloadTemplateFile() {
         // Pass the direct customer ID when not emulating
         customerId: !isEmulating ? userContext?.customerId : null
     };
+    
+    debugLog("Uploader context prepared for API:", uploaderContextForAPI);
 
     debugLog(`Data to be sent to /api/${endpointPath}:`, {
       csvData: filteredData,
@@ -3612,7 +3689,7 @@ function bindStepEvents() {
       const encodedData = btoa(JSON.stringify(linkData));
       
       // Create the registration URL using jsDelivr CDN
-      const registrationUrl = `https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/self-registration-form.html1a?data=${encodedData}`;
+      const registrationUrl = `https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/self-registration-form1a.html?data=${encodedData}`;
       
       // Generate QR code
       const qrCanvas = document.createElement('canvas');
