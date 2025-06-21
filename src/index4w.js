@@ -2956,6 +2956,19 @@ function prevStep() {
       return;
     }
     
+    // Handle special upload types on step 1
+    if (currentStep === 1) {
+      if (uploadType === 'ks5-workflow') {
+        debugLog("Proceeding to KS5 Workflow interface", null, 'info');
+        showKS5WorkflowInterface();
+        return;
+      } else if (uploadType === 'academic-data') {
+        debugLog("Proceeding to Academic Data Management interface", null, 'info');
+        showAcademicDataInterface();
+        return;
+      }
+    }
+    
     // Handle special actions for certain steps
     if ((isSuperUser && currentStep === 4) || (!isSuperUser && currentStep === 3)) {
       // Validation step
@@ -3004,14 +3017,16 @@ function bindStepEvents() {
           // Handle KS5 workflow selection
           if (radio.value === 'ks5-workflow' && radio.checked) {
             debugLog("KS5 Workflow selected", null, 'info');
-            showKS5WorkflowInterface();
+            // Don't show the interface immediately, just set the upload type
+            uploadType = 'ks5-workflow';
             return;
           }
           
           // Handle academic-data selection (mid-year updates)
           if (radio.value === 'academic-data' && radio.checked) {
             debugLog("Academic Data Management selected", null, 'info');
-            showAcademicDataInterface();
+            // Don't show the interface immediately, just set the upload type
+            uploadType = 'academic-data';
             return;
           }
         });
