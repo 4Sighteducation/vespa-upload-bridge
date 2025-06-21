@@ -1075,77 +1075,123 @@ debugLog(`Rendering step ${step}, User is SuperUser: ${isSuperUser}`, {
  * @returns {string} HTML for the step
  */
 function renderSelectTypeStep() {
+    // Check if we need to verify staff existence
+    checkStaffExistence();
+    
     return `
-      <h2>Select Upload Type</h2>
-      <p>Choose the type of data you want to upload.</p>
+      <h2>VESPA Data Upload System</h2>
       
-      <div class="vespa-upload-options">
-        <div class="vespa-upload-option">
-          <input type="radio" id="upload-staff" name="upload-type" value="staff">
-          <label for="upload-staff">
-            <div class="vespa-option-icon">👥</div>
-            <div class="vespa-option-title">Staff Upload</div>
-            <div class="vespa-option-description">Upload staff data to create or update staff accounts.</div>
-          </label>
-        </div>
+      <div class="vespa-stage-container" style="margin-bottom: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+        <h3 style="color: #0056b3; margin-bottom: 15px;">📋 Stage 1: Account Generation (Required)</h3>
+        <p style="margin-bottom: 15px;">You must create accounts before uploading any academic data.</p>
         
-        <div class="vespa-upload-option">
-          <input type="radio" id="upload-student-onboard" name="upload-type" value="student-onboard">
-          <label for="upload-student-onboard">
-            <div class="vespa-option-icon">🎓</div>
-            <div class="vespa-option-title">Create Student Accounts (Stage 1)</div>
-            <div class="vespa-option-description">Onboard new students<code>StudentData.csv</code>.</div>
-          </label>
-        </div>
-
-        <div class="vespa-upload-option">
-          <input type="radio" id="upload-student-subjects" name="upload-type" value="student-subjects">
-          <label for="upload-student-subjects">
-            <div class="vespa-option-icon">📚</div>
-            <div class="vespa-option-title">Upload Student Subject Data</div>
-            <div class="vespa-option-description">Upload KS4  or KS5 subject data</div>
-          </label>
-        </div>
-        
-        <div class="vespa-upload-option">
-          <input type="radio" id="upload-academic-data" name="upload-type" value="academic-data">
-          <label for="upload-academic-data">
-            <div class="vespa-option-icon">📊</div>
-            <div class="vespa-option-title">Academic Data Management</div>
-            <div class="vespa-option-description">Manage GCSE prior attainment, KS5 subjects, and mid-year updates</div>
-          </label>
-        </div>
-      </div>
-
-      <div id="student-subject-subtypes-container" style="display: none; margin-top: 16px; padding: 16px; background-color: #f0f7ff; border-radius: 8px;">
-        <h4>Select Subject Data Type:</h4>
-        <div class="vespa-upload-options vespa-upload-sub-options">
-          <div class="vespa-upload-option sub-option">
-            <input type="radio" id="upload-student-ks4" name="student-subject-subtype" value="student-ks4">
-            <label for="upload-student-ks4">
-              <div class="vespa-option-icon">📄</div>
-              <div class="vespa-option-title">KS4 Subject Data</div>
-              <div class="vespa-option-description">Upload GCSE subjects using <code>SubjectData_KS4.csv</code>. User provides expected grades.</div>
+        <div class="vespa-upload-options">
+          <div class="vespa-upload-option">
+            <input type="radio" id="upload-staff" name="upload-type" value="staff">
+            <label for="upload-staff">
+              <div class="vespa-option-icon">👥</div>
+              <div class="vespa-option-title">A) Staff Accounts</div>
+              <div class="vespa-option-description">Upload staff accounts first - tutors, teachers, heads of year</div>
+              <div id="staff-status" class="vespa-status-badge" style="display: none;"></div>
             </label>
           </div>
-          <div class="vespa-upload-option sub-option">
-            <input type="radio" id="upload-student-ks5" name="student-subject-subtype" value="student-ks5">
-            <label for="upload-student-ks5">
-              <div class="vespa-option-icon">📊</div>
-              <div class="vespa-option-title">KS5 Subject Data</div>
-              <div class="vespa-option-description">Upload A-Level/L3 subjects using <code>SubjectData_KS5.csv</code>. User provides Prior Attainment for MEG calculation.</div>
+          
+          <div class="vespa-upload-option" id="student-upload-option">
+            <input type="radio" id="upload-student-onboard" name="upload-type" value="student-onboard">
+            <label for="upload-student-onboard">
+              <div class="vespa-option-icon">🎓</div>
+              <div class="vespa-option-title">B) Student Accounts</div>
+              <div class="vespa-option-description">Create student accounts (requires staff to exist)</div>
+              <div id="student-disabled-message" class="vespa-disabled-message" style="display: none; color: #dc3545; margin-top: 5px;">
+                ⚠️ Staff accounts must be created first
+              </div>
             </label>
           </div>
         </div>
       </div>
       
-      <div class="vespa-info-box">
-        <div class="vespa-info-icon">ℹ️</div>
-        <div class="vespa-info-content">
-          <strong>Important:</strong> For "Create Student Accounts", ensure staff (especially Tutors, Heads of Year) are already in the system or included in a staff upload.
+      <div class="vespa-stage-container" style="padding: 20px; background: #f0f7ff; border-radius: 8px;">
+        <h3 style="color: #28a745; margin-bottom: 15px;">📊 Stage 2: Academic Data Upload (Optional)</h3>
+        <div class="vespa-info-box" style="background: #e8f5e9; border-left: 4px solid #28a745; padding: 12px; margin-bottom: 15px;">
+          <div class="vespa-info-icon" style="display: inline-block; margin-right: 8px;">ℹ️</div>
+          <div class="vespa-info-content" style="display: inline-block; width: calc(100% - 30px); vertical-align: top;">
+            Academic data is completely optional. Schools can use VESPA successfully without uploading any subject or grade information.
+          </div>
+        </div>
+        
+        <div class="vespa-upload-options">
+          <div class="vespa-upload-option">
+            <input type="radio" id="upload-ks4-simple" name="upload-type" value="student-ks4">
+            <label for="upload-ks4-simple">
+              <div class="vespa-option-icon">📚</div>
+              <div class="vespa-option-title">A) Key Stage 4 Data (Years 10-11)</div>
+              <div class="vespa-option-description">Simple upload of GCSE subjects - no calculations needed</div>
+            </label>
+          </div>
+          
+          <div class="vespa-upload-option">
+            <input type="radio" id="upload-ks5-workflow" name="upload-type" value="ks5-workflow">
+            <label for="upload-ks5-workflow">
+              <div class="vespa-option-icon">🎯</div>
+              <div class="vespa-option-title">B) Key Stage 5 Workflow (Years 12-13)</div>
+              <div class="vespa-option-description">Calculate prior attainment & upload A-Level subjects with MEGs</div>
+            </label>
+          </div>
+          
+          <div class="vespa-upload-option">
+            <input type="radio" id="upload-academic-data" name="upload-type" value="academic-data">
+            <label for="upload-academic-data">
+              <div class="vespa-option-icon">✏️</div>
+              <div class="vespa-option-title">C) Mid-Year Updates</div>
+              <div class="vespa-option-description">Update existing academic data - grades, exam boards, etc.</div>
+            </label>
+          </div>
         </div>
       </div>
     `;
+  }
+  
+  /**
+   * Check if staff exist and update UI accordingly
+   */
+  async function checkStaffExistence() {
+    try {
+      const customerId = selectedSchool?.id || userContext?.customerId;
+      if (!customerId) return;
+      
+      const response = await $.ajax({
+        url: `${API_BASE_URL}staff/check-exists?customerId=${customerId}`,
+        type: 'GET',
+        xhrFields: { withCredentials: true }
+      });
+      
+      const hasStaff = response.success && response.hasStaff;
+      const staffStatus = document.getElementById('staff-status');
+      const studentOption = document.getElementById('upload-student-onboard');
+      const disabledMessage = document.getElementById('student-disabled-message');
+      
+      if (hasStaff) {
+        // Enable student upload
+        if (studentOption) studentOption.disabled = false;
+        if (disabledMessage) disabledMessage.style.display = 'none';
+        if (staffStatus) {
+          staffStatus.innerHTML = '✅ Staff exist';
+          staffStatus.style.display = 'inline-block';
+          staffStatus.style.color = '#28a745';
+        }
+      } else {
+        // Disable student upload
+        if (studentOption) studentOption.disabled = true;
+        if (disabledMessage) disabledMessage.style.display = 'block';
+        if (staffStatus) {
+          staffStatus.innerHTML = '❌ No staff found';
+          staffStatus.style.display = 'inline-block';
+          staffStatus.style.color = '#dc3545';
+        }
+      }
+    } catch (error) {
+      debugLog('Error checking staff existence:', error, 'warn');
+    }
   }
   
   /**
@@ -2955,22 +3001,18 @@ function bindStepEvents() {
 
       uploadTypeRadios.forEach(radio => {
         radio.addEventListener('change', () => {
-          if (document.getElementById('upload-student-subjects')?.checked) {
-            if (subTypesContainer) subTypesContainer.style.display = 'block';
-          } else {
-            if (subTypesContainer) subTypesContainer.style.display = 'none';
-          }
-          // Reset subtype selection if main type changes away from student-subjects
-          if (radio.value !== 'student-subjects') {
-            const subTypeRadios = document.querySelectorAll('input[name="student-subject-subtype"]');
-            subTypeRadios.forEach(subRadio => subRadio.checked = false);
+          // Handle KS5 workflow selection
+          if (radio.value === 'ks5-workflow' && radio.checked) {
+            debugLog("KS5 Workflow selected", null, 'info');
+            showKS5WorkflowInterface();
+            return;
           }
           
-          // Handle academic-data selection
+          // Handle academic-data selection (mid-year updates)
           if (radio.value === 'academic-data' && radio.checked) {
             debugLog("Academic Data Management selected", null, 'info');
-            // Instead of proceeding with normal flow, show the academic data interface
             showAcademicDataInterface();
+            return;
           }
         });
       });
@@ -3855,7 +3897,8 @@ function bindStepEvents() {
       }
       
       // Hide the wizard interface
-      document.querySelector('.vespa-wizard-container').style.display = 'none';
+      const wizard = document.getElementById('vespa-upload-wizard');
+      if (wizard) wizard.style.display = 'none';
       
       // Create the academic data interface
       contentDiv.innerHTML = `
@@ -4050,11 +4093,12 @@ function bindStepEvents() {
    */
   window.backToUploadWizard = function() {
     // Show the wizard interface again
-    document.querySelector('.vespa-wizard-container').style.display = 'block';
+    const wizard = document.getElementById('vespa-upload-wizard');
+    if (wizard) wizard.style.display = 'block';
     
     // Clear the academic data interface
     const contentDiv = document.querySelector('.vespa-upload-content');
-    contentDiv.innerHTML = '';
+    if (contentDiv) contentDiv.innerHTML = '';
     
     // Reset to step 1
     currentStep = 1;
@@ -4096,6 +4140,418 @@ function bindStepEvents() {
         <button onclick="closeModal()" class="vespa-button primary">OK</button>
       </div>
     `);
+  }
+  
+  /**
+   * Show the KS5 Workflow interface
+   */
+  function showKS5WorkflowInterface() {
+    debugLog("Loading KS5 Workflow interface", null, 'info');
+    
+    const contentDiv = document.querySelector('.vespa-upload-content');
+    if (!contentDiv) {
+      showError('Unable to find content area. Please refresh and try again.');
+      return;
+    }
+    
+    // Hide the wizard interface
+    const wizardContainer = document.getElementById('vespa-upload-wizard');
+    if (wizardContainer) wizardContainer.style.display = 'none';
+    
+    // Create the KS5 workflow interface
+    contentDiv.innerHTML = `
+      <div class="vespa-ks5-workflow-container" style="padding: 20px;">
+        <div class="vespa-workflow-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+          <h2>Key Stage 5 Workflow</h2>
+          <button class="vespa-button secondary" onclick="backToUploadWizard()">← Back to Upload System</button>
+        </div>
+        
+        <div class="vespa-workflow-steps" style="display: grid; gap: 20px;">
+          <div class="vespa-workflow-step" style="background: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #007bff;">
+            <h3 style="color: #007bff; margin-bottom: 15px;">📊 Step 1: Calculate GCSE Prior Attainment</h3>
+            <p style="margin-bottom: 15px;">First, calculate your students' prior attainment scores based on their GCSE results. This step is optional but recommended for accurate MEG calculations.</p>
+            
+            <div class="vespa-step-content">
+              <div class="vespa-info-box" style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 12px; margin-bottom: 15px;">
+                <strong>What you need:</strong>
+                <ul style="margin: 5px 0 0 20px;">
+                  <li>CSV file with student identifiers (Name, UPN, Email)</li>
+                  <li>GCSE grades in columns (any number of subjects)</li>
+                  <li>Grades should be numeric (1-9) format</li>
+                </ul>
+              </div>
+              
+              <div class="vespa-workflow-actions" style="display: flex; gap: 10px;">
+                <button class="vespa-button secondary" onclick="downloadGCSETemplate()">
+                  📥 Download GCSE Template
+                </button>
+                <button class="vespa-button primary" onclick="showGCSEPriorAttainmentCalculator()">
+                  🧮 Launch Prior Attainment Calculator
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <div class="vespa-workflow-step" style="background: #f0f7ff; padding: 20px; border-radius: 8px; border-left: 4px solid #28a745;">
+            <h3 style="color: #28a745; margin-bottom: 15px;">📚 Step 2: Upload KS5 Subject Data</h3>
+            <p style="margin-bottom: 15px;">Upload your A-Level/Level 3 subject choices along with the prior attainment scores calculated in Step 1.</p>
+            
+            <div class="vespa-step-content">
+              <div class="vespa-info-box" style="background: #e8f5e9; border-left: 4px solid #28a745; padding: 12px; margin-bottom: 15px;">
+                <strong>What you need:</strong>
+                <ul style="margin: 5px 0 0 20px;">
+                  <li>Student identifiers (UPN, Student_Email)</li>
+                  <li>GCSE_Prior_Attainment score from Step 1</li>
+                  <li>A-Level/Level 3 subjects (sub1, sub2, etc.)</li>
+                </ul>
+              </div>
+              
+              <div class="vespa-workflow-actions" style="display: flex; gap: 10px;">
+                <button class="vespa-button secondary" onclick="downloadKS5Template()">
+                  📥 Download KS5 Template
+                </button>
+                <button class="vespa-button primary" onclick="proceedToKS5Upload()">
+                  📤 Upload KS5 Data
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="vespa-workflow-tips" style="margin-top: 30px; padding: 20px; background: #fff3cd; border-radius: 8px;">
+          <h4 style="color: #856404; margin-bottom: 10px;">💡 Tips for Success:</h4>
+          <ul style="margin: 0; padding-left: 20px;">
+            <li>Complete Step 1 first to get accurate prior attainment scores</li>
+            <li>You can manually add prior attainment if you already have the data</li>
+            <li>The system will calculate MEGs based on the prior attainment and selected percentile</li>
+            <li>Make sure student identifiers match exactly between files</li>
+          </ul>
+        </div>
+      </div>
+    `;
+  }
+  
+  /**
+   * Download GCSE template
+   */
+  window.downloadGCSETemplate = function() {
+    const template = `Name,UPN,Email,English,Maths,Science,History,Geography,French,Spanish,Art,Music,PE
+John Smith,A123456,jsmith@school.edu,7,8,7-7,6,7,5,,,8,6
+Jane Doe,A123457,jdoe@school.edu,8,7,8-8,7,6,,4,7,,5`;
+    
+    const blob = new Blob([template], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'gcse_template.csv';
+    a.click();
+    
+    showSuccess('GCSE template downloaded!');
+  }
+  
+  /**
+   * Download KS5 template
+   */
+  window.downloadKS5Template = function() {
+    const template = `UPN,Student_Email,GCSE_Prior_Attainment,sub1,sub2,sub3,sub4,sub5
+A123456,jsmith@school.edu,7.2,Physics,Chemistry,Maths,Further Maths,
+A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
+    
+    const blob = new Blob([template], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ks5_template.csv';
+    a.click();
+    
+    showSuccess('KS5 template downloaded!');
+  }
+  
+  /**
+   * Proceed to KS5 upload
+   */
+  window.proceedToKS5Upload = function() {
+    // Reset to main wizard
+    const wizardContainer = document.getElementById('vespa-upload-wizard');
+    if (wizardContainer) wizardContainer.style.display = 'block';
+    
+    // Clear the workflow interface
+    const contentDiv = document.querySelector('.vespa-upload-content');
+    contentDiv.innerHTML = '';
+    
+    // Set upload type to KS5 and start from step 1
+    uploadType = 'student-ks5';
+    currentStep = 1;
+    
+    // Move directly to file upload step
+    currentStep = 2; // Skip type selection
+    renderStep(currentStep);
+  }
+
+  /**
+   * GCSE Prior Attainment Calculator (Client-side)
+   * Calculates average GCSE scores for students based on numeric grades (9-1)
+   */
+
+  /**
+   * Convert a single numeric grade string to base points and entry weight.
+   * Handles:
+   *  - Numeric grades 9–1 (e.g., "9","7","1") → points = grade, weight = 1
+   *  - Short-course suffix "/SC" or "-SC" (e.g., "5-SC") → weight 0.5
+   *  - Double-award combined grades with hyphen (e.g., "8-7") → sum of both grades, weight = 2
+   * @param {string} rawGrade
+   * @returns {{ points: number, weight: number }}
+   */
+  function parseGrade(rawGrade) {
+    let grade = String(rawGrade).trim();
+    let weight = 1;
+
+    // Detect short-course (e.g. "4/SC" or "4-SC")
+    if (/[-\/]SC$/i.test(grade)) {
+      weight = 0.5;
+      grade = grade.replace(/[-\/]SC$/i, '');
+    }
+
+    // Detect double-award hyphen grades (e.g. "8-7")
+    if (/^\d-\d$/.test(grade)) {
+      const [g1, g2] = grade.split('-').map(Number);
+      return { points: g1 + g2, weight: 2 };
+    }
+
+    // Numeric 9–1
+    const num = Number(grade);
+    if (!isNaN(num) && num >= 1 && num <= 9) {
+      return { points: num, weight };
+    }
+
+    // Unrecognized or U grade
+    return { points: 0, weight };
+  }
+
+  /**
+   * Calculate the prior attainment score for an array of numeric grade strings
+   * @param {string[]} grades
+   * @returns {number} Average score (0–9)
+   */
+  function calculatePriorAttainment(grades) {
+    let totalPoints = 0;
+    let totalWeight = 0;
+
+    grades.forEach(raw => {
+      const { points, weight } = parseGrade(raw);
+      totalPoints += points * weight;
+      totalWeight += weight;
+    });
+
+    return totalWeight > 0 ? +(totalPoints / totalWeight).toFixed(2) : 0;
+  }
+
+  /**
+   * Process GCSE CSV data and calculate prior attainment for each student
+   * @param {Array<Object>} csvData - Parsed CSV data
+   * @returns {Array<Object>} CSV data with prior attainment scores added
+   */
+  function processGCSEPriorAttainment(csvData) {
+    return csvData.map(row => {
+      // Extract student info fields
+      const studentInfo = {};
+      const grades = [];
+      
+      // Common student identifier fields to preserve
+      const studentFields = ['Name', 'Firstname', 'Lastname', 'UPN', 'ULN', 'Email', 'Student Email', 'Student_Email'];
+      
+      // Separate student info from grades
+      Object.keys(row).forEach(key => {
+        const value = row[key];
+        if (studentFields.some(field => key.toLowerCase() === field.toLowerCase())) {
+          studentInfo[key] = value;
+        } else if (value && String(value).trim()) {
+          // This is likely a grade column
+          grades.push(value);
+        }
+      });
+      
+      // Calculate prior attainment
+      const priorAttainment = calculatePriorAttainment(grades);
+      
+      // Return combined data
+      return {
+        ...studentInfo,
+        GCSE_Prior_Attainment: priorAttainment,
+        Grade_Count: grades.length
+      };
+    });
+  }
+
+  /**
+   * Show the GCSE Prior Attainment Calculator interface
+   */
+  function showGCSEPriorAttainmentCalculator() {
+    const modalContent = `
+      <div class="vespa-prior-attainment-calculator">
+        <h3>GCSE Prior Attainment Calculator</h3>
+        <p>Upload a CSV file containing student GCSE grades to calculate their prior attainment scores.</p>
+        
+        <div class="vespa-calculator-info">
+          <h4>How it works:</h4>
+          <ul>
+            <li>Upload a CSV with student names/IDs and their GCSE grades (1-9)</li>
+            <li>The calculator averages all numeric grades for each student</li>
+            <li>Handles double awards (e.g., "8-7") and short courses (e.g., "5-SC")</li>
+            <li>Download results with calculated prior attainment scores</li>
+          </ul>
+        </div>
+        
+        <div class="vespa-file-upload-section">
+          <input type="file" id="gcse-calc-file" accept=".csv" style="display: none;">
+          <button class="vespa-button primary" onclick="document.getElementById('gcse-calc-file').click()">
+            📤 Select GCSE Results CSV
+          </button>
+          <div id="gcse-file-info" style="margin-top: 10px; display: none;">
+            <strong>Selected:</strong> <span id="gcse-file-name"></span>
+          </div>
+        </div>
+        
+        <div id="gcse-preview-section" style="display: none; margin-top: 20px;">
+          <h4>Preview Results:</h4>
+          <div class="vespa-preview-table" style="max-height: 300px; overflow-y: auto;">
+            <table id="gcse-preview-table">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Grades Count</th>
+                  <th>Prior Attainment Score</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        
+        <div class="vespa-modal-actions" style="margin-top: 20px;">
+          <button class="vespa-button secondary" onclick="closeModal()">Cancel</button>
+          <button id="download-results-btn" class="vespa-button primary" style="display: none;" onclick="downloadPriorAttainmentResults()">
+            📥 Download Results
+          </button>
+        </div>
+      </div>
+    `;
+    
+    showModal('GCSE Prior Attainment Calculator', modalContent);
+    
+    // Add file input handler
+    document.getElementById('gcse-calc-file').addEventListener('change', handleGCSEFileUpload);
+  }
+
+  // Store calculated results globally for download
+  let calculatedPriorAttainmentData = null;
+
+  /**
+   * Handle GCSE file upload for prior attainment calculation
+   */
+  async function handleGCSEFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    // Update UI
+    document.getElementById('gcse-file-name').textContent = file.name;
+    document.getElementById('gcse-file-info').style.display = 'block';
+    
+    try {
+      // Parse CSV
+      const csvData = await parseCSVFile(file);
+      debugLog(`Parsed ${csvData.length} rows from GCSE file`, null, 'info');
+      
+      // Calculate prior attainment
+      calculatedPriorAttainmentData = processGCSEPriorAttainment(csvData);
+      
+      // Show preview
+      displayGCSEPreview(calculatedPriorAttainmentData);
+      
+      // Show download button
+      document.getElementById('download-results-btn').style.display = 'inline-block';
+      
+    } catch (error) {
+      debugLog('Error processing GCSE file:', error, 'error');
+      showError('Failed to process GCSE file: ' + error.message);
+    }
+  }
+
+  /**
+   * Display preview of calculated prior attainment scores
+   */
+  function displayGCSEPreview(data) {
+    const tbody = document.querySelector('#gcse-preview-table tbody');
+    tbody.innerHTML = '';
+    
+    // Show first 10 results
+    data.slice(0, 10).forEach(student => {
+      const row = document.createElement('tr');
+      
+      // Get student identifier (try various field names)
+      const studentName = student.Name || student.Firstname || student.UPN || student.Email || 'Unknown';
+      
+      row.innerHTML = `
+        <td>${studentName}</td>
+        <td>${student.Grade_Count}</td>
+        <td><strong>${student.GCSE_Prior_Attainment}</strong></td>
+      `;
+      
+      tbody.appendChild(row);
+    });
+    
+    // Add summary row if more than 10
+    if (data.length > 10) {
+      const summaryRow = document.createElement('tr');
+      summaryRow.innerHTML = `
+        <td colspan="3" style="text-align: center; font-style: italic;">
+          ... and ${data.length - 10} more students
+        </td>
+      `;
+      tbody.appendChild(summaryRow);
+    }
+    
+    document.getElementById('gcse-preview-section').style.display = 'block';
+  }
+
+  /**
+   * Download the calculated prior attainment results as CSV
+   */
+  function downloadPriorAttainmentResults() {
+    if (!calculatedPriorAttainmentData || calculatedPriorAttainmentData.length === 0) {
+      showError('No data to download');
+      return;
+    }
+    
+    // Convert to CSV format
+    const headers = Object.keys(calculatedPriorAttainmentData[0]);
+    const csvContent = [
+      headers.join(','),
+      ...calculatedPriorAttainmentData.map(row => 
+        headers.map(header => {
+          const value = row[header] || '';
+          // Escape values containing commas
+          return String(value).includes(',') ? `"${value}"` : value;
+        }).join(',')
+      )
+    ].join('\n');
+    
+    // Create download
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gcse_prior_attainment_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    
+    showSuccess('Prior attainment results downloaded successfully!');
+    
+    // Close modal after short delay
+    setTimeout(() => {
+      closeModal();
+      // Reset data
+      calculatedPriorAttainmentData = null;
+    }, 1500);
   }
 
 
