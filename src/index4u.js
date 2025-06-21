@@ -274,7 +274,7 @@ function addStyles() {
   linkElement.id = 'vespa-upload-styles';
   linkElement.rel = 'stylesheet';
   linkElement.type = 'text/css';
-  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2i.css';
+  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2j.css';
   
   document.head.appendChild(linkElement);
   debugLog("Dynamically linked external CSS: " + linkElement.href, null, 'info');
@@ -1134,7 +1134,7 @@ function renderSelectTypeStep() {
             <label for="upload-ks5-workflow">
               <div class="vespa-option-icon">🎯</div>
               <div class="vespa-option-title">B) Key Stage 5 Workflow (Years 12-13)</div>
-              <div class="vespa-option-description">Calculate prior attainment & upload A-Level subjects with MEGs</div>
+              <div class="vespa-option-description">Prior Attainment Calculator &AAcademic Profile Upload</div>
             </label>
           </div>
           
@@ -4145,7 +4145,7 @@ function bindStepEvents() {
   /**
    * Show the KS5 Workflow interface
    */
-  function showKS5WorkflowInterface() {
+  window.showKS5WorkflowInterface = function() {
     debugLog("Loading KS5 Workflow interface", null, 'info');
     
     const contentDiv = document.querySelector('.vespa-upload-content');
@@ -4185,7 +4185,7 @@ function bindStepEvents() {
                 <button class="vespa-button secondary" onclick="downloadGCSETemplate()">
                   📥 Download GCSE Template
                 </button>
-                <button class="vespa-button primary" onclick="showGCSEPriorAttainmentCalculator()">
+                <button class="vespa-button primary" onclick="window.showGCSEPriorAttainmentCalculator()">
                   🧮 Launch Prior Attainment Calculator
                 </button>
               </div>
@@ -4386,7 +4386,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
   /**
    * Show the GCSE Prior Attainment Calculator interface
    */
-  function showGCSEPriorAttainmentCalculator() {
+  window.showGCSEPriorAttainmentCalculator = function() {
     const modalContent = `
       <div class="vespa-prior-attainment-calculator">
         <h3>GCSE Prior Attainment Calculator</h3>
@@ -4440,7 +4440,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
     showModal('GCSE Prior Attainment Calculator', modalContent);
     
     // Add file input handler
-    document.getElementById('gcse-calc-file').addEventListener('change', handleGCSEFileUpload);
+    document.getElementById('gcse-calc-file').addEventListener('change', window.handleGCSEFileUpload);
   }
 
   // Store calculated results globally for download
@@ -4449,7 +4449,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
   /**
    * Handle GCSE file upload for prior attainment calculation
    */
-  async function handleGCSEFileUpload(event) {
+  window.handleGCSEFileUpload = async function(event) {
     const file = event.target.files[0];
     if (!file) return;
     
@@ -4517,7 +4517,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
   /**
    * Download the calculated prior attainment results as CSV
    */
-  function downloadPriorAttainmentResults() {
+  window.downloadPriorAttainmentResults = function() {
     if (!calculatedPriorAttainmentData || calculatedPriorAttainmentData.length === 0) {
       showError('No data to download');
       return;
@@ -4553,5 +4553,6 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       calculatedPriorAttainmentData = null;
     }, 1500);
   }
+
 
 
