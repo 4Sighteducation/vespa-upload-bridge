@@ -1106,6 +1106,15 @@ function renderSelectTypeStep() {
             <div class="vespa-option-description">Upload KS4  or KS5 subject data</div>
           </label>
         </div>
+        
+        <div class="vespa-upload-option">
+          <input type="radio" id="upload-academic-data" name="upload-type" value="academic-data">
+          <label for="upload-academic-data">
+            <div class="vespa-option-icon">📊</div>
+            <div class="vespa-option-title">Academic Data Management</div>
+            <div class="vespa-option-description">Manage GCSE prior attainment, KS5 subjects, and mid-year updates</div>
+          </label>
+        </div>
       </div>
 
       <div id="student-subject-subtypes-container" style="display: none; margin-top: 16px; padding: 16px; background-color: #f0f7ff; border-radius: 8px;">
@@ -2956,6 +2965,13 @@ function bindStepEvents() {
             const subTypeRadios = document.querySelectorAll('input[name="student-subject-subtype"]');
             subTypeRadios.forEach(subRadio => subRadio.checked = false);
           }
+          
+          // Handle academic-data selection
+          if (radio.value === 'academic-data' && radio.checked) {
+            debugLog("Academic Data Management selected", null, 'info');
+            // Instead of proceeding with normal flow, show the academic data interface
+            showAcademicDataInterface();
+          }
         });
       });
       // Trigger change once on load to set initial state
@@ -3792,6 +3808,294 @@ function bindStepEvents() {
       script.onerror = reject;
       document.head.appendChild(script);
     });
+  }
+
+  /**
+   * Show the Academic Data Management interface
+   */
+  async function showAcademicDataInterface() {
+    debugLog("Loading Academic Data Management interface", null, 'info');
+    
+    // First check if students exist
+    try {
+      const customerId = selectedSchool?.id || userContext?.customerId;
+      if (!customerId) {
+        showError('Unable to determine school ID. Please refresh and try again.');
+        return;
+      }
+      
+      // Check if students exist
+      const response = await $.ajax({
+        url: `${API_BASE_URL}academic-data/check-students?customerId=${customerId}`,
+        type: 'GET',
+        xhrFields: { withCredentials: true }
+      });
+      
+      if (!response.success || !response.hasStudents) {
+        showModal('No Students Found', `
+          <div class="vespa-info-box" style="background: #fff3cd; border-left: 4px solid #ffc107;">
+            <div class="vespa-info-icon" style="display: inline-block; margin-right: 8px;">⚠️</div>
+            <div class="vespa-info-content" style="display: inline-block; width: calc(100% - 30px); vertical-align: top;">
+              <p><strong>No student accounts found in the system.</strong></p>
+              <p>You must first create student accounts before managing academic data. Please use the "Create Student Accounts" option to upload student data first.</p>
+            </div>
+          </div>
+          <div class="vespa-modal-actions" style="margin-top: 20px; text-align: right;">
+            <button onclick="closeModal()" class="vespa-button primary">OK</button>
+          </div>
+        `);
+        return;
+      }
+      
+      // Students exist, show the academic data interface
+      const contentDiv = document.querySelector('.vespa-upload-content');
+      if (!contentDiv) {
+        showError('Unable to find content area. Please refresh and try again.');
+        return;
+      }
+      
+      // Hide the wizard interface
+      document.querySelector('.vespa-wizard-container').style.display = 'none';
+      
+      // Create the academic data interface
+      contentDiv.innerHTML = `
+        <div class="vespa-academic-data-container">
+          <div class="vespa-academic-header">
+            <h2>Academic Data Management</h2>
+            <button class="vespa-button secondary" onclick="backToUploadWizard()">← Back to Upload Wizard</button>
+          </div>
+          
+          <div class="vespa-academic-tabs">
+            <button class="vespa-tab-button active" onclick="showAcademicTab('gcse-calculator')">
+              GCSE Prior Attainment Calculator
+            </button>
+            <button class="vespa-tab-button" onclick="showAcademicTab('ks5-upload')">
+              KS5 Subject Upload
+            </button>
+            <button class="vespa-tab-button" onclick="showAcademicTab('mid-year-update')">
+              Mid-Year Update
+            </button>
+          </div>
+          
+          <div class="vespa-academic-content">
+            <div id="gcse-calculator-tab" class="vespa-tab-content active">
+              <h3>GCSE Prior Attainment Calculator</h3>
+              <p>Calculate and update student prior attainment scores based on their GCSE results.</p>
+              <div class="vespa-info-box">
+                <div class="vespa-info-icon">ℹ️</div>
+                <div class="vespa-info-content">
+                  This tool allows you to upload GCSE results and automatically calculate prior attainment scores for MEG calculations.
+                </div>
+              </div>
+              <button class="vespa-button primary" onclick="showGCSECalculator()">Launch GCSE Calculator</button>
+            </div>
+            
+            <div id="ks5-upload-tab" class="vespa-tab-content" style="display: none;">
+              <h3>KS5 Subject Upload</h3>
+              <p>Upload A-Level and Level 3 subject data for students.</p>
+              <div class="vespa-info-box">
+                <div class="vespa-info-icon">ℹ️</div>
+                <div class="vespa-info-content">
+                  Upload subject choices and calculate Minimum Expected Grades (MEGs) based on prior attainment.
+                </div>
+              </div>
+              <button class="vespa-button primary" onclick="showKS5Upload()">Upload KS5 Subjects</button>
+            </div>
+            
+            <div id="mid-year-update-tab" class="vespa-tab-content" style="display: none;">
+              <h3>Mid-Year Subject Data Update</h3>
+              <p>Update current grades, target grades, and exam boards for existing KS5 subjects.</p>
+              <div id="custom-datatable-container" style="margin-top: 20px;">
+                <!-- Custom data table will be loaded here -->
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      // Add styles for the academic data interface
+      addAcademicDataStyles();
+      
+      // Auto-load the custom data table for the mid-year update tab
+      if (window.vespaTable) {
+        // If already loaded, just show it
+        showAcademicTab('mid-year-update');
+      }
+      
+    } catch (error) {
+      debugLog('Error loading academic data interface:', error, 'error');
+      showError('Failed to load academic data interface. Please try again.');
+    }
+  }
+  
+  /**
+   * Add styles for the academic data interface
+   */
+  function addAcademicDataStyles() {
+    if (document.getElementById('vespa-academic-styles')) return;
+    
+    const style = document.createElement('style');
+    style.id = 'vespa-academic-styles';
+    style.textContent = `
+      .vespa-academic-data-container {
+        padding: 20px;
+      }
+      
+      .vespa-academic-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+      }
+      
+      .vespa-academic-tabs {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+        border-bottom: 2px solid #e0e0e0;
+      }
+      
+      .vespa-tab-button {
+        padding: 10px 20px;
+        background: none;
+        border: none;
+        border-bottom: 3px solid transparent;
+        cursor: pointer;
+        font-size: 16px;
+        transition: all 0.3s;
+      }
+      
+      .vespa-tab-button:hover {
+        background: #f5f5f5;
+      }
+      
+      .vespa-tab-button.active {
+        border-bottom-color: #007bff;
+        color: #007bff;
+        font-weight: 600;
+      }
+      
+      .vespa-tab-content {
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 8px;
+      }
+      
+      .vespa-academic-content h3 {
+        margin-top: 0;
+        margin-bottom: 15px;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  
+  /**
+   * Show a specific academic data tab
+   */
+  window.showAcademicTab = async function(tabName) {
+    // Update tab buttons
+    document.querySelectorAll('.vespa-tab-button').forEach(btn => {
+      btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    // Hide all tab contents
+    document.querySelectorAll('.vespa-tab-content').forEach(content => {
+      content.style.display = 'none';
+    });
+    
+    // Show selected tab
+    document.getElementById(`${tabName}-tab`).style.display = 'block';
+    
+    // If mid-year update tab, load the custom data table
+    if (tabName === 'mid-year-update' && !window.vespaTable) {
+      await loadCustomDataTable();
+    }
+  }
+  
+  /**
+   * Load the custom data table module
+   */
+  async function loadCustomDataTable() {
+    try {
+      debugLog("Loading custom data table module", null, 'info');
+      
+      // Load the custom data table script
+      await loadScript('https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/customDataTable1a.js');
+      
+      // Configure the custom data table
+      const customerId = selectedSchool?.id || userContext?.customerId;
+      window.CUSTOM_DATATABLE_CONFIG = {
+        elementSelector: '#custom-datatable-container',
+        customerId: customerId,
+        apiUrl: API_BASE_URL
+      };
+      
+      // Initialize the custom data table
+      if (window.initializeCustomDataTable) {
+        window.initializeCustomDataTable();
+        debugLog("Custom data table initialized successfully", null, 'success');
+      } else {
+        throw new Error('Custom data table initialization function not found');
+      }
+      
+    } catch (error) {
+      debugLog('Error loading custom data table:', error, 'error');
+      showError('Failed to load the data table. Please refresh and try again.');
+    }
+  }
+  
+  /**
+   * Go back to the upload wizard
+   */
+  window.backToUploadWizard = function() {
+    // Show the wizard interface again
+    document.querySelector('.vespa-wizard-container').style.display = 'block';
+    
+    // Clear the academic data interface
+    const contentDiv = document.querySelector('.vespa-upload-content');
+    contentDiv.innerHTML = '';
+    
+    // Reset to step 1
+    currentStep = 1;
+    uploadType = null;
+    renderStep(1);
+  }
+  
+  /**
+   * Show GCSE Calculator (placeholder)
+   */
+  window.showGCSECalculator = function() {
+    showModal('GCSE Calculator', `
+      <p>The GCSE Prior Attainment Calculator is coming soon.</p>
+      <p>This feature will allow you to:</p>
+      <ul>
+        <li>Upload GCSE results via CSV</li>
+        <li>Automatically calculate prior attainment scores</li>
+        <li>Update student records with calculated values</li>
+      </ul>
+      <div class="vespa-modal-actions" style="margin-top: 20px; text-align: right;">
+        <button onclick="closeModal()" class="vespa-button primary">OK</button>
+      </div>
+    `);
+  }
+  
+  /**
+   * Show KS5 Upload (placeholder)
+   */
+  window.showKS5Upload = function() {
+    showModal('KS5 Subject Upload', `
+      <p>The KS5 Subject Upload feature is coming soon.</p>
+      <p>This feature will allow you to:</p>
+      <ul>
+        <li>Upload A-Level and Level 3 subject choices</li>
+        <li>Automatically calculate MEGs based on prior attainment</li>
+        <li>Set initial target grades</li>
+      </ul>
+      <div class="vespa-modal-actions" style="margin-top: 20px; text-align: right;">
+        <button onclick="closeModal()" class="vespa-button primary">OK</button>
+      </div>
+    `);
   }
 
 
