@@ -3905,9 +3905,9 @@ function bindStepEvents() {
       }
       
       // Students exist, show the academic data interface
-      const contentDiv = document.querySelector('.vespa-upload-content');
-      if (!contentDiv) {
-        showError('Unable to find content area. Please refresh and try again.');
+      const mainContainer = document.querySelector(VESPA_UPLOAD_CONFIG.elementSelector);
+      if (!mainContainer) {
+        showError('Unable to find main container. Please refresh and try again.');
         return;
       }
       
@@ -3915,8 +3915,10 @@ function bindStepEvents() {
       const wizard = document.getElementById('vespa-upload-wizard');
       if (wizard) wizard.style.display = 'none';
       
-      // Create the academic data interface
-      contentDiv.innerHTML = `
+      // Create a new container for the academic data interface
+      const academicContainer = document.createElement('div');
+      academicContainer.id = 'vespa-academic-data';
+      academicContainer.innerHTML = `
         <div class="vespa-academic-data-container">
           <div class="vespa-academic-header">
             <h2>Academic Data Management</h2>
@@ -3979,6 +3981,9 @@ function bindStepEvents() {
         // If already loaded, just show it
         showAcademicTab('mid-year-update');
       }
+      
+      // Append the academic container to the main container
+      mainContainer.appendChild(academicContainer);
       
     } catch (error) {
       debugLog('Error loading academic data interface:', error, 'error');
@@ -4111,7 +4116,14 @@ function bindStepEvents() {
     const wizard = document.getElementById('vespa-upload-wizard');
     if (wizard) wizard.style.display = 'block';
     
-    // Clear the academic data interface
+    // Remove any KS5 workflow or academic data containers
+    const ks5Container = document.getElementById('vespa-ks5-workflow');
+    if (ks5Container) ks5Container.remove();
+    
+    const academicContainer = document.getElementById('vespa-academic-data');
+    if (academicContainer) academicContainer.remove();
+    
+    // Clear the content div if it exists
     const contentDiv = document.querySelector('.vespa-upload-content');
     if (contentDiv) contentDiv.innerHTML = '';
     
@@ -4163,9 +4175,10 @@ function bindStepEvents() {
   window.showKS5WorkflowInterface = function() {
     debugLog("Loading KS5 Workflow interface", null, 'info');
     
-    const contentDiv = document.querySelector('.vespa-upload-content');
-    if (!contentDiv) {
-      showError('Unable to find content area. Please refresh and try again.');
+    // Get the main container (where the wizard is)
+    const mainContainer = document.querySelector(VESPA_UPLOAD_CONFIG.elementSelector);
+    if (!mainContainer) {
+      showError('Unable to find main container. Please refresh and try again.');
       return;
     }
     
@@ -4173,8 +4186,10 @@ function bindStepEvents() {
     const wizardContainer = document.getElementById('vespa-upload-wizard');
     if (wizardContainer) wizardContainer.style.display = 'none';
     
-    // Create the KS5 workflow interface
-    contentDiv.innerHTML = `
+    // Create a new container for the KS5 workflow
+    const ks5Container = document.createElement('div');
+    ks5Container.id = 'vespa-ks5-workflow';
+    ks5Container.innerHTML = `
       <div class="vespa-ks5-workflow-container" style="padding: 20px;">
         <div class="vespa-workflow-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
           <h2>Key Stage 5 Workflow</h2>
@@ -4244,6 +4259,9 @@ function bindStepEvents() {
         </div>
       </div>
     `;
+    
+    // Append the KS5 container to the main container
+    mainContainer.appendChild(ks5Container);
   }
   
   /**
@@ -4290,9 +4308,13 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
     const wizardContainer = document.getElementById('vespa-upload-wizard');
     if (wizardContainer) wizardContainer.style.display = 'block';
     
-    // Clear the workflow interface
+    // Remove the KS5 workflow container
+    const ks5Container = document.getElementById('vespa-ks5-workflow');
+    if (ks5Container) ks5Container.remove();
+    
+    // Clear the content div
     const contentDiv = document.querySelector('.vespa-upload-content');
-    contentDiv.innerHTML = '';
+    if (contentDiv) contentDiv.innerHTML = '';
     
     // Set upload type to KS5 and start from step 1
     uploadType = 'student-ks5';
@@ -4568,6 +4590,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       calculatedPriorAttainmentData = null;
     }, 1500);
   }
+
 
 
 
