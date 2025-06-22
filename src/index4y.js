@@ -274,7 +274,7 @@ function addStyles() {
   linkElement.id = 'vespa-upload-styles';
   linkElement.rel = 'stylesheet';
   linkElement.type = 'text/css';
-  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2j.css';
+  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2k.css';
   
   document.head.appendChild(linkElement);
   debugLog("Dynamically linked external CSS: " + linkElement.href, null, 'info');
@@ -1078,8 +1078,38 @@ function renderSelectTypeStep() {
     // Check if we need to verify staff existence
     checkStaffExistence();
     
+    // Check if user is a Super User
+    const isSuperUser = VESPA_UPLOAD_CONFIG && VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID;
+    
     return `
       <h2>VESPA Data Upload System</h2>
+      
+      ${isSuperUser ? `
+      <div class="vespa-stage-container" style="margin-bottom: 30px; padding: 20px; background: #fff3cd; border-radius: 8px; border: 2px solid #ffc107;">
+        <h3 style="color: #856404; margin-bottom: 15px;">🏢 Super User: Customer Account Management</h3>
+        <p style="margin-bottom: 15px;">Create new VESPA Customer accounts or manage renewals.</p>
+        
+        <div class="vespa-upload-options">
+          <div class="vespa-upload-option">
+            <input type="radio" id="create-new-customer" name="upload-type" value="new-customer">
+            <label for="create-new-customer">
+              <div class="vespa-option-icon">🆕</div>
+              <div class="vespa-option-title">Create New Customer Account</div>
+              <div class="vespa-option-description">Set up a new school/organization with VESPA</div>
+            </label>
+          </div>
+          
+          <div class="vespa-upload-option" style="opacity: 0.5;">
+            <input type="radio" id="renew-customer" name="upload-type" value="renew-customer" disabled>
+            <label for="renew-customer">
+              <div class="vespa-option-icon">🔄</div>
+              <div class="vespa-option-title">Generate Renewal Invoice</div>
+              <div class="vespa-option-description">Coming soon - Create renewal invoice for existing customer</div>
+            </label>
+          </div>
+        </div>
+      </div>
+      ` : ''}
       
       <div class="vespa-stage-container" style="margin-bottom: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
         <h3 style="color: #0056b3; margin-bottom: 15px;">📋 Stage 1: Account Generation (Required)</h3>
@@ -2958,7 +2988,11 @@ function prevStep() {
     
     // Handle special upload types on step 1
     if (currentStep === 1) {
-      if (uploadType === 'ks5-workflow') {
+      if (uploadType === 'new-customer') {
+        debugLog("Proceeding to New Customer Creation form", null, 'info');
+        showNewCustomerForm();
+        return;
+      } else if (uploadType === 'ks5-workflow') {
         debugLog("Proceeding to KS5 Workflow interface", null, 'info');
         showKS5WorkflowInterface();
         return;
@@ -4123,6 +4157,10 @@ function bindStepEvents() {
     const academicContainer = document.getElementById('vespa-academic-data');
     if (academicContainer) academicContainer.remove();
     
+    // Remove new customer form container
+    const customerFormContainer = document.getElementById('vespa-new-customer-form');
+    if (customerFormContainer) customerFormContainer.remove();
+    
     // Clear the content div if it exists
     const contentDiv = document.querySelector('.vespa-upload-content');
     if (contentDiv) contentDiv.innerHTML = '';
@@ -4169,6 +4207,633 @@ function bindStepEvents() {
     `);
   }
   
+  /**
+   * Show the New Customer Creation Form (Super User only)
+   */
+  function showNewCustomerForm() {
+    debugLog("Loading New Customer Creation form", null, 'info');
+    
+    // Get the main container
+    const mainContainer = document.querySelector(VESPA_UPLOAD_CONFIG.elementSelector);
+    if (!mainContainer) {
+      showError('Unable to find main container. Please refresh and try again.');
+      return;
+    }
+    
+    // Hide the wizard interface
+    const wizardContainer = document.getElementById('vespa-upload-wizard');
+    if (wizardContainer) wizardContainer.style.display = 'none';
+    
+    // Create the new customer form container
+    const formContainer = document.createElement('div');
+    formContainer.id = 'vespa-new-customer-form';
+    formContainer.innerHTML = `
+      <div class="vespa-customer-form-container" style="padding: 20px; max-width: 900px; margin: 0 auto;">
+        <div class="vespa-form-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+          <h2>VESPA Customer Account Management</h2>
+          <button class="vespa-button secondary" onclick="backToUploadWizard()">← Back to Upload System</button>
+        </div>
+        
+        <div class="vespa-flow-selector" style="background: #e3f2fd; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+          <label for="flow-type" style="display: block; font-weight: bold; margin-bottom: 10px;">
+            Select Action <span style="color: red;">*</span>
+          </label>
+          <select id="flow-type" name="flowType" required onchange="handleFlowTypeChange()"
+            style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px;">
+            <option value="">-- Select an action --</option>
+            <optgroup label="New Customer">
+              <option value="new-no-email">Set up new user ONLY (no email)</option>
+              <option value="new-estimate">Set up new user and generate estimate (no welcome email)</option>
+              <option value="new-invoice-email" selected>Set up new user - generate invoice AND send welcome email</option>
+            </optgroup>
+            <optgroup label="Existing Customer">
+              <option value="update-details">Update current user organisation/order details only</option>
+              <option value="update-estimate">Update current user and send renewal estimate</option>
+              <option value="update-invoice-email">Update current user - generate invoice AND send welcome email</option>
+            </optgroup>
+          </select>
+        </div>
+        
+        <form id="new-customer-form" style="background: #f8f9fa; padding: 30px; border-radius: 8px;">
+          <h3 style="color: #007bff; margin-bottom: 20px;">Organization Information</h3>
+          
+          <div class="vespa-form-group" style="margin-bottom: 20px;">
+            <label for="org-name" style="display: block; font-weight: bold; margin-bottom: 5px;">
+              Organization Name <span style="color: red;">*</span>
+            </label>
+            <input type="text" id="org-name" name="orgName" required 
+              style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+              placeholder="e.g., Springfield Academy">
+          </div>
+          
+          <div class="vespa-form-group" style="margin-bottom: 20px;">
+            <label for="centre-number" style="display: block; font-weight: bold; margin-bottom: 5px;">
+              Centre Number <span style="color: red;">*</span>
+            </label>
+            <input type="text" id="centre-number" name="centreNumber" required 
+              style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+              placeholder="e.g., 123456">
+          </div>
+          
+          <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+            <div class="vespa-form-group">
+              <label for="address" style="display: block; font-weight: bold; margin-bottom: 5px;">
+                Address <span style="color: red;">*</span>
+              </label>
+              <textarea id="address" name="address" required rows="3"
+                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+                placeholder="Street address, City, Postal code"></textarea>
+            </div>
+            
+            <div class="vespa-form-group">
+              <label for="phone" style="display: block; font-weight: bold; margin-bottom: 5px;">
+                Phone Number <span style="color: red;">*</span>
+              </label>
+              <input type="tel" id="phone" name="phone" required 
+                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+                placeholder="e.g., +44 20 1234 5678">
+            </div>
+          </div>
+          
+          <div class="vespa-form-group" style="margin-bottom: 30px;">
+            <label for="logo-url" style="display: block; font-weight: bold; margin-bottom: 5px;">
+              School Logo URL (optional)
+            </label>
+            <input type="url" id="logo-url" name="logoUrl" 
+              style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+              placeholder="https://example.com/logo.png">
+          </div>
+          
+          <h3 style="color: #007bff; margin-bottom: 20px;">Primary Administrator Account</h3>
+          
+          <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+            <div class="vespa-form-group">
+              <label for="admin-name" style="display: block; font-weight: bold; margin-bottom: 5px;">
+                Administrator Name <span style="color: red;">*</span>
+              </label>
+              <input type="text" id="admin-name" name="adminName" required 
+                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+                placeholder="e.g., John Smith">
+            </div>
+            
+            <div class="vespa-form-group">
+              <label for="admin-email" style="display: block; font-weight: bold; margin-bottom: 5px;">
+                Administrator Email <span style="color: red;">*</span>
+              </label>
+              <input type="email" id="admin-email" name="adminEmail" required 
+                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+                placeholder="e.g., admin@school.edu">
+            </div>
+          </div>
+          
+          <h3 style="color: #007bff; margin-bottom: 20px;">Account Configuration</h3>
+          
+          <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+            <div class="vespa-form-group">
+              <label for="account-type" style="display: block; font-weight: bold; margin-bottom: 5px;">
+                Account Type <span style="color: red;">*</span>
+              </label>
+              <select id="account-type" name="accountType" required onchange="handleAccountTypeChange()"
+                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                <option value="">-- Select Account Type --</option>
+                <option value="COACHING PORTAL">COACHING PORTAL - Full coaching portal access</option>
+                <option value="RESOURCE PORTAL">RESOURCE PORTAL - Resource portal only</option>
+              </select>
+            </div>
+            
+            <div class="vespa-form-group">
+              <label for="account-level" style="display: block; font-weight: bold; margin-bottom: 5px;">
+                Account Level <span style="color: red;">*</span>
+              </label>
+              <select id="account-level" name="accountLevel" required 
+                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                <option value="">-- Select Level --</option>
+                <option value="Level 2">Level 2 Only</option>
+                <option value="Level 3">Level 3 Only</option>
+                <option value="Level 2&3">Level 2 & 3 Combined</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="vespa-form-group" style="margin-bottom: 20px;">
+            <label for="resource-size" style="display: block; font-weight: bold; margin-bottom: 5px;">
+              Tutor Resource Size
+            </label>
+            <select id="resource-size" name="resourceSize" 
+              style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+              <option value="INDIVIDUAL">Individual</option>
+              <option value="SMALL">Small</option>
+              <option value="MEDIUM" selected>Medium</option>
+              <option value="LARGE">Large</option>
+              <option value="COLLEGE">College</option>
+              <option value="ACADEMY TRUST">Academy Trust</option>
+            </select>
+          </div>
+          
+          <h3 style="color: #28a745; margin-bottom: 20px;">Order Details</h3>
+          
+          <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+            <div class="vespa-form-group">
+              <label for="finance-contact" style="display: block; font-weight: bold; margin-bottom: 5px;">
+                Finance Contact Name
+              </label>
+              <input type="text" id="finance-contact" name="financeContact" 
+                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+                placeholder="e.g., Jane Smith">
+            </div>
+            
+            <div class="vespa-form-group">
+              <label for="finance-email" style="display: block; font-weight: bold; margin-bottom: 5px;">
+                Finance Email
+              </label>
+              <input type="email" id="finance-email" name="financeEmail" 
+                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+                placeholder="e.g., finance@school.edu">
+            </div>
+          </div>
+          
+          <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+            <div class="vespa-form-group">
+              <label for="quantity" style="display: block; font-weight: bold; margin-bottom: 5px;">
+                Student Quantity <span style="color: red;">*</span>
+              </label>
+              <input type="number" id="quantity" name="quantity" required min="1" value="100"
+                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+                onchange="calculateTotal()">
+            </div>
+            
+            <div class="vespa-form-group">
+              <label for="rate" style="display: block; font-weight: bold; margin-bottom: 5px;">
+                Rate per Student (£) <span style="color: red;">*</span>
+              </label>
+              <input type="number" id="rate" name="rate" required min="0" step="0.01" value="25.00"
+                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+                onchange="calculateTotal()">
+            </div>
+            
+            <div class="vespa-form-group">
+              <label for="discount" style="display: block; font-weight: bold; margin-bottom: 5px;">
+                Discount (%)
+              </label>
+              <input type="number" id="discount" name="discount" min="0" max="100" value="0"
+                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+                onchange="calculateTotal()">
+            </div>
+          </div>
+          
+          <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+            <div class="vespa-form-group">
+              <label for="po-number" style="display: block; font-weight: bold; margin-bottom: 5px;">
+                Purchase Order Number
+              </label>
+              <input type="text" id="po-number" name="poNumber" 
+                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+                placeholder="Optional">
+            </div>
+            
+            <div class="vespa-form-group">
+              <label style="display: block; font-weight: bold; margin-bottom: 5px;">
+                VAT Chargeable
+              </label>
+              <div style="margin-top: 10px;">
+                <label style="margin-right: 20px;">
+                  <input type="radio" name="vatChargeable" value="Yes" checked onchange="calculateTotal()"> Yes
+                </label>
+                <label>
+                  <input type="radio" name="vatChargeable" value="No" onchange="calculateTotal()"> No
+                </label>
+              </div>
+            </div>
+            
+            <div class="vespa-form-group">
+              <label style="display: block; font-weight: bold; margin-bottom: 5px;">
+                Total (£)
+              </label>
+              <div id="order-total" style="font-size: 24px; font-weight: bold; color: #28a745; padding: 8px;">
+                £0.00
+              </div>
+            </div>
+          </div>
+          
+          <div id="cycle-section" style="display: none;">
+            <h3 style="color: #ff6f00; margin-bottom: 20px;">Cycle Configuration</h3>
+            
+            <div class="vespa-form-group" style="margin-bottom: 20px;">
+              <label style="display: block; font-weight: bold; margin-bottom: 10px;">
+                How would you like to set the cycles?
+              </label>
+              <div>
+                <label style="margin-right: 20px;">
+                  <input type="radio" name="cycleMode" value="automatic" checked onchange="handleCycleModeChange()"> 
+                  Automatic (based on order date)
+                </label>
+                <label>
+                  <input type="radio" name="cycleMode" value="manual" onchange="handleCycleModeChange()"> 
+                  Manual
+                </label>
+              </div>
+            </div>
+            
+            <div id="automatic-cycles-info" style="background: #fff3cd; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+              <p style="margin: 0;"><strong>Automatic cycles will be calculated based on today's date.</strong></p>
+            </div>
+            
+            <div id="manual-cycles" style="display: none;">
+              <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 2fr 2fr; gap: 20px; margin-bottom: 10px;">
+                <div><strong>Cycle</strong></div>
+                <div><strong>Start Date</strong></div>
+                <div><strong>End Date</strong></div>
+              </div>
+              
+              <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 2fr 2fr; gap: 20px; margin-bottom: 10px;">
+                <div style="padding: 8px;">Cycle 1</div>
+                <div><input type="date" id="cycle1-start" name="cycle1Start" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"></div>
+                <div><input type="date" id="cycle1-end" name="cycle1End" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"></div>
+              </div>
+              
+              <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 2fr 2fr; gap: 20px; margin-bottom: 10px;">
+                <div style="padding: 8px;">Cycle 2</div>
+                <div><input type="date" id="cycle2-start" name="cycle2Start" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"></div>
+                <div><input type="date" id="cycle2-end" name="cycle2End" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"></div>
+              </div>
+              
+              <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 2fr 2fr; gap: 20px; margin-bottom: 10px;">
+                <div style="padding: 8px;">Cycle 3</div>
+                <div><input type="date" id="cycle3-start" name="cycle3Start" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"></div>
+                <div><input type="date" id="cycle3-end" name="cycle3End" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"></div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="vespa-form-actions" style="margin-top: 30px; text-align: right;">
+            <button type="button" class="vespa-button secondary" onclick="backToUploadWizard()">Cancel</button>
+            <button type="submit" class="vespa-button primary" id="create-customer-btn">Create Customer Account</button>
+          </div>
+        </form>
+        
+        <div id="creation-status" style="display: none; margin-top: 20px; padding: 20px; border-radius: 8px;"></div>
+      </div>
+    `;
+    
+    // Append the form to the main container
+    mainContainer.appendChild(formContainer);
+    
+    // Add form submission handler
+    document.getElementById('new-customer-form').addEventListener('submit', handleNewCustomerSubmit);
+    
+    // Initialize total calculation
+    calculateTotal();
+    
+    // Check initial account type
+    handleAccountTypeChange();
+  }
+  
+  /**
+   * Handle flow type change
+   */
+  window.handleFlowTypeChange = function() {
+    const flowType = document.getElementById('flow-type').value;
+    // For update flows, we'd need to add customer search functionality
+    // For now, all flows use the same form
+    debugLog("Flow type changed to:", flowType);
+  }
+  
+  /**
+   * Handle account type change
+   */
+  window.handleAccountTypeChange = function() {
+    const accountType = document.getElementById('account-type').value;
+    const cycleSection = document.getElementById('cycle-section');
+    
+    if (accountType === 'COACHING PORTAL') {
+      cycleSection.style.display = 'block';
+    } else {
+      cycleSection.style.display = 'none';
+    }
+  }
+  
+  /**
+   * Handle cycle mode change
+   */
+  window.handleCycleModeChange = function() {
+    const cycleMode = document.querySelector('input[name="cycleMode"]:checked').value;
+    const manualCycles = document.getElementById('manual-cycles');
+    const automaticInfo = document.getElementById('automatic-cycles-info');
+    
+    if (cycleMode === 'manual') {
+      manualCycles.style.display = 'block';
+      automaticInfo.style.display = 'none';
+    } else {
+      manualCycles.style.display = 'none';
+      automaticInfo.style.display = 'block';
+    }
+  }
+  
+  /**
+   * Calculate order total
+   */
+  window.calculateTotal = function() {
+    const quantity = parseFloat(document.getElementById('quantity').value) || 0;
+    const rate = parseFloat(document.getElementById('rate').value) || 0;
+    const discount = parseFloat(document.getElementById('discount').value) || 0;
+    const vatChargeable = document.querySelector('input[name="vatChargeable"]:checked').value === 'Yes';
+    
+    let subtotal = quantity * rate;
+    let discountAmount = subtotal * (discount / 100);
+    let afterDiscount = subtotal - discountAmount;
+    let vatAmount = vatChargeable ? afterDiscount * 0.20 : 0; // 20% VAT
+    let total = afterDiscount + vatAmount;
+    
+    document.getElementById('order-total').textContent = `£${total.toFixed(2)}`;
+  }
+  
+  /**
+   * Calculate automatic cycle dates based on order date
+   */
+  function calculateAutomaticCycles(orderDate) {
+    const cycles = [];
+    const order = new Date(orderDate);
+    const month = order.getMonth(); // 0-11
+    const year = order.getFullYear();
+    
+    // Helper function to get nearest Monday
+    function getNearestMonday(date) {
+      const d = new Date(date);
+      const day = d.getDay();
+      const diff = day === 0 ? 1 : (day === 1 ? 0 : 8 - day);
+      d.setDate(d.getDate() + diff);
+      return d;
+    }
+    
+    // Helper function to add weeks to date
+    function addWeeks(date, weeks) {
+      const d = new Date(date);
+      d.setDate(d.getDate() + (weeks * 7));
+      return d;
+    }
+    
+    // Early orders (June 1 - Sept 1)
+    if ((month === 5 && order.getDate() >= 1) || month === 6 || month === 7 || (month === 8 && order.getDate() === 1)) {
+      // Cycle 1: Nearest Monday to Sept 1
+      const sept1 = new Date(year, 8, 1);
+      const cycle1Start = getNearestMonday(sept1);
+      const cycle1End = addWeeks(cycle1Start, 4); // 4 weeks
+      
+      // Cycle 2: Nearest Monday to Jan 1
+      const jan1 = new Date(year + 1, 0, 1);
+      const cycle2Start = getNearestMonday(jan1);
+      const cycle2End = addWeeks(cycle2Start, 4);
+      
+      // Cycle 3: Nearest Monday to May 1
+      const may1 = new Date(year + 1, 4, 1);
+      const cycle3Start = getNearestMonday(may1);
+      const cycle3End = addWeeks(cycle3Start, 4);
+      
+      cycles.push(
+        { number: 1, start: cycle1Start, end: cycle1End },
+        { number: 2, start: cycle2Start, end: cycle2End },
+        { number: 3, start: cycle3Start, end: cycle3End }
+      );
+    }
+    // Late orders (Oct 1 - Feb 1)
+    else if ((month >= 9) || (month === 0) || (month === 1 && order.getDate() === 1)) {
+      // Cycle 1: 1 week after order date
+      const cycle1Start = addWeeks(order, 1);
+      const cycle1End = addWeeks(cycle1Start, 3); // 3 weeks
+      
+      // Calculate remaining time until June 1
+      const june1 = new Date(month >= 9 ? year + 1 : year, 5, 1);
+      const daysUntilJune = Math.floor((june1 - cycle1End) / (1000 * 60 * 60 * 24));
+      const weeksPerCycle = Math.floor(daysUntilJune / (2 * 7)) - 1; // Divide by 2 cycles, leave buffer
+      
+      const cycle2Start = addWeeks(cycle1End, 1);
+      const cycle2End = addWeeks(cycle2Start, Math.min(weeksPerCycle, 3));
+      
+      const cycle3Start = addWeeks(cycle2End, 1);
+      const cycle3End = addWeeks(cycle3Start, Math.min(weeksPerCycle, 3));
+      
+      cycles.push(
+        { number: 1, start: cycle1Start, end: cycle1End },
+        { number: 2, start: cycle2Start, end: cycle2End },
+        { number: 3, start: cycle3Start, end: cycle3End }
+      );
+    }
+    // Holiday orders (Feb 1 - May 1)
+    else {
+      // Cycles 1 & 2 complete before June 1
+      const cycle1Start = addWeeks(order, 1);
+      const cycle1End = addWeeks(cycle1Start, 2);
+      
+      const cycle2Start = addWeeks(cycle1End, 1);
+      const cycle2End = addWeeks(cycle2Start, 2);
+      
+      // Cycle 3: Sept 1
+      const sept1 = new Date(year, 8, 1);
+      const cycle3Start = getNearestMonday(sept1);
+      const cycle3End = addWeeks(cycle3Start, 4);
+      
+      cycles.push(
+        { number: 1, start: cycle1Start, end: cycle1End },
+        { number: 2, start: cycle2Start, end: cycle2End },
+        { number: 3, start: cycle3Start, end: cycle3End }
+      );
+    }
+    
+    return cycles;
+  }
+  
+  /**
+   * Handle new customer form submission
+   */
+  async function handleNewCustomerSubmit(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const submitBtn = document.getElementById('create-customer-btn');
+    const statusDiv = document.getElementById('creation-status');
+    
+    // Disable submit button
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Creating Account...';
+    
+    // Get form data
+    const formData = {
+      // Flow info
+      flowType: form.flowType.value,
+      
+      // Organization info
+      orgName: form.orgName.value.trim(),
+      centreNumber: form.centreNumber.value.trim(),
+      address: form.address.value.trim(),
+      phone: form.phone.value.trim(),
+      logoUrl: form.logoUrl.value.trim(),
+      
+      // Admin info
+      adminName: form.adminName.value.trim(),
+      adminEmail: form.adminEmail.value.trim(),
+      
+      // Account config
+      accountType: form.accountType.value,
+      accountLevel: form.accountLevel.value,
+      resourceSize: form.resourceSize.value,
+      
+      // Order details
+      financeContact: form.financeContact.value.trim(),
+      financeEmail: form.financeEmail.value.trim(),
+      poNumber: form.poNumber.value.trim(),
+      quantity: parseInt(form.quantity.value),
+      rate: parseFloat(form.rate.value),
+      discount: parseFloat(form.discount.value) || 0,
+      vatChargeable: form.vatChargeable.value,
+      
+      // Cycles (if COACHING PORTAL)
+      cycleMode: form.accountType.value === 'COACHING PORTAL' ? form.cycleMode.value : null,
+      cycles: []
+    };
+    
+    // Calculate total
+    const subtotal = formData.quantity * formData.rate;
+    const discountAmount = subtotal * (formData.discount / 100);
+    const afterDiscount = subtotal - discountAmount;
+    const vatAmount = formData.vatChargeable === 'Yes' ? afterDiscount * 0.20 : 0;
+    formData.total = afterDiscount + vatAmount;
+    
+    // Handle cycles
+    if (formData.accountType === 'COACHING PORTAL') {
+      if (formData.cycleMode === 'manual') {
+        // Get manual cycle dates
+        formData.cycles = [
+          {
+            number: 1,
+            start: form.cycle1Start.value,
+            end: form.cycle1End.value
+          },
+          {
+            number: 2,
+            start: form.cycle2Start.value,
+            end: form.cycle2End.value
+          },
+          {
+            number: 3,
+            start: form.cycle3Start.value,
+            end: form.cycle3End.value
+          }
+        ];
+      } else {
+        // Calculate automatic cycles
+        formData.cycles = calculateAutomaticCycles(new Date());
+      }
+    }
+    
+    debugLog("Submitting new customer data:", formData);
+    
+    try {
+      // Call the API to create the customer and admin account
+      const response = await $.ajax({
+        url: `${API_BASE_URL}account/create-customer`,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(formData),
+        xhrFields: { withCredentials: true }
+      });
+      
+      debugLog("Customer creation response:", response);
+      
+      if (response.success) {
+        // Show success message
+        statusDiv.style.display = 'block';
+        statusDiv.style.background = '#d4edda';
+        statusDiv.style.color = '#155724';
+        statusDiv.innerHTML = `
+          <h3>✅ Customer Account Created Successfully!</h3>
+          <p><strong>Organization:</strong> ${formData.orgName}</p>
+          <p><strong>Customer ID:</strong> ${response.customerId}</p>
+          <p><strong>Admin Account:</strong> ${formData.adminEmail}</p>
+          <p><strong>Temporary Password:</strong> <code>${response.temporaryPassword}</code></p>
+          <div style="margin-top: 20px;">
+            <p><strong>Next Steps:</strong></p>
+            <ol>
+              <li>Share the login credentials with the administrator</li>
+              <li>They should log in and change their password</li>
+              <li>Create staff accounts before adding students</li>
+              <li>Configure QuickBooks integration if needed</li>
+            </ol>
+          </div>
+          <button class="vespa-button primary" onclick="backToUploadWizard()" style="margin-top: 20px;">
+            Create Another Account
+          </button>
+        `;
+        
+        // Clear the form
+        form.reset();
+        
+        // Hide the form
+        form.style.display = 'none';
+      } else {
+        throw new Error(response.message || 'Failed to create customer account');
+      }
+      
+    } catch (error) {
+      debugLog("Error creating customer:", error, 'error');
+      
+      // Show error message
+      statusDiv.style.display = 'block';
+      statusDiv.style.background = '#f8d7da';
+      statusDiv.style.color = '#721c24';
+      statusDiv.innerHTML = `
+        <h3>❌ Error Creating Account</h3>
+        <p>${error.responseJSON?.message || error.message || 'An unexpected error occurred'}</p>
+        <button class="vespa-button secondary" onclick="document.getElementById('creation-status').style.display='none'; document.getElementById('new-customer-form').style.display='block';">
+          Try Again
+        </button>
+      `;
+    } finally {
+      // Re-enable submit button
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Create Customer Account';
+    }
+  }
+
   /**
    * Show the KS5 Workflow interface
    */
@@ -4590,7 +5255,6 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       calculatedPriorAttainmentData = null;
     }, 1500);
   }
-
 
 
 
