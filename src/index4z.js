@@ -4234,27 +4234,26 @@ function bindStepEvents() {
           <button class="vespa-button secondary" onclick="backToUploadWizard()">← Back to Upload System</button>
         </div>
         
-        <div class="vespa-flow-selector" style="background: #e3f2fd; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-          <label for="flow-type" style="display: block; font-weight: bold; margin-bottom: 10px;">
-            Select Action <span style="color: red;">*</span>
-          </label>
-          <select id="flow-type" name="flowType" required onchange="handleFlowTypeChange()"
-            style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px;">
-            <option value="">-- Select an action --</option>
-            <optgroup label="New Customer">
-              <option value="new-no-email">Set up new user ONLY (no email)</option>
-              <option value="new-estimate">Set up new user and generate estimate (no welcome email)</option>
-              <option value="new-invoice-email" selected>Set up new user - generate invoice AND send welcome email</option>
-            </optgroup>
-            <optgroup label="Existing Customer">
-              <option value="update-details">Update current user organisation/order details only</option>
-              <option value="update-estimate">Update current user and send renewal estimate</option>
-              <option value="update-invoice-email">Update current user - generate invoice AND send welcome email</option>
-            </optgroup>
-          </select>
-        </div>
-        
         <form id="new-customer-form" style="background: #f8f9fa; padding: 30px; border-radius: 8px;">
+          <div class="vespa-flow-selector" style="background: #e3f2fd; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <label for="flow-type" style="display: block; font-weight: bold; margin-bottom: 10px;">
+              Select Action <span style="color: red;">*</span>
+            </label>
+            <select id="flow-type" name="flowType" required onchange="handleFlowTypeChange()"
+              style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px;">
+              <option value="">-- Select an action --</option>
+              <optgroup label="New Customer">
+                <option value="new-no-email">Set up new user ONLY (no email)</option>
+                <option value="new-estimate">Set up new user and generate estimate (no welcome email)</option>
+                <option value="new-invoice-email" selected>Set up new user - generate invoice AND send welcome email</option>
+              </optgroup>
+              <optgroup label="Existing Customer">
+                <option value="update-details">Update current user organisation/order details only</option>
+                <option value="update-estimate">Update current user and send renewal estimate</option>
+                <option value="update-invoice-email">Update current user - generate invoice AND send welcome email</option>
+              </optgroup>
+            </select>
+          </div>
           <h3 style="color: #007bff; margin-bottom: 20px;">Organization Information</h3>
           
           <div class="vespa-form-group" style="margin-bottom: 20px;">
@@ -4692,11 +4691,31 @@ function bindStepEvents() {
     const submitBtn = document.getElementById('create-customer-btn');
     const statusDiv = document.getElementById('creation-status');
     
+    // Check if form exists
+    if (!form) {
+      showError('Form not found. Please refresh and try again.');
+      return;
+    }
+    
     // Disable submit button
     submitBtn.disabled = true;
     submitBtn.textContent = 'Creating Account...';
     
     // Get form data
+    debugLog("Form elements:", {
+      flowType: form.flowType,
+      orgName: form.orgName,
+      hasAllElements: !!(form.flowType && form.orgName && form.adminEmail)
+    });
+    
+    // Validate required elements exist
+    if (!form.flowType || !form.flowType.value) {
+      showError('Please select an action type.');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Create Customer Account';
+      return;
+    }
+    
     const formData = {
       // Flow info
       flowType: form.flowType.value,
@@ -5255,6 +5274,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       calculatedPriorAttainmentData = null;
     }, 1500);
   }
+
 
 
 
