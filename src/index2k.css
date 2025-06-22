@@ -1463,3 +1463,225 @@ code {
   }
 }
 
+/* Super User Customer Management Form Styles */
+.vespa-customer-form-container {
+  padding: 20px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.vespa-form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.vespa-form-header h2 {
+  margin: 0;
+  color: #007bff;
+}
+
+.vespa-flow-selector {
+  background: #e3f2fd;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.vespa-flow-selector label {
+  display: block;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.vespa-flow-selector select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+#new-customer-form {
+  background: #f8f9fa;
+  padding: 30px;
+  border-radius: 8px;
+}
+
+#new-customer-form h3 {
+  color: #007bff;
+  margin-bottom: 20px;
+  margin-top: 30px;
+}
+
+#new-customer-form h3:first-child {
+  margin-top: 0;
+}
+
+.vespa-form-group {
+  margin-bottom: 20px;
+}
+
+.vespa-form-group label {
+  display: block;
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.vespa-form-group input,
+.vespa-form-group select,
+.vespa-form-group textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.vespa-form-row {
+  display: grid;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.vespa-form-row.two-columns {
+  grid-template-columns: 1fr 1fr;
+}
+
+.vespa-form-row.three-columns {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+/* Order total display */
+#order-total {
+  font-size: 24px;
+  font-weight: bold;
+  color: #28a745;
+  padding: 8px;
+  background: #d4edda;
+  border-radius: 4px;
+  text-align: center;
+}
+
+/* Cycle configuration section */
+#cycle-section {
+  background: #fff8e1;
+  padding: 20px;
+  border-radius: 8px;
+  margin-top: 20px;
+}
+
+#cycle-section h3 {
+  color: #ff6f00;
+  margin-bottom: 20px;
+}
+
+#automatic-cycles-info {
+  background: #fff3cd;
+  padding: 15px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+#manual-cycles .vespa-form-row {
+  align-items: center;
+}
+
+#manual-cycles .vespa-form-row > div:first-child {
+  padding: 8px;
+  font-weight: bold;
+}
+
+.vespa-form-actions {
+  margin-top: 30px;
+  text-align: right;
+  padding-top: 20px;
+  border-top: 1px solid #ddd;
+}
+
+/* Radio button styling */
+.vespa-form-group input[type="radio"] {
+  width: auto;
+  margin-right: 8px;
+}
+
+.vespa-form-group label input[type="radio"] {
+  margin-right: 5px;
+}
+
+/* Required field indicator */
+.vespa-form-group label span[style*="color: red"] {
+  margin-left: 3px;
+}
+
+/* Responsive design for customer form */
+@media (max-width: 768px) {
+  .vespa-form-header {
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .vespa-form-row {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .vespa-form-actions {
+    text-align: center;
+  }
+  
+  #order-total {
+    font-size: 20px;
+  }
+}
+
+/* Loading state for form submission */
+.vespa-form-loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.vespa-form-loading::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #007bff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Success/Error messages for customer form */
+.vespa-customer-message {
+  padding: 15px;
+  margin-bottom: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vespa-customer-message.success {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.vespa-customer-message.error {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.vespa-customer-message-icon {
+  font-size: 24px;
+}
+
