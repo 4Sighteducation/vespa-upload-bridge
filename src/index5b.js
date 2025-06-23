@@ -1685,11 +1685,7 @@ function renderSelectTypeStep() {
 
 /**
  * Download a template file
- * This function has been fixed to use the correct endpoint
- */
-/**
- * Download a template file
- * This function has been fixed to use the correct endpoint
+ * This function generates templates client-side as a fallback
  */
 function downloadTemplateFile() {
   debugLog("Template download initiated", null, 'info');
@@ -1714,72 +1710,80 @@ function downloadTemplateFile() {
     statusMessage.style.display = 'block';
     statusMessage.textContent = 'Preparing download...';
     
-    // Get the current upload type with fallback
-    // const type = uploadType || 'staff'; // Old way
-    let templateType = 'staff'; // Default
-    if (uploadType === 'student-onboard') {
-      templateType = 'student-onboard'; // Should map to StudentData.csv
-    } else if (uploadType === 'student-ks4') {
-      templateType = 'student-ks4';   // Should map to SubjectData_KS4.csv
-    } else if (uploadType === 'student-ks5') {
-      templateType = 'student-ks5';   // Should map to SubjectData_KS5.csv
-    } else if (uploadType === 'staff') {
-      templateType = 'staff';
+    // Generate template content based on upload type
+    let templateContent = '';
+    let filename = '';
+    
+    switch (uploadType) {
+      case 'staff':
+        templateContent = `Title,First Name,Last Name,Email Address,Staff Type,Year Group,Group,Faculty/Dept,Subject
+Mr,John,Smith,jsmith@school.edu,tut,12,12A,Science,Physics
+Ms,Jane,Doe,jdoe@school.edu,"admin,hoy",12,,,
+Dr,Sarah,Johnson,sjohnson@school.edu,sub,13,13B,Maths,Further Maths
+Mrs,Emily,Brown,ebrown@school.edu,"tut,sub",12,12C,English,English Literature
+Mr,David,Wilson,dwilson@school.edu,hod,,,"Science,Physics",`;
+        filename = 'staff_template.csv';
+        break;
+        
+      case 'student-onboard':
+        templateContent = `ULN,UPN,Firstname,Lastname,Student Email,Gender,DOB,Group,Year Gp,Level,Tutors,Head of Year
+1234567890,A123456,Alex,Johnson,ajohnson@school.edu,M,15/09/2006,12B,12,Level 3,jsmith@school.edu,jdoe@school.edu
+2345678901,A123457,Emma,Williams,ewilliams@school.edu,F,22/10/2006,12A,12,Level 3,"jsmith@school.edu,ebrown@school.edu",jdoe@school.edu
+3456789012,A123458,Michael,Brown,mbrown@school.edu,M,08/03/2007,12C,12,Level 3,dwilson@school.edu,jdoe@school.edu
+4567890123,A123459,Sophie,Davis,sdavis@school.edu,F,14/07/2006,12A,12,Level 3,ebrown@school.edu,jdoe@school.edu`;
+        filename = 'StudentData.csv';
+        break;
+        
+      case 'student-ks4':
+        templateContent = `UPN,Student_Email,sub1,ex1,sub2,ex2,sub3,ex3,sub4,ex4,sub5,ex5
+A123456,ajohnson@school.edu,English Language,7,English Literature,7,Maths,8,Biology,7,Chemistry,7,Physics,8
+A123457,ewilliams@school.edu,English Language,8,English Literature,9,Maths,7,Biology,8,Chemistry,8,Physics,7
+A123458,mbrown@school.edu,English Language,6,English Literature,6,Maths,9,Biology,7,Chemistry,8,Physics,9
+A123459,sdavis@school.edu,English Language,9,English Literature,8,Maths,6,Biology,6,Chemistry,6,Physics,5`;
+        filename = 'SubjectData_KS4.csv';
+        break;
+        
+      case 'student-ks5':
+        templateContent = `UPN,Student_Email,GCSE_Prior_Attainment,sub1,sub2,sub3,sub4,sub5
+A123456,ajohnson@school.edu,7.2,Physics,Chemistry,Maths,Further Maths,
+A123457,ewilliams@school.edu,7.8,English Literature,History,Psychology,Sociology,
+A123458,mbrown@school.edu,8.1,Maths,Further Maths,Physics,Computer Science,
+A123459,sdavis@school.edu,6.5,Biology,Chemistry,Psychology,,`;
+        filename = 'SubjectData_KS5.csv';
+        break;
+        
+      default:
+        showError('Unknown upload type for template generation');
+        return;
     }
     
-    // Use the correct template type
-    // const templateType = type === 'staff' ? 'staff' : 'student'; // Old way
-    debugLog(`Using template type: ${templateType}`);
+    debugLog(`Generating ${uploadType} template locally`);
     
-    // Update UI during download
-    const downloadButton = document.getElementById('download-template');
-    let originalText = '';
-    if (downloadButton) {
-      originalText = downloadButton.textContent;
-      downloadButton.textContent = 'Opening Template...';
-      downloadButton.disabled = true;
-    }
-    
-    // EXPLICIT URL CONSTRUCTION - avoid string concatenation issues
-    // Make sure we have /api/ in the path
-    let baseUrl = API_BASE_URL;
-    debugLog(`Starting with base URL: ${baseUrl}`);
-    
-    if (!baseUrl.endsWith('/')) baseUrl += '/';
-    if (!baseUrl.includes('/api/')) {
-      // If it doesn't have /api/ but has /api at the end, add the trailing slash
-      if (baseUrl.endsWith('/api')) {
-        baseUrl += '/';
-      } 
-      // If it doesn't have /api at all, add it
-      else if (!baseUrl.endsWith('/api/')) {
-        baseUrl = baseUrl.replace(/\/+$/, '') + '/api/';
-      }
-    }
-    
-    const templateUrl = `${baseUrl}templates/${templateType}`;
-    debugLog(`Template URL constructed: ${templateUrl}`, null, 'info');
-    
-    statusMessage.textContent = 'Opening download...';
-    
-    // Direct approach: Open in new tab (most reliable cross-browser)
-    window.open(templateUrl, '_blank');
+    // Create blob and download
+    const blob = new Blob([templateContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
     
     // Show success message
-    setTimeout(() => {
-      statusMessage.innerHTML = `
-        <span style="color:#2e7d32">✓ Template ready!</span> 
-        If download doesn't start automatically, 
-        <a href="${templateUrl}" target="_blank" style="font-weight:bold">click here</a>
-      `;
-      statusMessage.style.backgroundColor = '#e8f5e9';
-      
-      // Reset button
-      if (downloadButton) {
-        downloadButton.textContent = originalText;
-        downloadButton.disabled = false;
-      }
-    }, 1000);
+    statusMessage.innerHTML = `
+      <span style="color:#2e7d32">✓ Template downloaded!</span>
+    `;
+    statusMessage.style.backgroundColor = '#e8f5e9';
+    
+    debugLog(`Template '${filename}' generated and downloaded successfully`, null, 'success');
+    
+    // Reset button if needed
+    const downloadButton = document.getElementById('download-template');
+    if (downloadButton) {
+      downloadButton.disabled = false;
+    }
     
   } catch (error) {
     debugLog("Error in template download", error, 'error');
@@ -1788,7 +1792,6 @@ function downloadTemplateFile() {
     // Reset button if error
     const downloadButton = document.getElementById('download-template');
     if (downloadButton) {
-      downloadButton.textContent = `Download ${uploadType === 'staff' ? 'Staff' : 'Student'} Template`;
       downloadButton.disabled = false;
     }
   }
