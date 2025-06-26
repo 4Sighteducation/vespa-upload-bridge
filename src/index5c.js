@@ -2995,6 +2995,10 @@ function prevStep() {
         debugLog("Proceeding to New Customer Creation form", null, 'info');
         showNewCustomerForm();
         return;
+      } else if (uploadType === 'renew-customer') {
+        debugLog("Loading Renewal Management System", null, 'info');
+        loadRenewalModule();
+        return;
       } else if (uploadType === 'ks5-workflow') {
         debugLog("Proceeding to KS5 Workflow interface", null, 'info');
         showKS5WorkflowInterface();
@@ -5278,5 +5282,50 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
     }, 1500);
   }
 
+  /**
+   * Load the renewal management module
+   */
+  async function loadRenewalModule() {
+    try {
+      debugLog("Loading renewal management module", null, 'info');
+      
+      // Check if already loaded
+      if (window.VESPARenewals && window.VESPARenewals.show) {
+        debugLog("Renewal module already loaded, showing interface", null, 'info');
+        window.VESPARenewals.show();
+        return;
+      }
+      
+      // Show loading indicator
+      showModal('Loading Renewal System', '<div style="text-align: center; padding: 20px;">Loading renewal management system...</div>');
+      
+      // Load the renewal module from CDN
+      await loadScript('https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/renewals.js');
+      
+      // Wait a bit for initialization
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Close loading modal
+      closeModal();
+      
+      // Check if module loaded successfully
+      if (window.VESPARenewals && window.VESPARenewals.show) {
+        debugLog("Renewal module loaded successfully", null, 'success');
+        // Module will auto-initialize and show the interface
+      } else {
+        throw new Error('Renewal module failed to initialize');
+      }
+      
+    } catch (error) {
+      debugLog('Error loading renewal module:', error, 'error');
+      closeModal();
+      showError('Failed to load renewal management system. Please refresh and try again.');
+      
+      // Reset to step 1
+      currentStep = 1;
+      uploadType = null;
+      renderStep(1);
+    }
+  }
 
 
