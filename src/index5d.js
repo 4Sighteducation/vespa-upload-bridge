@@ -664,6 +664,16 @@ function initializeUploadInterface(container) {
   
   // Render the first step
   renderStep(currentStep);
+  
+  // Auto-load renewal module for super users
+  if (isSuperUser) {
+    debugLog("Auto-loading renewal module for super user", null, 'info');
+    // Load the renewal module asynchronously without blocking
+    loadRenewalModule().catch(error => {
+      debugLog('Failed to auto-load renewal module:', error, 'error');
+      // Don't show error to user, just log it
+    });
+  }
 }
 
 /**
@@ -5327,5 +5337,6 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       renderStep(1);
     }
   }
+
 
 
