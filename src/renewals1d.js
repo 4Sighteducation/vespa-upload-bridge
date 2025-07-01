@@ -16,7 +16,52 @@
   const RENEWAL_CONFIG = {
     objectId: 'object_122', // Orders object in Knack
     customerObjectId: 'object_2', // Customer object
-    apiUrl: window.VESPA_UPLOAD_CONFIG?.apiUrl || 'https://vespa-upload-api-07e11c285370.herokuapp.com/api/',
+    get apiUrl() {
+      // Try to find the API URL from various possible sources
+      const possibleUrls = [
+        window.VESPA_UPLOAD_CONFIG?.apiUrl,
+        window.VESPA_UPLOAD_CONFIG?.API_BASE_URL,
+        window.API_BASE_URL,
+        window.vespaApiUrl,
+        // Check if it might be stored differently
+        window.VESPA_UPLOAD_CONFIG?.apiBaseUrl,
+        window.VESPA_UPLOAD_CONFIG?.baseUrl
+      ];
+      
+      debugLog('Searching for API URL in:', {
+        vespaConfig: window.VESPA_UPLOAD_CONFIG,
+        possibleUrls: possibleUrls
+      });
+      
+      // Find the first valid URL
+      const configUrl = possibleUrls.find(url => url && typeof url === 'string');
+      
+      if (configUrl) {
+        let url = configUrl;
+        // Ensure trailing slash
+        if (!url.endsWith('/')) {
+          url += '/';
+        }
+        // Ensure the URL has the proper protocol
+        if (!url.startsWith('http')) {
+          url = 'https://' + url;
+        }
+        // Ensure it ends with /api/ if it doesn't already
+        if (!url.includes('/api/')) {
+          if (url.endsWith('/')) {
+            url += 'api/';
+          } else {
+            url += '/api/';
+          }
+        }
+        debugLog('Using API URL:', url);
+        return url;
+      }
+      
+      const defaultUrl = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api/';
+      debugLog('Using default API URL:', defaultUrl);
+      return defaultUrl;
+    },
     debug: true,
     // Field mappings for Object_122
     fields: {
@@ -94,6 +139,10 @@
    */
   function initializeRenewalSystem() {
     debugLog('Initializing Renewal Management System');
+    
+    // Log the current VESPA_UPLOAD_CONFIG
+    debugLog('Current VESPA_UPLOAD_CONFIG:', window.VESPA_UPLOAD_CONFIG);
+    debugLog('API URL from config:', window.VESPA_UPLOAD_CONFIG?.apiUrl);
     
     // Set up global access immediately
     window.VESPARenewals = {
@@ -447,15 +496,29 @@
       
       debugLog('Loading renewal data with filters:', filters);
       
-      // Call API to get renewal data
+      // Get the API URL and log it
+      const apiUrl = RENEWAL_CONFIG.apiUrl;
+      
+      // Ensure the URL is properly formatted
+      if (!apiUrl || !apiUrl.startsWith('http')) {
+        throw new Error(`Invalid API URL: ${apiUrl}`);
+      }
+      
+      const fullUrl = new URL('renewals/list', apiUrl).href;
+      debugLog('API URL:', apiUrl);
+      debugLog('Full request URL:', fullUrl);
+      debugLog('Window location:', window.location.href);
+      
+      // Call API to get renewal data - use absolute URL
       const response = await $.ajax({
-        url: `${RENEWAL_CONFIG.apiUrl}renewals/list`,
+        url: fullUrl,
         type: 'GET',
         data: {
           ...filters,
           includeCustomerDetails: true
         },
-        xhrFields: { withCredentials: true }
+        xhrFields: { withCredentials: true },
+        crossDomain: true
       });
       
       if (response.success) {
@@ -749,8 +812,11 @@
         updateProgress(`Processing order ${i + 1} of ${orderIds.length}...`, i + 1, orderIds.length);
         
         try {
+          const processUrl = new URL('renewals/process', RENEWAL_CONFIG.apiUrl).href;
+          debugLog('Processing URL:', processUrl);
+          
           const response = await $.ajax({
-            url: `${RENEWAL_CONFIG.apiUrl}renewals/process`,
+            url: processUrl,
             type: 'POST',
             contentType: 'application/json',
             data: JSON.stringify({
@@ -760,7 +826,8 @@
               notes: notes,
               emailTemplateId: action === 'reminder' ? 'RENEWAL_EMAIL_TEMPLATE_ID_2' : 'RENEWAL_EMAIL_TEMPLATE_ID'
             }),
-            xhrFields: { withCredentials: true }
+            xhrFields: { withCredentials: true },
+            crossDomain: true
           });
           
           if (response.success) {
@@ -973,12 +1040,16 @@
       
       debugLog('Saving order changes:', data);
       
+      const updateUrl = new URL(`renewals/update/${orderId}`, RENEWAL_CONFIG.apiUrl).href;
+      debugLog('Update URL:', updateUrl);
+      
       const response = await $.ajax({
-        url: `${RENEWAL_CONFIG.apiUrl}renewals/update/${orderId}`,
+        url: updateUrl,
         type: 'PUT',
         contentType: 'application/json',
         data: JSON.stringify(data),
-        xhrFields: { withCredentials: true }
+        xhrFields: { withCredentials: true },
+        crossDomain: true
       });
       
       if (response.success) {
@@ -1102,10 +1173,22 @@
   }
 
   // Auto-initialize when loaded
+  function waitForConfig() {
+    // Wait for VESPA_UPLOAD_CONFIG to be available
+    if (window.VESPA_UPLOAD_CONFIG) {
+      debugLog('VESPA_UPLOAD_CONFIG found:', window.VESPA_UPLOAD_CONFIG);
+      initializeRenewalSystem();
+    } else {
+      debugLog('Waiting for VESPA_UPLOAD_CONFIG...');
+      setTimeout(waitForConfig, 100);
+    }
+  }
+  
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeRenewalSystem);
+    document.addEventListener('DOMContentLoaded', waitForConfig);
   } else {
-    initializeRenewalSystem();
+    waitForConfig();
   }
 
 })(window);
+
