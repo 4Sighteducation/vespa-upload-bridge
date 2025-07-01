@@ -104,7 +104,7 @@
     // Set up global access
     window.VESPARenewals = {
       show: showRenewalInterface,
-      refresh: loadRenewalData,
+      refresh: refreshRenewalData,
       processSelected: processSelectedRenewals
     };
     
@@ -851,26 +851,26 @@
             <div class="vespa-form-group">
               <label>Quantity:</label>
               <input type="number" id="edit-quantity" name="quantity" value="${order.quantity || 0}" 
-                     onchange="window.VESPARenewals.calculateEditTotal()">
+                     onchange="VESPARenewals.calculateEditTotal()">
             </div>
             
             <div class="vespa-form-group">
               <label>Rate (£):</label>
               <input type="number" id="edit-rate" name="rate" value="${order.rate || 0}" step="0.01"
-                     onchange="window.VESPARenewals.calculateEditTotal()">
+                     onchange="VESPARenewals.calculateEditTotal()">
             </div>
             
             <div class="vespa-form-group">
               <label>Discount (%):</label>
               <input type="number" id="edit-discount" name="discount" value="${order.discount || 0}" 
-                     min="0" max="100" onchange="window.VESPARenewals.calculateEditTotal()">
+                     min="0" max="100" onchange="VESPARenewals.calculateEditTotal()">
             </div>
           </div>
           
           <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
             <div class="vespa-form-group">
               <label>VAT Chargeable:</label>
-              <select id="edit-vat" name="vatChargeable" onchange="window.VESPARenewals.calculateEditTotal()">
+              <select id="edit-vat" name="vatChargeable" onchange="VESPARenewals.calculateEditTotal()">
                 <option value="Yes" ${order.vatChargeable === 'Yes' ? 'selected' : ''}>Yes</option>
                 <option value="No" ${order.vatChargeable === 'No' ? 'selected' : ''}>No</option>
               </select>
@@ -924,7 +924,7 @@
   /**
    * Calculate total for edit form
    */
-  function calculateEditTotal() {
+  window.VESPARenewals.calculateEditTotal = function() {
     const quantity = parseFloat(document.getElementById('edit-quantity')?.value || 0);
     const rate = parseFloat(document.getElementById('edit-rate')?.value || 0);
     const discount = parseFloat(document.getElementById('edit-discount')?.value || 0);
@@ -937,7 +937,7 @@
     let total = afterDiscount + vatAmount;
     
     document.getElementById('edit-total').value = total.toFixed(2);
-  }
+  };
 
   /**
    * Save order changes
@@ -1101,7 +1101,7 @@
     editOrder: editOrder,
     processSelected: processSelectedRenewals,
     executeProcessing: executeProcessing,
-    calculateEditTotal: calculateEditTotal,
+    calculateEditTotal: () => {}, // Will be set later
     generateEstimates: () => processSelectedRenewals(),
     sendReminders: () => processSelectedRenewals()
   };
@@ -1112,6 +1112,8 @@
   } else {
     initializeRenewalSystem();
   }
+
+})(window);
 
 })(window);
 
