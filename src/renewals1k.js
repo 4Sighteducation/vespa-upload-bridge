@@ -307,6 +307,7 @@
       processSelected: processSelectedRenewals,
       executeProcessing: executeProcessing,
       calculateEditTotal: calculateEditTotal,
+      toggleNewOrderMode: toggleNewOrderMode,
       generateEstimates: () => processSelectedRenewals(),
       sendReminders: () => processSelectedRenewals(),
       formatDateForInput: formatDateForInput,
@@ -465,6 +466,7 @@
       .renewal-status.estimate_sent { background: #cce5ff; color: #004085; }
       .renewal-status.invoice_sent { background: #d4edda; color: #155724; }
       .renewal-status.paid { background: #d1ecf1; color: #0c5460; }
+      .renewal-status.renewed { background: #e2e3e5; color: #383d41; }
       .renewal-status.cancelled { background: #f8d7da; color: #721c24; }
       
       .renewal-edit-btn {
@@ -669,6 +671,7 @@
               <option value="Estimate Sent">Estimate Sent</option>
               <option value="Invoice Sent">Invoice Sent</option>
               <option value="Paid">Paid</option>
+              <option value="Renewed">Renewed</option>
               <option value="Cancelled">Cancelled</option>
             </select>
           </div>
@@ -785,7 +788,8 @@
             ...order,
             staffAdminEmail: extractEmail(order.staffAdminEmail),
             financeEmail: extractEmail(order.financeEmail),
-            staffAdminName: extractPersonName(order.staffAdminName)
+            staffAdminName: extractPersonName(order.staffAdminName),
+            product: order.product || 'Coaching Portal' // Default to Coaching Portal if not set
           };
         });
         
@@ -884,9 +888,9 @@
             </th>
             <th>Customer</th>
             <th>Order #</th>
+            <th>Product</th>
             <th>Renewal Date</th>
             <th>Quantity</th>
-            <th>Rate</th>
             <th>Total</th>
             <th>Status</th>
             <th>PO Number</th>
@@ -934,12 +938,12 @@
             <small>${order.staffAdminEmail || order.customerEmail || ''}</small>
           </td>
           <td>${order.orderNumber || '-'}</td>
+          <td>${order.product || 'Coaching Portal'}</td>
           <td>
             ${formattedRenewalDate}
             ${dateBadge}
           </td>
           <td>${order.quantity || 0}</td>
-          <td>£${parseFloat(order.rate || 0).toFixed(2)}</td>
           <td><strong>£${parseFloat(order.total || 0).toFixed(2)}</strong></td>
           <td>
             <span class="renewal-status ${statusClass}">
@@ -1029,6 +1033,19 @@
         </div>
         
         <form id="edit-renewal-form" style="padding: 20px;">
+          <!-- Create as New Order Option -->
+          <div class="renewal-edit-section" style="background-color: #e7f4ff; border: 2px solid #0066cc; padding: 15px; margin-bottom: 20px;">
+            <div class="vespa-form-group" style="margin: 0;">
+              <label style="font-weight: bold; color: #0066cc;">
+                <input type="checkbox" id="create-as-new-order" name="createAsNewOrder" value="true" onchange="VESPARenewals.toggleNewOrderMode(this.checked)">
+                Create this as a New Order
+              </label>
+              <p style="margin: 5px 0 0 22px; font-size: 13px; color: #666;">
+                This will create a new order record with today's date and set renewal date to 1 year from now.
+              </p>
+            </div>
+          </div>
+          
           <!-- Order Information Section -->
           <div class="renewal-edit-section">
             <h4>Order Information</h4>
@@ -1107,6 +1124,17 @@
           <!-- Product Details Section -->
           <div class="renewal-edit-section">
             <h4>Product Details</h4>
+            
+            <div class="vespa-form-row cols-1">
+              <div class="vespa-form-group">
+                <label>Product:</label>
+                <select id="edit-product" name="product">
+                  <option value="Coaching Portal" ${order.product === 'Coaching Portal' ? 'selected' : ''}>Coaching Portal</option>
+                  <option value="Resource Portal" ${order.product === 'Resource Portal' ? 'selected' : ''}>Resource Portal</option>
+                  <option value="Training" ${order.product === 'Training' ? 'selected' : ''}>Training</option>
+                </select>
+              </div>
+            </div>
             
             <div class="vespa-form-row cols-4">
               <div class="vespa-form-group">
@@ -1265,6 +1293,41 @@
   }
 
   /**
+   * Toggle new order mode in edit form
+   */
+  function toggleNewOrderMode(isNewOrder) {
+    if (isNewOrder) {
+      // Set dates to new values
+      const today = new Date();
+      const oneYearFromNow = new Date(today);
+      oneYearFromNow.setFullYear(today.getFullYear() + 1);
+      const thirtyDaysFromNow = new Date(today);
+      thirtyDaysFromNow.setDate(today.getDate() + 30);
+      
+      document.getElementById('edit-order-date').value = formatDateForInput(today);
+      document.getElementById('edit-setup-date').value = formatDateForInput(today);
+      document.getElementById('edit-renewal-date').value = formatDateForInput(oneYearFromNow);
+      document.getElementById('edit-payment-due').value = formatDateForInput(thirtyDaysFromNow);
+      
+      // Change status to Pending
+      document.getElementById('edit-status').value = 'Pending';
+      
+      // Show alert
+      showSuccess('Dates have been updated for new order. You can still modify them if needed.');
+    } else {
+      // Restore original dates if unchecked
+      const order = window.currentEditOrder;
+      if (order) {
+        document.getElementById('edit-order-date').value = formatDateForInput(order.orderDate);
+        document.getElementById('edit-setup-date').value = formatDateForInput(order.setupDate);
+        document.getElementById('edit-renewal-date').value = formatDateForInput(order.renewalDate);
+        document.getElementById('edit-payment-due').value = formatDateForInput(order.paymentDue);
+        document.getElementById('edit-status').value = order.status || 'Pending';
+      }
+    }
+  }
+
+  /**
    * Save order changes - now handling all fields
    */
   async function saveOrderChanges(orderId, formData) {
@@ -1299,7 +1362,11 @@
       });
       
       if (response.success) {
-        showSuccess('Order updated successfully');
+        if (response.isNewOrder) {
+          showSuccess('New order created successfully');
+        } else {
+          showSuccess('Order updated successfully');
+        }
         document.querySelector('.renewal-modal[style*="10001"]')?.remove();
         await loadRenewalData();
       } else {
@@ -1422,6 +1489,40 @@
       return;
     }
     
+    // Special handling for invoice generation
+    if (action === 'invoice') {
+      let confirmMessage;
+      
+      if (orderIds.length > 1) {
+        confirmMessage = `⚠️ IMPORTANT: You are about to generate ${orderIds.length} new renewal orders.\n\n` +
+                        `Each new order will be created as a copy of the current order with:\n` +
+                        `• Order Date: Today\n` +
+                        `• Setup Date: Today\n` +
+                        `• Renewal Date: 1 year from today\n` +
+                        `• Payment Due: 30 days from today\n\n` +
+                        `The new orders will replicate all details from the current orders.\n\n` +
+                        `If you need to change any details (e.g., quantity, price, or add the QuickBooks invoice URL), ` +
+                        `please EDIT THE CURRENT ORDERS NOW before proceeding.\n\n` +
+                        `Remember to include the QuickBooks invoice URL in the current order - it will be copied to the new order.\n\n` +
+                        `Do you want to continue?`;
+      } else {
+        // Single order - still show a reminder about the invoice URL
+        const order = renewalState.orders.find(o => o.id === orderIds[0]);
+        confirmMessage = `📋 Creating new renewal order for ${order?.customerName || 'this customer'}.\n\n` +
+                        `A new order will be created with:\n` +
+                        `• Order Date: Today\n` +
+                        `• Renewal Date: 1 year from today\n` +
+                        `• Payment Due: 30 days from today\n\n` +
+                        `⚠️ IMPORTANT: Make sure you've added the QuickBooks invoice URL to the current order.\n` +
+                        `It will be copied to the new order and removed from the old one.\n\n` +
+                        `Continue?`;
+      }
+      
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+    }
+    
     // Special handling for cancellation - require confirmation
     if (action === 'cancel') {
       // Get the order details for confirmation
@@ -1472,6 +1573,25 @@
         try {
           const processUrl = new URL('renewals/process', RENEWAL_CONFIG.apiUrl).href;
           
+          // For invoice action, we might need to confirm no invoice
+          let confirmNoInvoice = false;
+          
+          if (action === 'invoice') {
+            // Check if this order has an invoice link
+            const order = renewalState.orders.find(o => o.id === orderId);
+            if (order && !order.invoiceLink) {
+              // Ask for confirmation if no invoice link
+              const confirmMsg = `Order #${order.orderNumber} for ${order.customerName || 'this customer'} does not have an invoice link.\n\nThe welcome email will be sent without an invoice attached.\n\nDo you wish to continue?`;
+              
+              if (!confirm(confirmMsg)) {
+                results.failed++;
+                results.errors.push(`Order ${orderId}: Skipped - no invoice link and user declined to proceed`);
+                continue; // Skip this order
+              }
+              confirmNoInvoice = true;
+            }
+          }
+          
           const response = await $.ajax({
             url: processUrl,
             type: 'POST',
@@ -1482,6 +1602,7 @@
               autoUpdateStatus: autoUpdateStatus,
               bccAdmin: bccAdmin,
               notes: notes,
+              confirmNoInvoice: confirmNoInvoice,
               emailTemplateId: action === 'reminder' ? 'RENEWAL_EMAIL_TEMPLATE_ID_2' : 'RENEWAL_EMAIL_TEMPLATE_ID'
             }),
             xhrFields: { withCredentials: true },
