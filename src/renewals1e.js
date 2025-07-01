@@ -110,7 +110,7 @@
     orders: [],
     selectedOrders: [],
     filters: {
-      dateRange: 'upcoming_60',
+      dateRange: 'all',
       status: 'all',
       search: ''
     },
@@ -132,6 +132,33 @@
     };
     
     console.log(`%c[VESPA Renewals] ${message}`, styles[level], data || '');
+  }
+
+  /**
+   * Format date for HTML date input (YYYY-MM-DD)
+   */
+  function formatDateForInput(dateValue) {
+    if (!dateValue) return '';
+    
+    // If it's already a string in ISO format, extract the date part
+    if (typeof dateValue === 'string') {
+      // Check if it's already in YYYY-MM-DD format
+      if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        return dateValue;
+      }
+      // Extract date part from ISO string
+      return dateValue.split('T')[0];
+    }
+    
+    // If it's a Date object or timestamp
+    const date = new Date(dateValue);
+    if (isNaN(date.getTime())) return '';
+    
+    // Format as YYYY-MM-DD
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   /**
@@ -163,7 +190,8 @@
       executeProcessing: executeProcessing,
       calculateEditTotal: calculateEditTotal,
       generateEstimates: () => processSelectedRenewals(),
-      sendReminders: () => processSelectedRenewals()
+      sendReminders: () => processSelectedRenewals(),
+      formatDateForInput: formatDateForInput
     };
     
     // Add button to Super User interface
@@ -417,9 +445,9 @@
             <select id="renewal-date-filter" onchange="VESPARenewals.applyFilters()">
               <option value="overdue">Overdue</option>
               <option value="upcoming_30">Next 30 days</option>
-              <option value="upcoming_60" selected>Next 60 days</option>
+              <option value="upcoming_60">Next 60 days</option>
               <option value="upcoming_90">Next 90 days</option>
-              <option value="all">All renewals</option>
+              <option value="all" selected>All renewals</option>
             </select>
           </div>
           
@@ -491,7 +519,7 @@
     
     try {
       // Calculate date range based on filter
-      const dateFilter = document.getElementById('renewal-date-filter')?.value || 'upcoming_60';
+      const dateFilter = document.getElementById('renewal-date-filter')?.value || renewalState.filters.dateRange;
       const filters = buildDateFilters(dateFilter);
       
       debugLog('Loading renewal data with filters:', filters);
@@ -524,6 +552,8 @@
       if (response.success) {
         renewalState.orders = response.orders || [];
         debugLog(`Loaded ${renewalState.orders.length} renewal orders`, null, 'success');
+        debugLog('First order sample:', renewalState.orders[0]);
+        debugLog('Response structure:', { success: response.success, ordersLength: response.orders?.length, totalField: response.total });
         updateTableDisplay();
         updateCounts();
       } else {
@@ -577,6 +607,8 @@
     const container = document.getElementById('renewal-table-container');
     if (!container) return;
     
+    debugLog('updateTableDisplay called', { isLoading: renewalState.isLoading, ordersCount: renewalState.orders.length });
+    
     if (renewalState.isLoading) {
       container.innerHTML = '<div class="renewal-loading">Loading renewal data...</div>';
       return;
@@ -584,6 +616,7 @@
     
     // Apply filters
     const filteredOrders = applyLocalFilters(renewalState.orders);
+    debugLog('Filtered orders:', { originalCount: renewalState.orders.length, filteredCount: filteredOrders.length });
     
     if (filteredOrders.length === 0) {
       container.innerHTML = `
@@ -621,15 +654,20 @@
     filteredOrders.forEach(order => {
       const renewalDate = new Date(order.renewalDate);
       const today = new Date();
-      const daysUntil = Math.floor((renewalDate - today) / (1000 * 60 * 60 * 24));
+      today.setHours(0, 0, 0, 0); // Reset time to start of day
       
       let dateBadge = '';
-      if (daysUntil < 0) {
-        dateBadge = `<span class="renewal-date-badge overdue">${Math.abs(daysUntil)} days overdue</span>`;
-      } else if (daysUntil <= 7) {
-        dateBadge = `<span class="renewal-date-badge soon">${daysUntil} days</span>`;
-      } else if (daysUntil <= 30) {
-        dateBadge = `<span class="renewal-date-badge upcoming">${daysUntil} days</span>`;
+      if (!isNaN(renewalDate.getTime())) {
+        renewalDate.setHours(0, 0, 0, 0); // Reset time to start of day
+        const daysUntil = Math.floor((renewalDate - today) / (1000 * 60 * 60 * 24));
+        
+        if (daysUntil < 0) {
+          dateBadge = `<span class="renewal-date-badge overdue">${Math.abs(daysUntil)} days overdue</span>`;
+        } else if (daysUntil <= 7) {
+          dateBadge = `<span class="renewal-date-badge soon">${daysUntil} days</span>`;
+        } else if (daysUntil <= 30) {
+          dateBadge = `<span class="renewal-date-badge upcoming">${daysUntil} days</span>`;
+        }
       }
       
       tableHtml += `
@@ -673,14 +711,23 @@
    * Apply local filters to the orders
    */
   function applyLocalFilters(orders) {
+    debugLog('applyLocalFilters called with orders:', { count: orders.length, firstOrder: orders[0] });
+    
     let filtered = [...orders];
     
     // Status filter
     const statusFilter = document.getElementById('renewal-status-filter')?.value;
     if (statusFilter && statusFilter !== 'all') {
-      filtered = filtered.filter(order => 
-        (order.status || 'pending').toLowerCase().replace(' ', '_') === statusFilter
-      );
+      debugLog('Status filter active:', { statusFilter, sampleStatus: filtered[0]?.status });
+      
+      filtered = filtered.filter(order => {
+        // Normalize the status for comparison
+        const orderStatus = (order.status || 'Pending').toLowerCase().replace(/\s+/g, '_');
+        const filterStatus = statusFilter.toLowerCase().replace(/\s+/g, '_');
+        
+        debugLog('Status comparison:', { orderStatus, filterStatus, matches: orderStatus === filterStatus });
+        return orderStatus === filterStatus;
+      });
     }
     
     // Search filter
@@ -918,7 +965,7 @@
             <div class="vespa-form-group">
               <label>Renewal Date:</label>
               <input type="date" id="edit-renewal-date" name="renewalDate" 
-                     value="${order.renewalDate ? order.renewalDate.split('T')[0] : ''}">
+                     value="${order.renewalDate ? formatDateForInput(order.renewalDate) : ''}">
             </div>
             
             <div class="vespa-form-group">
