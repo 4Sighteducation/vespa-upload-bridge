@@ -1033,19 +1033,6 @@
         </div>
         
         <form id="edit-renewal-form" style="padding: 20px;">
-          <!-- Create as New Order Option -->
-          <div class="renewal-edit-section" style="background-color: #e7f4ff; border: 2px solid #0066cc; padding: 15px; margin-bottom: 20px;">
-            <div class="vespa-form-group" style="margin: 0;">
-              <label style="font-weight: bold; color: #0066cc;">
-                <input type="checkbox" id="create-as-new-order" name="createAsNewOrder" value="true" onchange="VESPARenewals.toggleNewOrderMode(this.checked)">
-                Create this as a New Order
-              </label>
-              <p style="margin: 5px 0 0 22px; font-size: 13px; color: #666;">
-                This will create a new order record with today's date and set renewal date to 1 year from now.
-              </p>
-            </div>
-          </div>
-          
           <!-- Order Information Section -->
           <div class="renewal-edit-section">
             <h4>Order Information</h4>
@@ -1318,10 +1305,19 @@
       // Restore original dates if unchecked
       const order = window.currentEditOrder;
       if (order) {
-        document.getElementById('edit-order-date').value = formatDateForInput(order.orderDate);
-        document.getElementById('edit-setup-date').value = formatDateForInput(order.setupDate);
-        document.getElementById('edit-renewal-date').value = formatDateForInput(order.renewalDate);
-        document.getElementById('edit-payment-due').value = formatDateForInput(order.paymentDue);
+        // Only set values if the dates exist
+        if (order.orderDate) {
+          document.getElementById('edit-order-date').value = formatDateForInput(order.orderDate);
+        }
+        if (order.setupDate) {
+          document.getElementById('edit-setup-date').value = formatDateForInput(order.setupDate);
+        }
+        if (order.renewalDate) {
+          document.getElementById('edit-renewal-date').value = formatDateForInput(order.renewalDate);
+        }
+        if (order.paymentDue) {
+          document.getElementById('edit-payment-due').value = formatDateForInput(order.paymentDue);
+        }
         document.getElementById('edit-status').value = order.status || 'Pending';
       }
     }
