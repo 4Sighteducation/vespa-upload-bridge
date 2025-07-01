@@ -104,7 +104,7 @@
     // Set up global access
     window.VESPARenewals = {
       show: showRenewalInterface,
-      refresh: refreshRenewalData,
+      refresh: loadRenewalData,
       processSelected: processSelectedRenewals
     };
     
@@ -924,7 +924,7 @@
   /**
    * Calculate total for edit form
    */
-  window.VESPARenewals.calculateEditTotal = function() {
+  function calculateEditTotal() {
     const quantity = parseFloat(document.getElementById('edit-quantity')?.value || 0);
     const rate = parseFloat(document.getElementById('edit-rate')?.value || 0);
     const discount = parseFloat(document.getElementById('edit-discount')?.value || 0);
@@ -937,7 +937,7 @@
     let total = afterDiscount + vatAmount;
     
     document.getElementById('edit-total').value = total.toFixed(2);
-  };
+  }
 
   /**
    * Save order changes
@@ -1101,7 +1101,7 @@
     editOrder: editOrder,
     processSelected: processSelectedRenewals,
     executeProcessing: executeProcessing,
-    calculateEditTotal: () => {}, // Will be set later
+    calculateEditTotal: calculateEditTotal,
     generateEstimates: () => processSelectedRenewals(),
     sendReminders: () => processSelectedRenewals()
   };
@@ -1114,6 +1114,3 @@
   }
 
 })(window);
-
-})(window);
-
