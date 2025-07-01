@@ -992,13 +992,15 @@
     modal.style.zIndex = '10001';
     
     modal.innerHTML = `
-      <div class="renewal-modal-content" style="width: 700px; height: auto;">
+      <div class="renewal-modal-content" style="width: 800px; height: auto; max-height: 90vh; overflow-y: auto;">
         <div class="renewal-header">
           <h3>Edit Renewal - ${order.customerName}</h3>
           <button class="vespa-button secondary small-button" onclick="this.closest('.renewal-modal').remove()">× Close</button>
         </div>
         
         <form id="edit-renewal-form" style="padding: 20px;">
+          <h4 style="margin-bottom: 15px;">Order Information</h4>
+          
           <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
             <div class="vespa-form-group">
               <label>Order Number:</label>
@@ -1028,17 +1030,22 @@
             </div>
           </div>
           
-          <h4 style="margin-top: 20px;">Order Details</h4>
+          <h4 style="margin-top: 20px;">Product Details</h4>
+          
+          <div class="vespa-form-group">
+            <label>Product:</label>
+            <input type="text" value="VESPA Portal Subscription" readonly style="background: #f8f9fa;">
+          </div>
           
           <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
             <div class="vespa-form-group">
-              <label>Quantity:</label>
+              <label>Student Logins:</label>
               <input type="number" id="edit-quantity" name="quantity" value="${order.quantity || 0}" 
                      onchange="VESPARenewals.calculateEditTotal()">
             </div>
             
             <div class="vespa-form-group">
-              <label>Rate (£):</label>
+              <label>Rate per Login (£):</label>
               <input type="number" id="edit-rate" name="rate" value="${order.rate || 0}" step="0.01"
                      onchange="VESPARenewals.calculateEditTotal()">
             </div>
@@ -1070,6 +1077,18 @@
           
           <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
             <div class="vespa-form-group">
+              <label>Staff Admin Name:</label>
+              <input type="text" value="${order.staffAdminName || ''}" readonly style="background: #f8f9fa;">
+            </div>
+            
+            <div class="vespa-form-group">
+              <label>Staff Admin Email:</label>
+              <input type="email" value="${order.staffAdminEmail || ''}" readonly style="background: #f8f9fa;">
+            </div>
+          </div>
+          
+          <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div class="vespa-form-group">
               <label>Finance Contact:</label>
               <input type="text" id="edit-finance-name" name="financeName" value="${order.financeName || ''}">
             </div>
@@ -1078,6 +1097,14 @@
               <label>Finance Email:</label>
               <input type="email" id="edit-finance-email" name="financeEmail" value="${order.financeEmail || ''}">
             </div>
+          </div>
+          
+          <h4 style="margin-top: 20px;">Email History</h4>
+          
+          <div class="vespa-form-group">
+            <label>Last Reminder Sent:</label>
+            <input type="text" value="${order.lastReminderSent ? formatDate(order.lastReminderSent) : 'Never'}" 
+                   readonly style="background: #f8f9fa;">
           </div>
           
           <div style="margin-top: 20px; text-align: right;">
