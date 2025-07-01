@@ -1,8 +1,17 @@
 /**
- * VESPA Renewal Management System
+ * VESPA Renewal Management System - Version 1d
  * 
  * This module handles renewal invoice generation and management for Super Users.
  * It integrates with Object_122 (Orders) in Knack and manages the renewal process.
+ * 
+ * Changes in v1d:
+ * - Fixed filtering logic to handle edge cases and prevent loading failures
+ * - Added ALL fields to the edit modal with proper organization
+ * - Fixed email rendering issue (HTML showing as text)
+ * - Improved UI with cleaner layout and better field grouping
+ * - Added proper field mappings from accurate source
+ * - Added timeout handling and retry logic for API calls
+ * - Improved status filtering to match exact values
  * 
  * @requires jQuery
  * @requires Knack API access
@@ -12,7 +21,7 @@
 (function(window) {
   'use strict';
 
-  // Module configuration
+  // Module configuration with complete field mappings
   const RENEWAL_CONFIG = {
     objectId: 'object_122', // Orders object in Knack
     customerObjectId: 'object_2', // Customer object
@@ -23,7 +32,6 @@
         window.VESPA_UPLOAD_CONFIG?.API_BASE_URL,
         window.API_BASE_URL,
         window.vespaApiUrl,
-        // Check if it might be stored differently
         window.VESPA_UPLOAD_CONFIG?.apiBaseUrl,
         window.VESPA_UPLOAD_CONFIG?.baseUrl
       ];
@@ -63,39 +71,50 @@
       return defaultUrl;
     },
     debug: true,
-    // Field mappings for Object_122
+    // Complete field mappings for Object_122 (Orders)
     fields: {
+      // Order Information
       customerId: 'field_3459', // VESPA Customer connection
-      orderDate: 'field_3454',
-      renewalDate: 'field_3497', 
-      paymentDue: 'field_3464',
-      orderNumber: 'field_3470',
-      invoiceNumber: 'field_3469',
-      poNumber: 'field_3472',
-      rate: 'field_3461',
-      quantity: 'field_3462',
-      discount: 'field_3465',
-      vatChargeable: 'field_3467',
-      total: 'field_3453',
-      status: 'field_3451',
-      financeEmail: 'field_3471',
-      financeName: 'field_3473',
-      invoiceLink: 'field_3474',
-      estimateLink: 'field_3475',
-      setupDate: 'field_3455',
-      settled: 'field_3498',
-      secondaryContact: 'field_3501',
-      secondaryEmail: 'field_3502',
-      address: 'field_3499',
-      trustSchool: 'field_3504'
+      orderNumber: 'field_3470', // Auto Increment
+      status: 'field_3451', // Multiple Choice
+      orderDate: 'field_3454', // Date/Time
+      renewalDate: 'field_3497', // Date/Time
+      paymentDue: 'field_3464', // Date/Time
+      setupDate: 'field_3455', // Date/Time
+      
+      // Product Details
+      rate: 'field_3461', // Currency
+      quantity: 'field_3462', // Number
+      discount: 'field_3465', // Number
+      vatChargeable: 'field_3467', // Yes/No
+      total: 'field_3453', // Currency
+      equation: 'field_3506', // Equation
+      
+      // Contact Information
+      staffAdminEmail: 'field_3468', // Email
+      staffAdminName: 'field_3500', // Person
+      financeEmail: 'field_3471', // Email
+      financeName: 'field_3473', // Short Text
+      secondaryContact: 'field_3501', // Person
+      secondaryEmail: 'field_3502', // Email
+      
+      // Additional Information
+      poNumber: 'field_3472', // Short Text (PO Number)
+      invoiceNumber: 'field_3469', // Short Text
+      invoiceLink: 'field_3474', // Link
+      estimateLink: 'field_3475', // Link
+      address: 'field_3499', // Address
+      trustSchool: 'field_3504', // Yes/No
+      settled: 'field_3498', // Yes/No
+      lastReminderSent: 'field_3505' // Date/Time
     },
     // Renewal status options
     statusOptions: {
-      pending: 'Pending',
-      estimate_sent: 'Estimate Sent',
-      invoice_sent: 'Invoice Sent',
-      paid: 'Paid',
-      cancelled: 'Cancelled'
+      'Pending': 'Pending',
+      'Estimate Sent': 'Estimate Sent',
+      'Invoice Sent': 'Invoice Sent',
+      'Paid': 'Paid',
+      'Cancelled': 'Cancelled'
     },
     // Renewal timing settings
     renewalSettings: {
@@ -115,7 +134,9 @@
       search: ''
     },
     isLoading: false,
-    currentModal: null
+    currentModal: null,
+    loadAttempts: 0,
+    maxLoadAttempts: 3
   };
 
   /**
@@ -131,7 +152,84 @@
       error: 'color: #dc3545'
     };
     
-    console.log(`%c[VESPA Renewals] ${message}`, styles[level], data || '');
+    console.log(`%c[VESPA Renewals v1d] ${message}`, styles[level], data || '');
+  }
+
+  /**
+   * Extract email from Knack field (handles various formats)
+   */
+  function extractEmail(emailField) {
+    if (!emailField) return '';
+    
+    // If it's a string, return it
+    if (typeof emailField === 'string') {
+      // Check if it contains HTML (like the issue in the screenshot)
+      if (emailField.includes('<a href=')) {
+        // Extract email from href attribute
+        const match = emailField.match(/href="mailto:([^"]+)"/);
+        if (match) return match[1];
+        // Extract from text content
+        const textMatch = emailField.match(/>([^<]+@[^<]+)</);
+        if (textMatch) return textMatch[1];
+      }
+      return emailField;
+    }
+    
+    // If it's an object with email property
+    if (emailField.email) return emailField.email;
+    
+    // If it's an object with field property
+    if (emailField.field) return emailField.field;
+    
+    // If it's an object with formatted property
+    if (emailField.formatted) return emailField.formatted;
+    
+    return '';
+  }
+
+  /**
+   * Extract text from Knack person field
+   */
+  function extractPersonName(personField) {
+    if (!personField) return '';
+    
+    // If it's a string, return it
+    if (typeof personField === 'string') return personField;
+    
+    // If it's an object with full property
+    if (personField.full) return personField.full;
+    
+    // If it's an object with identifier property
+    if (personField.identifier) return personField.identifier;
+    
+    // If it has first and last
+    if (personField.first || personField.last) {
+      return `${personField.first || ''} ${personField.last || ''}`.trim();
+    }
+    
+    return '';
+  }
+
+  /**
+   * Format address field
+   */
+  function formatAddress(addressField) {
+    if (!addressField) return '';
+    
+    if (typeof addressField === 'string') return addressField;
+    
+    if (addressField.formatted) return addressField.formatted;
+    
+    // Build from components
+    const parts = [];
+    if (addressField.street) parts.push(addressField.street);
+    if (addressField.street2) parts.push(addressField.street2);
+    if (addressField.city) parts.push(addressField.city);
+    if (addressField.state) parts.push(addressField.state);
+    if (addressField.zip) parts.push(addressField.zip);
+    if (addressField.country) parts.push(addressField.country);
+    
+    return parts.join(', ');
   }
 
   /**
@@ -143,10 +241,16 @@
     let date;
     
     // Handle Knack date object format
-    if (dateValue && typeof dateValue === 'object' && dateValue.date_formatted) {
-      // Use the UK formatted date from Knack
-      const [day, month, year] = dateValue.date_formatted.split('/');
-      date = new Date(year, month - 1, day);
+    if (dateValue && typeof dateValue === 'object') {
+      if (dateValue.date_formatted) {
+        // Use the UK formatted date from Knack
+        const [day, month, year] = dateValue.date_formatted.split('/');
+        date = new Date(year, month - 1, day);
+      } else if (dateValue.iso_timestamp) {
+        date = new Date(dateValue.iso_timestamp);
+      } else if (dateValue.unix_timestamp) {
+        date = new Date(dateValue.unix_timestamp);
+      }
     }
     // If it's already a Date object
     else if (dateValue instanceof Date) {
@@ -183,11 +287,7 @@
    * Initialize the renewal management system
    */
   function initializeRenewalSystem() {
-    debugLog('Initializing Renewal Management System');
-    
-    // Log the current VESPA_UPLOAD_CONFIG
-    debugLog('Current VESPA_UPLOAD_CONFIG:', window.VESPA_UPLOAD_CONFIG);
-    debugLog('API URL from config:', window.VESPA_UPLOAD_CONFIG?.apiUrl);
+    debugLog('Initializing Renewal Management System v1d');
     
     // Set up global access immediately
     window.VESPARenewals = {
@@ -209,7 +309,8 @@
       calculateEditTotal: calculateEditTotal,
       generateEstimates: () => processSelectedRenewals(),
       sendReminders: () => processSelectedRenewals(),
-      formatDateForInput: formatDateForInput
+      formatDateForInput: formatDateForInput,
+      saveOrderChanges: saveOrderChanges
     };
     
     // Add button to Super User interface
@@ -261,7 +362,7 @@
    * Load renewal-specific styles
    */
   function loadRenewalStyles() {
-    if (document.getElementById('vespa-renewal-styles')) return;
+    if (document.getElementById('vespa-renewal-styles-v1d')) return;
     
     const styles = `
       .renewal-modal {
@@ -357,6 +458,7 @@
         border-radius: 4px;
         font-size: 12px;
         font-weight: 500;
+        white-space: nowrap;
       }
       
       .renewal-status.pending { background: #fff3cd; color: #856404; }
@@ -421,10 +523,100 @@
         background: #17a2b8;
         color: white;
       }
+      
+      /* Edit modal styles */
+      .renewal-edit-section {
+        background: #f8f9fa;
+        padding: 15px;
+        margin: 15px 0;
+        border-radius: 6px;
+        border: 1px solid #e9ecef;
+      }
+      
+      .renewal-edit-section h4 {
+        margin: 0 0 15px 0;
+        color: #495057;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      
+      .renewal-form-row {
+        display: grid;
+        gap: 15px;
+        margin-bottom: 15px;
+      }
+      
+      .renewal-form-row.cols-2 {
+        grid-template-columns: 1fr 1fr;
+      }
+      
+      .renewal-form-row.cols-3 {
+        grid-template-columns: 1fr 1fr 1fr;
+      }
+      
+      .renewal-form-row.cols-4 {
+        grid-template-columns: 1fr 1fr 1fr 1fr;
+      }
+      
+      .vespa-form-group label {
+        display: block;
+        margin-bottom: 5px;
+        color: #495057;
+        font-weight: 500;
+        font-size: 14px;
+      }
+      
+      .vespa-form-group input,
+      .vespa-form-group select,
+      .vespa-form-group textarea {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        font-size: 14px;
+        transition: border-color 0.15s;
+      }
+      
+      .vespa-form-group input:focus,
+      .vespa-form-group select:focus,
+      .vespa-form-group textarea:focus {
+        outline: none;
+        border-color: #80bdff;
+        box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+      }
+      
+      .vespa-form-group input[readonly] {
+        background-color: #e9ecef;
+        cursor: not-allowed;
+      }
+      
+      .renewal-link-field {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      
+      .renewal-link-field input {
+        flex: 1;
+      }
+      
+      .renewal-link-field a {
+        padding: 8px 12px;
+        background: #007bff;
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      
+      .renewal-link-field a:hover {
+        background: #0056b3;
+      }
     `;
     
     const styleSheet = document.createElement('style');
-    styleSheet.id = 'vespa-renewal-styles';
+    styleSheet.id = 'vespa-renewal-styles-v1d';
     styleSheet.textContent = styles;
     document.head.appendChild(styleSheet);
   }
@@ -461,11 +653,11 @@
           <div class="filter-group">
             <label>Date Range:</label>
             <select id="renewal-date-filter" onchange="VESPARenewals.applyFilters()">
+              <option value="all">All renewals</option>
               <option value="overdue">Overdue</option>
               <option value="upcoming_30">Next 30 days</option>
               <option value="upcoming_60">Next 60 days</option>
               <option value="upcoming_90">Next 90 days</option>
-              <option value="all" selected>All renewals</option>
             </select>
           </div>
           
@@ -473,10 +665,11 @@
             <label>Status:</label>
             <select id="renewal-status-filter" onchange="VESPARenewals.applyFilters()">
               <option value="all">All statuses</option>
-              <option value="pending">Pending</option>
-              <option value="estimate_sent">Estimate Sent</option>
-              <option value="invoice_sent">Invoice Sent</option>
-              <option value="paid">Paid</option>
+              <option value="Pending">Pending</option>
+              <option value="Estimate Sent">Estimate Sent</option>
+              <option value="Invoice Sent">Invoice Sent</option>
+              <option value="Paid">Paid</option>
+              <option value="Cancelled">Cancelled</option>
             </select>
           </div>
           
@@ -500,25 +693,18 @@
         
         <div class="renewal-actions">
           <div class="renewal-bulk-actions">
-            <label>
-              <input type="checkbox" id="select-all-renewals" onchange="VESPARenewals.toggleSelectAll()">
-              Select All
-            </label>
             <span id="selected-count">0 selected</span>
-          </div>
-          
-          <div class="renewal-action-buttons">
-            <button class="vespa-button secondary" onclick="VESPARenewals.generateEstimates()" 
-                    id="generate-estimates-btn" disabled>
-              📄 Generate Estimates
+            <button id="generate-estimates-btn" class="vespa-button primary small-button" 
+                    onclick="VESPARenewals.generateEstimates()" disabled>
+              Generate Estimates
             </button>
-            <button class="vespa-button secondary" onclick="VESPARenewals.sendReminders()" 
-                    id="send-reminders-btn" disabled>
-              📧 Send Reminders
+            <button id="send-reminders-btn" class="vespa-button secondary small-button" 
+                    onclick="VESPARenewals.sendReminders()" disabled>
+              Send Reminders
             </button>
-            <button class="vespa-button primary" onclick="VESPARenewals.processSelected()" 
-                    id="process-renewals-btn" disabled>
-              🚀 Process Renewals
+            <button id="process-renewals-btn" class="vespa-button" 
+                    onclick="VESPARenewals.processSelected()" disabled>
+              Process Renewals
             </button>
           </div>
         </div>
@@ -529,7 +715,7 @@
   }
 
   /**
-   * Load renewal data from the API
+   * Load renewal data from the API with improved error handling
    */
   async function loadRenewalData() {
     renewalState.isLoading = true;
@@ -546,9 +732,14 @@
       
       const filters = buildDateFilters(dateFilter);
       
+      // Add status filter if not "all"
+      if (statusFilter && statusFilter !== 'all') {
+        filters.status = statusFilter;
+      }
+      
       debugLog('Loading renewal data with filters:', filters);
       
-      // Get the API URL and log it
+      // Get the API URL
       const apiUrl = RENEWAL_CONFIG.apiUrl;
       
       // Ensure the URL is properly formatted
@@ -557,12 +748,19 @@
       }
       
       const fullUrl = new URL('renewals/list', apiUrl).href;
-      debugLog('API URL:', apiUrl);
       debugLog('Full request URL:', fullUrl);
-      debugLog('Window location:', window.location.href);
       
-      // Call API to get renewal data - use absolute URL
-      const response = await $.ajax({
+      // Set a timeout for the request
+      const timeoutDuration = 30000; // 30 seconds
+      let timeoutId;
+      
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error('Request timed out after 30 seconds'));
+        }, timeoutDuration);
+      });
+      
+      const requestPromise = $.ajax({
         url: fullUrl,
         type: 'GET',
         data: {
@@ -573,11 +771,25 @@
         crossDomain: true
       });
       
+      // Race between the request and timeout
+      const response = await Promise.race([requestPromise, timeoutPromise]);
+      clearTimeout(timeoutId);
+      
       if (response.success) {
         renewalState.orders = response.orders || [];
+        renewalState.loadAttempts = 0; // Reset attempts on success
+        
+        // Process orders to extract emails properly
+        renewalState.orders = renewalState.orders.map(order => {
+          return {
+            ...order,
+            staffAdminEmail: extractEmail(order.staffAdminEmail),
+            financeEmail: extractEmail(order.financeEmail),
+            staffAdminName: extractPersonName(order.staffAdminName)
+          };
+        });
+        
         debugLog(`Loaded ${renewalState.orders.length} renewal orders`, null, 'success');
-        debugLog('First order sample:', renewalState.orders[0]);
-        debugLog('Response structure:', { success: response.success, ordersLength: response.orders?.length, totalField: response.total });
         updateTableDisplay();
         updateCounts();
       } else {
@@ -585,8 +797,16 @@
       }
       
     } catch (error) {
+      renewalState.loadAttempts++;
       debugLog('Error loading renewal data:', error, 'error');
-      showError('Failed to load renewal data: ' + error.message);
+      
+      if (renewalState.loadAttempts < renewalState.maxLoadAttempts) {
+        debugLog(`Retrying... (attempt ${renewalState.loadAttempts + 1} of ${renewalState.maxLoadAttempts})`);
+        setTimeout(() => loadRenewalData(), 2000); // Retry after 2 seconds
+      } else {
+        showError('Failed to load renewal data after multiple attempts. Please check your connection and try again.');
+        renewalState.loadAttempts = 0; // Reset for next manual attempt
+      }
     } finally {
       renewalState.isLoading = false;
     }
@@ -619,7 +839,8 @@
         filters.renewalDateEnd = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
         break;
       case 'all':
-        // No date filters
+      default:
+        // No date filters for "all"
         break;
     }
     
@@ -634,8 +855,6 @@
     const container = document.getElementById('renewal-table-container');
     if (!container) return;
     
-    debugLog('updateTableDisplay called', { isLoading: renewalState.isLoading, ordersCount: renewalState.orders.length });
-    
     if (renewalState.isLoading) {
       container.innerHTML = '<div class="renewal-loading">Loading renewal data...</div>';
       return;
@@ -643,7 +862,6 @@
     
     // Apply filters
     const filteredOrders = applyLocalFilters(renewalState.orders);
-    debugLog('Filtered orders:', { originalCount: renewalState.orders.length, filteredCount: filteredOrders.length });
     
     if (filteredOrders.length === 0) {
       container.innerHTML = `
@@ -671,7 +889,7 @@
             <th>Rate</th>
             <th>Total</th>
             <th>Status</th>
-            <th>Last Action</th>
+            <th>PO Number</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -681,18 +899,16 @@
     filteredOrders.forEach(order => {
       // Use formatDate to handle the object format
       const formattedRenewalDate = formatDate(order.renewalDate);
-      const renewalDate = order.renewalDate && order.renewalDate.proper_unix_timestamp 
-        ? new Date(order.renewalDate.proper_unix_timestamp)
-        : (order.renewalDate && order.renewalDate.unix_timestamp 
-          ? new Date(order.renewalDate.unix_timestamp)
-          : new Date());
+      const renewalDate = order.renewalDate && order.renewalDate.unix_timestamp 
+        ? new Date(order.renewalDate.unix_timestamp)
+        : new Date(order.renewalDate);
       
       const today = new Date();
-      today.setHours(0, 0, 0, 0); // Reset time to start of day
+      today.setHours(0, 0, 0, 0);
       
       let dateBadge = '';
       if (!isNaN(renewalDate.getTime())) {
-        renewalDate.setHours(0, 0, 0, 0); // Reset time to start of day
+        renewalDate.setHours(0, 0, 0, 0);
         const daysUntil = Math.floor((renewalDate - today) / (1000 * 60 * 60 * 24));
         
         if (daysUntil < 0) {
@@ -703,6 +919,9 @@
           dateBadge = `<span class="renewal-date-badge upcoming">${daysUntil} days</span>`;
         }
       }
+      
+      // Format status for CSS class
+      const statusClass = (order.status || 'Pending').toLowerCase().replace(/\s+/g, '_');
       
       tableHtml += `
         <tr data-order-id="${order.id}">
@@ -723,11 +942,11 @@
           <td>£${parseFloat(order.rate || 0).toFixed(2)}</td>
           <td><strong>£${parseFloat(order.total || 0).toFixed(2)}</strong></td>
           <td>
-            <span class="renewal-status ${(order.status || 'pending').toLowerCase().replace(' ', '_')}">
+            <span class="renewal-status ${statusClass}">
               ${order.status || 'Pending'}
             </span>
           </td>
-          <td>${formatDate(order.lastAction)}</td>
+          <td>${order.poNumber || '-'}</td>
           <td>
             <button class="renewal-edit-btn" onclick="VESPARenewals.editOrder('${order.id}')">
               Edit
@@ -745,59 +964,352 @@
    * Apply local filters to the orders
    */
   function applyLocalFilters(orders) {
-    debugLog('applyLocalFilters called with orders:', { count: orders.length, firstOrder: orders[0] });
-    
     let filtered = [...orders];
-    
-    // Status filter
-    const statusFilter = document.getElementById('renewal-status-filter')?.value;
-    if (statusFilter && statusFilter !== 'all') {
-      debugLog('Status filter active:', { statusFilter, sampleStatus: filtered[0]?.status });
-      
-      filtered = filtered.filter(order => {
-        // Normalize the status for comparison
-        const orderStatus = (order.status || 'Pending').toLowerCase().replace(/\s+/g, '_');
-        const filterStatus = statusFilter.toLowerCase().replace(/\s+/g, '_');
-        
-        // Remove per-order logging to reduce console spam
-        return orderStatus === filterStatus;
-      });
-      
-      debugLog('Status filter applied:', { statusFilter, resultCount: filtered.length });
-    }
     
     // Search filter
     const searchTerm = document.getElementById('renewal-search')?.value?.toLowerCase();
     if (searchTerm) {
-      debugLog('Search term:', searchTerm);
-      debugLog('Sample order for search:', filtered[0]);
-      
       filtered = filtered.filter(order => {
-        // Convert all searchable values to strings for searching
         const searchableFields = {
           customerName: order.customerName || '',
           customerEmail: order.customerEmail || '',
+          staffAdminEmail: order.staffAdminEmail || '',
           orderNumber: order.orderNumber || '',
           financeName: order.financeName || '',
           financeEmail: order.financeEmail || '',
           poNumber: order.poNumber || ''
         };
         
-        // Convert all fields to lowercase strings
         const searchString = Object.values(searchableFields)
           .map(value => value.toString().toLowerCase())
           .join(' ');
         
         return searchString.includes(searchTerm);
       });
-      
-      debugLog('Search results:', { searchTerm, resultCount: filtered.length });
     }
     
     // Sort by renewal date
-    filtered.sort((a, b) => new Date(a.renewalDate) - new Date(b.renewalDate));
+    filtered.sort((a, b) => {
+      const dateA = a.renewalDate?.unix_timestamp || 0;
+      const dateB = b.renewalDate?.unix_timestamp || 0;
+      return dateA - dateB;
+    });
     
     return filtered;
+  }
+
+  /**
+   * Show edit modal for a single order with ALL fields
+   */
+  function showEditModal(order) {
+    const modal = document.createElement('div');
+    modal.className = 'renewal-modal';
+    modal.style.zIndex = '10001';
+    
+    // Format dates for input fields
+    const renewalDate = formatDateForInput(order.renewalDate);
+    const orderDate = formatDateForInput(order.orderDate);
+    const paymentDue = formatDateForInput(order.paymentDue);
+    const setupDate = formatDateForInput(order.setupDate);
+    const lastReminderSent = formatDateForInput(order.lastReminderSent);
+    
+    // Extract field values properly
+    const staffAdminEmail = extractEmail(order.staffAdminEmail);
+    const financeEmail = extractEmail(order.financeEmail);
+    const secondaryEmail = extractEmail(order.secondaryEmail);
+    const staffAdminName = extractPersonName(order.staffAdminName);
+    const secondaryContactName = extractPersonName(order.secondaryContact);
+    const address = formatAddress(order.address);
+    
+    modal.innerHTML = `
+      <div class="renewal-modal-content" style="width: 900px; height: auto; max-height: 90vh; overflow-y: auto;">
+        <div class="renewal-header">
+          <h3>Edit Renewal - ${order.customerName || 'Unknown Customer'}</h3>
+          <button class="vespa-button secondary small-button" onclick="this.closest('.renewal-modal').remove()">× Close</button>
+        </div>
+        
+        <form id="edit-renewal-form" style="padding: 20px;">
+          <!-- Order Information Section -->
+          <div class="renewal-edit-section">
+            <h4>Order Information</h4>
+            
+            <div class="renewal-form-row cols-3">
+              <div class="vespa-form-group">
+                <label>Order Number:</label>
+                <input type="text" value="${order.orderNumber || ''}" readonly>
+              </div>
+              
+              <div class="vespa-form-group">
+                <label>Status:</label>
+                <select id="edit-status" name="status">
+                  ${Object.entries(RENEWAL_CONFIG.statusOptions).map(([value, label]) => 
+                    `<option value="${value}" ${order.status === value ? 'selected' : ''}>${label}</option>`
+                  ).join('')}
+                </select>
+              </div>
+              
+              <div class="vespa-form-group">
+                <label>PO Number:</label>
+                <input type="text" id="edit-po-number" name="poNumber" value="${order.poNumber || ''}">
+              </div>
+            </div>
+            
+            <div class="renewal-form-row cols-2">
+              <div class="vespa-form-group">
+                <label>Invoice Number:</label>
+                <input type="text" id="edit-invoice-number" name="invoiceNumber" value="${order.invoiceNumber || ''}">
+              </div>
+              
+              <div class="vespa-form-group">
+                <label>Settled:</label>
+                <select id="edit-settled" name="settled">
+                  <option value="Yes" ${order.settled === 'Yes' ? 'selected' : ''}>Yes</option>
+                  <option value="No" ${order.settled === 'No' ? 'selected' : ''}>No</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Important Dates Section -->
+          <div class="renewal-edit-section">
+            <h4>Important Dates</h4>
+            
+            <div class="renewal-form-row cols-2">
+              <div class="vespa-form-group">
+                <label>Order Date:</label>
+                <input type="date" id="edit-order-date" name="orderDate" value="${orderDate}">
+              </div>
+              
+              <div class="vespa-form-group">
+                <label>Set-Up Date:</label>
+                <input type="date" id="edit-setup-date" name="setupDate" value="${setupDate}">
+              </div>
+            </div>
+            
+            <div class="renewal-form-row cols-3">
+              <div class="vespa-form-group">
+                <label>Renewal Date: <span style="color: #dc3545;">*</span></label>
+                <input type="date" id="edit-renewal-date" name="renewalDate" value="${renewalDate}" required>
+              </div>
+              
+              <div class="vespa-form-group">
+                <label>Payment Due:</label>
+                <input type="date" id="edit-payment-due" name="paymentDue" value="${paymentDue}">
+              </div>
+              
+              <div class="vespa-form-group">
+                <label>Last Reminder Sent:</label>
+                <input type="date" id="edit-last-reminder" name="lastReminderSent" value="${lastReminderSent}">
+              </div>
+            </div>
+          </div>
+          
+          <!-- Product Details Section -->
+          <div class="renewal-edit-section">
+            <h4>Product Details</h4>
+            
+            <div class="vespa-form-row cols-4">
+              <div class="vespa-form-group">
+                <label>Student Logins:</label>
+                <input type="number" id="edit-quantity" name="quantity" value="${order.quantity || 0}" 
+                       onchange="VESPARenewals.calculateEditTotal()">
+              </div>
+              
+              <div class="vespa-form-group">
+                <label>Rate per Login (£):</label>
+                <input type="number" id="edit-rate" name="rate" value="${order.rate || 0}" step="0.01"
+                       onchange="VESPARenewals.calculateEditTotal()">
+              </div>
+              
+              <div class="vespa-form-group">
+                <label>Discount (%):</label>
+                <input type="number" id="edit-discount" name="discount" value="${order.discount || 0}" 
+                       min="0" max="100" onchange="VESPARenewals.calculateEditTotal()">
+              </div>
+              
+              <div class="vespa-form-group">
+                <label>VAT Chargeable:</label>
+                <select id="edit-vat" name="vatChargeable" onchange="VESPARenewals.calculateEditTotal()">
+                  <option value="Yes" ${order.vatChargeable === 'Yes' ? 'selected' : ''}>Yes</option>
+                  <option value="No" ${order.vatChargeable === 'No' ? 'selected' : ''}>No</option>
+                </select>
+              </div>
+            </div>
+            
+            <div class="renewal-form-row cols-2">
+              <div class="vespa-form-group">
+                <label>Total (£):</label>
+                <input type="text" id="edit-total" value="${parseFloat(order.total || 0).toFixed(2)}" 
+                       readonly style="font-weight: bold; font-size: 16px;">
+              </div>
+              
+              <div class="vespa-form-group">
+                <label>Trust School:</label>
+                <select id="edit-trust-school" name="trustSchool">
+                  <option value="Yes" ${order.trustSchool === 'Yes' ? 'selected' : ''}>Yes</option>
+                  <option value="No" ${order.trustSchool === 'No' ? 'selected' : ''}>No</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Contact Information Section -->
+          <div class="renewal-edit-section">
+            <h4>Contact Information</h4>
+            
+            <div class="renewal-form-row cols-2">
+              <div class="vespa-form-group">
+                <label>Staff Admin Name:</label>
+                <input type="text" value="${staffAdminName}" readonly>
+              </div>
+              
+              <div class="vespa-form-group">
+                <label>Staff Admin Email:</label>
+                <input type="email" value="${staffAdminEmail}" readonly>
+              </div>
+            </div>
+            
+            <div class="renewal-form-row cols-2">
+              <div class="vespa-form-group">
+                <label>Finance Contact:</label>
+                <input type="text" id="edit-finance-name" name="financeName" value="${order.financeName || ''}">
+              </div>
+              
+              <div class="vespa-form-group">
+                <label>Finance Email:</label>
+                <input type="email" id="edit-finance-email" name="financeEmail" value="${financeEmail}">
+              </div>
+            </div>
+            
+            <div class="renewal-form-row cols-2">
+              <div class="vespa-form-group">
+                <label>Secondary Contact:</label>
+                <input type="text" id="edit-secondary-contact" name="secondaryContact" value="${secondaryContactName}">
+              </div>
+              
+              <div class="vespa-form-group">
+                <label>Secondary Email:</label>
+                <input type="email" id="edit-secondary-email" name="secondaryEmail" value="${secondaryEmail}">
+              </div>
+            </div>
+            
+            <div class="vespa-form-group">
+              <label>Address:</label>
+              <textarea id="edit-address" name="address" rows="3">${address}</textarea>
+            </div>
+          </div>
+          
+          <!-- Links Section -->
+          <div class="renewal-edit-section">
+            <h4>Documents & Links</h4>
+            
+            <div class="renewal-form-row cols-1">
+              <div class="vespa-form-group">
+                <label>Invoice Link:</label>
+                <div class="renewal-link-field">
+                  <input type="url" id="edit-invoice-link" name="invoiceLink" value="${order.invoiceLink || ''}" placeholder="https://...">
+                  ${order.invoiceLink ? `<a href="${order.invoiceLink}" target="_blank">View Invoice</a>` : ''}
+                </div>
+              </div>
+              
+              <div class="vespa-form-group">
+                <label>Estimate Link:</label>
+                <div class="renewal-link-field">
+                  <input type="url" id="edit-estimate-link" name="estimateLink" value="${order.estimateLink || ''}" placeholder="https://...">
+                  ${order.estimateLink ? `<a href="${order.estimateLink}" target="_blank">View Estimate</a>` : ''}
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div style="margin-top: 20px; text-align: right; padding: 20px; background: #f8f9fa; border-radius: 6px;">
+            <button type="button" class="vespa-button secondary" onclick="this.closest('.renewal-modal').remove()">
+              Cancel
+            </button>
+            <button type="submit" class="vespa-button primary">
+              Save Changes
+            </button>
+          </div>
+        </form>
+      </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Add form submit handler
+    document.getElementById('edit-renewal-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await saveOrderChanges(order.id, new FormData(e.target));
+    });
+    
+    // Store order data for calculations
+    window.currentEditOrder = order;
+  }
+
+  /**
+   * Calculate total for edit form
+   */
+  function calculateEditTotal() {
+    const quantity = parseFloat(document.getElementById('edit-quantity')?.value || 0);
+    const rate = parseFloat(document.getElementById('edit-rate')?.value || 0);
+    const discount = parseFloat(document.getElementById('edit-discount')?.value || 0);
+    const vat = document.getElementById('edit-vat')?.value === 'Yes';
+    
+    let subtotal = quantity * rate;
+    let discountAmount = subtotal * (discount / 100);
+    let afterDiscount = subtotal - discountAmount;
+    let vatAmount = vat ? afterDiscount * 0.20 : 0;
+    let total = afterDiscount + vatAmount;
+    
+    document.getElementById('edit-total').value = total.toFixed(2);
+  }
+
+  /**
+   * Save order changes - now handling all fields
+   */
+  async function saveOrderChanges(orderId, formData) {
+    try {
+      // Build update data object with all fields
+      const data = {};
+      
+      // Process each form field
+      for (let [key, value] of formData.entries()) {
+        // Skip empty values for optional fields
+        if (value !== '') {
+          // Convert numeric fields
+          if (['quantity', 'rate', 'discount'].includes(key)) {
+            data[key] = parseFloat(value) || 0;
+          } else {
+            data[key] = value;
+          }
+        }
+      }
+      
+      debugLog('Saving order changes:', data);
+      
+      const updateUrl = new URL(`renewals/update/${orderId}`, RENEWAL_CONFIG.apiUrl).href;
+      
+      const response = await $.ajax({
+        url: updateUrl,
+        type: 'PUT',
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        xhrFields: { withCredentials: true },
+        crossDomain: true
+      });
+      
+      if (response.success) {
+        showSuccess('Order updated successfully');
+        document.querySelector('.renewal-modal[style*="10001"]')?.remove();
+        await loadRenewalData();
+      } else {
+        throw new Error(response.message || 'Failed to update order');
+      }
+      
+    } catch (error) {
+      debugLog('Error saving order:', error, 'error');
+      showError('Failed to save changes: ' + error.message);
+    }
   }
 
   /**
@@ -851,6 +1363,16 @@
             </label>
           </div>
           
+          <div class="vespa-form-group" style="margin-top: 25px; padding: 15px; border: 2px solid #dc3545; border-radius: 6px; background-color: #fff5f5;">
+            <label style="color: #dc3545; font-weight: bold;">
+              <input type="radio" name="renewal-action" value="cancel">
+              ⚠️ Cancel Account - Permanently deactivate all user accounts
+            </label>
+            <p style="margin: 10px 0 0 22px; font-size: 13px; color: #721c24; line-height: 1.4;">
+              This will immediately deactivate ALL staff and student accounts associated with this subscription. This action cannot be easily undone.
+            </p>
+          </div>
+          
           <div class="vespa-form-group" style="margin-top: 20px;">
             <label>
               <input type="checkbox" id="auto-update-status" checked>
@@ -892,6 +1414,33 @@
       return;
     }
     
+    // Special handling for cancellation - require confirmation
+    if (action === 'cancel') {
+      // Get the order details for confirmation
+      const order = renewalState.orders.find(o => o.id === orderIds[0]);
+      const customerName = order?.customerName || 'this customer';
+      
+      const confirmMessage = `⚠️ WARNING: You are about to CANCEL the subscription for ${customerName}.\n\n` +
+                           `This will:\n` +
+                           `• Change the order status to "Cancelled"\n` +
+                           `• Mark the customer account as "Cancelled"\n` +
+                           `• IMMEDIATELY deactivate ALL staff and student accounts\n` +
+                           `• Send a cancellation confirmation email\n\n` +
+                           `This action cannot be easily undone.\n\n` +
+                           `Are you absolutely sure you want to proceed?`;
+      
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+      
+      // Second confirmation for extra safety
+      const secondConfirm = prompt(`Type "CANCEL ${customerName.toUpperCase()}" to confirm the cancellation:`);
+      if (secondConfirm !== `CANCEL ${customerName.toUpperCase()}`) {
+        showError('Cancellation aborted - confirmation text did not match');
+        return;
+      }
+    }
+    
     debugLog(`Processing ${orderIds.length} renewals with action: ${action}`);
     
     // Close the options modal
@@ -914,7 +1463,6 @@
         
         try {
           const processUrl = new URL('renewals/process', RENEWAL_CONFIG.apiUrl).href;
-          debugLog('Processing URL:', processUrl);
           
           const response = await $.ajax({
             url: processUrl,
@@ -933,6 +1481,10 @@
           
           if (response.success) {
             results.success++;
+            // Track deactivated users for cancellations
+            if (action === 'cancel' && response.deactivatedUsers) {
+              results.deactivatedUsers = (results.deactivatedUsers || 0) + response.deactivatedUsers;
+            }
           } else {
             results.failed++;
             results.errors.push(`Order ${orderId}: ${response.message}`);
@@ -948,7 +1500,17 @@
       hideProgress();
       
       // Show results
-      let message = `Processed ${results.success} renewal${results.success !== 1 ? 's' : ''} successfully.`;
+      let message = '';
+      
+      if (action === 'cancel') {
+        message = `Cancelled ${results.success} subscription${results.success !== 1 ? 's' : ''} successfully.`;
+        if (results.deactivatedUsers) {
+          message += ` ${results.deactivatedUsers} user account${results.deactivatedUsers !== 1 ? 's' : ''} have been deactivated.`;
+        }
+      } else {
+        message = `Processed ${results.success} renewal${results.success !== 1 ? 's' : ''} successfully.`;
+      }
+      
       if (results.failed > 0) {
         message += ` ${results.failed} failed.`;
         if (results.errors.length > 0) {
@@ -969,228 +1531,6 @@
       hideProgress();
       debugLog('Error processing renewals:', error, 'error');
       showError('Failed to process renewals: ' + error.message);
-    }
-  }
-
-  /**
-   * Edit a single order
-   */
-  function editOrder(orderId) {
-    const order = renewalState.orders.find(o => o.id === orderId);
-    if (!order) return;
-    
-    // Show edit modal
-    showEditModal(order);
-  }
-
-  /**
-   * Show edit modal for a single order
-   */
-  function showEditModal(order) {
-    const modal = document.createElement('div');
-    modal.className = 'renewal-modal';
-    modal.style.zIndex = '10001';
-    
-    modal.innerHTML = `
-      <div class="renewal-modal-content" style="width: 800px; height: auto; max-height: 90vh; overflow-y: auto;">
-        <div class="renewal-header">
-          <h3>Edit Renewal - ${order.customerName}</h3>
-          <button class="vespa-button secondary small-button" onclick="this.closest('.renewal-modal').remove()">× Close</button>
-        </div>
-        
-        <form id="edit-renewal-form" style="padding: 20px;">
-          <h4 style="margin-bottom: 15px;">Order Information</h4>
-          
-          <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-            <div class="vespa-form-group">
-              <label>Order Number:</label>
-              <input type="text" value="${order.orderNumber || ''}" readonly style="background: #f8f9fa;">
-            </div>
-            
-            <div class="vespa-form-group">
-              <label>Status:</label>
-              <select id="edit-status" name="status">
-                ${Object.entries(RENEWAL_CONFIG.statusOptions).map(([value, label]) => 
-                  `<option value="${value}" ${order.status === value ? 'selected' : ''}>${label}</option>`
-                ).join('')}
-              </select>
-            </div>
-          </div>
-          
-          <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-            <div class="vespa-form-group">
-              <label>Renewal Date:</label>
-              <input type="date" id="edit-renewal-date" name="renewalDate" 
-                     value="${order.renewalDate ? formatDateForInput(order.renewalDate) : ''}">
-            </div>
-            
-            <div class="vespa-form-group">
-              <label>PO Number:</label>
-              <input type="text" id="edit-po-number" name="poNumber" value="${order.poNumber || ''}">
-            </div>
-          </div>
-          
-          <h4 style="margin-top: 20px;">Product Details</h4>
-          
-          <div class="vespa-form-group">
-            <label>Product:</label>
-            <input type="text" value="VESPA Portal Subscription" readonly style="background: #f8f9fa;">
-          </div>
-          
-          <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
-            <div class="vespa-form-group">
-              <label>Student Logins:</label>
-              <input type="number" id="edit-quantity" name="quantity" value="${order.quantity || 0}" 
-                     onchange="VESPARenewals.calculateEditTotal()">
-            </div>
-            
-            <div class="vespa-form-group">
-              <label>Rate per Login (£):</label>
-              <input type="number" id="edit-rate" name="rate" value="${order.rate || 0}" step="0.01"
-                     onchange="VESPARenewals.calculateEditTotal()">
-            </div>
-            
-            <div class="vespa-form-group">
-              <label>Discount (%):</label>
-              <input type="number" id="edit-discount" name="discount" value="${order.discount || 0}" 
-                     min="0" max="100" onchange="VESPARenewals.calculateEditTotal()">
-            </div>
-          </div>
-          
-          <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-            <div class="vespa-form-group">
-              <label>VAT Chargeable:</label>
-              <select id="edit-vat" name="vatChargeable" onchange="VESPARenewals.calculateEditTotal()">
-                <option value="Yes" ${order.vatChargeable === 'Yes' ? 'selected' : ''}>Yes</option>
-                <option value="No" ${order.vatChargeable === 'No' ? 'selected' : ''}>No</option>
-              </select>
-            </div>
-            
-            <div class="vespa-form-group">
-              <label>Total (£):</label>
-              <input type="text" id="edit-total" value="${parseFloat(order.total || 0).toFixed(2)}" 
-                     readonly style="background: #f8f9fa; font-weight: bold;">
-            </div>
-          </div>
-          
-          <h4 style="margin-top: 20px;">Contact Information</h4>
-          
-          <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-            <div class="vespa-form-group">
-              <label>Staff Admin Name:</label>
-              <input type="text" value="${order.staffAdminName || ''}" readonly style="background: #f8f9fa;">
-            </div>
-            
-            <div class="vespa-form-group">
-              <label>Staff Admin Email:</label>
-              <input type="email" value="${order.staffAdminEmail || ''}" readonly style="background: #f8f9fa;">
-            </div>
-          </div>
-          
-          <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-            <div class="vespa-form-group">
-              <label>Finance Contact:</label>
-              <input type="text" id="edit-finance-name" name="financeName" value="${order.financeName || ''}">
-            </div>
-            
-            <div class="vespa-form-group">
-              <label>Finance Email:</label>
-              <input type="email" id="edit-finance-email" name="financeEmail" value="${order.financeEmail || ''}">
-            </div>
-          </div>
-          
-          <h4 style="margin-top: 20px;">Email History</h4>
-          
-          <div class="vespa-form-group">
-            <label>Last Reminder Sent:</label>
-            <input type="text" value="${order.lastReminderSent ? formatDate(order.lastReminderSent) : 'Never'}" 
-                   readonly style="background: #f8f9fa;">
-          </div>
-          
-          <div style="margin-top: 20px; text-align: right;">
-            <button type="button" class="vespa-button secondary" onclick="this.closest('.renewal-modal').remove()">
-              Cancel
-            </button>
-            <button type="submit" class="vespa-button primary">
-              Save Changes
-            </button>
-          </div>
-        </form>
-      </div>
-    `;
-    
-    document.body.appendChild(modal);
-    
-    // Add form submit handler
-    document.getElementById('edit-renewal-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      await saveOrderChanges(order.id, new FormData(e.target));
-    });
-    
-    // Store order data for calculations
-    window.currentEditOrder = order;
-  }
-
-  /**
-   * Calculate total for edit form
-   */
-  function calculateEditTotal() {
-    const quantity = parseFloat(document.getElementById('edit-quantity')?.value || 0);
-    const rate = parseFloat(document.getElementById('edit-rate')?.value || 0);
-    const discount = parseFloat(document.getElementById('edit-discount')?.value || 0);
-    const vat = document.getElementById('edit-vat')?.value === 'Yes';
-    
-    let subtotal = quantity * rate;
-    let discountAmount = subtotal * (discount / 100);
-    let afterDiscount = subtotal - discountAmount;
-    let vatAmount = vat ? afterDiscount * 0.20 : 0;
-    let total = afterDiscount + vatAmount;
-    
-    document.getElementById('edit-total').value = total.toFixed(2);
-  }
-
-  /**
-   * Save order changes
-   */
-  async function saveOrderChanges(orderId, formData) {
-    try {
-      const data = {
-        status: formData.get('status'),
-        renewalDate: formData.get('renewalDate'),
-        poNumber: formData.get('poNumber'),
-        quantity: parseInt(formData.get('quantity')),
-        rate: parseFloat(formData.get('rate')),
-        discount: parseFloat(formData.get('discount')),
-        vatChargeable: formData.get('vatChargeable'),
-        financeName: formData.get('financeName'),
-        financeEmail: formData.get('financeEmail')
-      };
-      
-      debugLog('Saving order changes:', data);
-      
-      const updateUrl = new URL(`renewals/update/${orderId}`, RENEWAL_CONFIG.apiUrl).href;
-      debugLog('Update URL:', updateUrl);
-      
-      const response = await $.ajax({
-        url: updateUrl,
-        type: 'PUT',
-        contentType: 'application/json',
-        data: JSON.stringify(data),
-        xhrFields: { withCredentials: true },
-        crossDomain: true
-      });
-      
-      if (response.success) {
-        showSuccess('Order updated successfully');
-        document.querySelector('.renewal-modal[style*="10001"]')?.remove();
-        await loadRenewalData();
-      } else {
-        throw new Error(response.message || 'Failed to update order');
-      }
-      
-    } catch (error) {
-      debugLog('Error saving order:', error, 'error');
-      showError('Failed to save changes: ' + error.message);
     }
   }
 
@@ -1235,58 +1575,33 @@
   }
 
   /**
-   * Format date for display - handles Knack date objects
+   * Format date for display
    */
   function formatDate(dateValue) {
     if (!dateValue) return '-';
     
-    // Debug log the incoming date value
-    debugLog('formatDate input:', { dateValue, type: typeof dateValue });
-    
     let date;
     
     // Handle Knack date object format
-    if (dateValue && typeof dateValue === 'object' && dateValue.date_formatted) {
-      // Use the UK formatted date from Knack
-      const [day, month, year] = dateValue.date_formatted.split('/');
-      date = new Date(year, month - 1, day);
+    if (dateValue && typeof dateValue === 'object') {
+      if (dateValue.date_formatted) {
+        // Return the pre-formatted date from Knack
+        return dateValue.date_formatted;
+      } else if (dateValue.unix_timestamp) {
+        date = new Date(dateValue.unix_timestamp);
+      }
     }
     // If it's already a Date object
     else if (dateValue instanceof Date) {
       date = dateValue;
     }
-    // If it's a number (timestamp)
-    else if (typeof dateValue === 'number') {
-      date = new Date(dateValue);
-    }
-    // If it's a string
-    else if (typeof dateValue === 'string') {
-      // Check if it's a Knack date format (MM/DD/YYYY)
-      if (dateValue.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
-        const parts = dateValue.split('/');
-        // Determine if it's US or UK format based on the first value
-        if (parseInt(parts[0]) > 12) {
-          // Likely UK format (DD/MM/YYYY)
-          const [day, month, year] = parts;
-          date = new Date(year, month - 1, day);
-        } else {
-          // US format (MM/DD/YYYY)
-          const [month, day, year] = parts;
-          date = new Date(year, month - 1, day);
-        }
-      }
-      // Otherwise try parsing it normally
-      else {
-        date = new Date(dateValue);
-      }
-    }
+    // If it's a string or number
     else {
-      return '-';
+      date = new Date(dateValue);
     }
     
     // Check if date is valid
-    if (isNaN(date.getTime())) {
-      debugLog('Invalid date:', dateValue, 'warning');
+    if (!date || isNaN(date.getTime())) {
       return '-';
     }
     
@@ -1295,6 +1610,17 @@
       month: 'short', 
       year: 'numeric' 
     });
+  }
+
+  /**
+   * Edit a single order
+   */
+  function editOrder(orderId) {
+    const order = renewalState.orders.find(o => o.id === orderId);
+    if (!order) return;
+    
+    // Show edit modal
+    showEditModal(order);
   }
 
   function showError(message) {
@@ -1371,4 +1697,4 @@
     waitForConfig();
   }
 
-})(window);
+})(window); 
