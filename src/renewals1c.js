@@ -16,7 +16,7 @@
   const RENEWAL_CONFIG = {
     objectId: 'object_122', // Orders object in Knack
     customerObjectId: 'object_2', // Customer object
-    apiUrl: 'https://vespa-upload-api-07e11c285370.herokuapp.com/api/',
+    apiUrl: window.VESPA_UPLOAD_CONFIG?.apiUrl || 'https://vespa-upload-api-07e11c285370.herokuapp.com/api/',
     debug: true,
     // Field mappings for Object_122
     fields: {
@@ -95,18 +95,33 @@
   function initializeRenewalSystem() {
     debugLog('Initializing Renewal Management System');
     
+    // Set up global access immediately
+    window.VESPARenewals = {
+      init: initializeRenewalSystem,
+      show: showRenewalInterface,
+      close: () => {
+        if (renewalState.currentModal) {
+          renewalState.currentModal.remove();
+          renewalState.currentModal = null;
+        }
+      },
+      refresh: loadRenewalData,
+      applyFilters: applyFilters,
+      toggleSelectAll: toggleSelectAll,
+      updateSelection: updateSelection,
+      editOrder: editOrder,
+      processSelected: processSelectedRenewals,
+      executeProcessing: executeProcessing,
+      calculateEditTotal: calculateEditTotal,
+      generateEstimates: () => processSelectedRenewals(),
+      sendReminders: () => processSelectedRenewals()
+    };
+    
     // Add button to Super User interface
     addRenewalButton();
     
     // Load required styles
     loadRenewalStyles();
-    
-    // Set up global access
-    window.VESPARenewals = {
-      show: showRenewalInterface,
-      refresh: loadRenewalData,
-      processSelected: processSelectedRenewals
-    };
     
     debugLog('Renewal system initialized', null, 'success');
   }
@@ -1085,26 +1100,6 @@
   function hideProgress() {
     document.getElementById('renewal-progress')?.remove();
   }
-
-  // Public API
-  window.VESPARenewals = {
-    init: initializeRenewalSystem,
-    show: showRenewalInterface,
-    close: () => {
-      renewalState.currentModal?.remove();
-      renewalState.currentModal = null;
-    },
-    refresh: loadRenewalData,
-    applyFilters: applyFilters,
-    toggleSelectAll: toggleSelectAll,
-    updateSelection: updateSelection,
-    editOrder: editOrder,
-    processSelected: processSelectedRenewals,
-    executeProcessing: executeProcessing,
-    calculateEditTotal: calculateEditTotal,
-    generateEstimates: () => processSelectedRenewals(),
-    sendReminders: () => processSelectedRenewals()
-  };
 
   // Auto-initialize when loaded
   if (document.readyState === 'loading') {
