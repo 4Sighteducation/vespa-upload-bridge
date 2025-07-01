@@ -1109,12 +1109,12 @@ function renderSelectTypeStep() {
             </label>
           </div>
           
-          <div class="vespa-upload-option" style="opacity: 0.5;">
-            <input type="radio" id="renew-customer" name="upload-type" value="renew-customer" disabled>
+          <div class="vespa-upload-option">
+            <input type="radio" id="renew-customer" name="upload-type" value="renew-customer">
             <label for="renew-customer">
               <div class="vespa-option-icon">🔄</div>
               <div class="vespa-option-title">Generate Renewal Invoice</div>
-              <div class="vespa-option-description">Coming soon - Create renewal invoice for existing customer</div>
+              <div class="vespa-option-description">Generate and manage renewal invoices for existing customers</div>
             </label>
           </div>
         </div>
@@ -5309,8 +5309,18 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       // Show loading indicator
       showModal('Loading Renewal System', '<div style="text-align: center; padding: 20px;">Loading renewal management system...</div>');
       
-      // Load the renewal module from CDN
-      await loadScript('https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/renewals.js');
+      // Load the renewal module from your CDN
+      // You'll need to update this URL to match where you host your renewals.js file
+      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/renewals1a.js';
+      
+      try {
+        await loadScript(scriptUrl);
+        debugLog("Renewal script loaded from CDN", null, 'success');
+      } catch (error) {
+        debugLog("Failed to load from CDN, trying local file", error, 'warn');
+        // Fallback to local file if CDN fails
+        await loadScript('/renewals.js');
+      }
       
       // Wait a bit for initialization
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -5321,7 +5331,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       // Check if module loaded successfully
       if (window.VESPARenewals && window.VESPARenewals.show) {
         debugLog("Renewal module loaded successfully", null, 'success');
-        // Module will auto-initialize and show the interface
+        window.VESPARenewals.show();
       } else {
         throw new Error('Renewal module failed to initialize');
       }
@@ -5337,6 +5347,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       renderStep(1);
     }
   }
+
 
 
 
