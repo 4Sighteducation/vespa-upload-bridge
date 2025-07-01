@@ -106,7 +106,7 @@
   };
 
   // State management
-  let renewalState = {
+  const renewalState = {
     orders: [],
     selectedOrders: [],
     filters: {
@@ -135,30 +135,48 @@
   }
 
   /**
-   * Format date for HTML date input (YYYY-MM-DD)
+   * Format date for input fields (YYYY-MM-DD format)
    */
   function formatDateForInput(dateValue) {
     if (!dateValue) return '';
     
-    // If it's already a string in ISO format, extract the date part
-    if (typeof dateValue === 'string') {
+    let date;
+    
+    // Handle Knack date object format
+    if (dateValue && typeof dateValue === 'object' && dateValue.date_formatted) {
+      // Use the UK formatted date from Knack
+      const [day, month, year] = dateValue.date_formatted.split('/');
+      date = new Date(year, month - 1, day);
+    }
+    // If it's already a Date object
+    else if (dateValue instanceof Date) {
+      date = dateValue;
+    }
+    // If it's a string
+    else if (typeof dateValue === 'string') {
       // Check if it's already in YYYY-MM-DD format
       if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
         return dateValue;
       }
-      // Extract date part from ISO string
-      return dateValue.split('T')[0];
+      date = new Date(dateValue);
+    }
+    // If it's a number (timestamp)
+    else if (typeof dateValue === 'number') {
+      date = new Date(dateValue);
+    }
+    else {
+      return '';
     }
     
-    // If it's a Date object or timestamp
-    const date = new Date(dateValue);
-    if (isNaN(date.getTime())) return '';
+    // Return in YYYY-MM-DD format for input fields
+    if (!isNaN(date.getTime())) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
     
-    // Format as YYYY-MM-DD
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return '';
   }
 
   /**
@@ -520,6 +538,12 @@
     try {
       // Calculate date range based on filter
       const dateFilter = document.getElementById('renewal-date-filter')?.value || renewalState.filters.dateRange;
+      const statusFilter = document.getElementById('renewal-status-filter')?.value || renewalState.filters.status;
+      
+      // Update state with current filter values
+      renewalState.filters.dateRange = dateFilter;
+      renewalState.filters.status = statusFilter;
+      
       const filters = buildDateFilters(dateFilter);
       
       debugLog('Loading renewal data with filters:', filters);
@@ -655,7 +679,14 @@
     `;
     
     filteredOrders.forEach(order => {
-      const renewalDate = new Date(order.renewalDate);
+      // Use formatDate to handle the object format
+      const formattedRenewalDate = formatDate(order.renewalDate);
+      const renewalDate = order.renewalDate && order.renewalDate.proper_unix_timestamp 
+        ? new Date(order.renewalDate.proper_unix_timestamp)
+        : (order.renewalDate && order.renewalDate.unix_timestamp 
+          ? new Date(order.renewalDate.unix_timestamp)
+          : new Date());
+      
       const today = new Date();
       today.setHours(0, 0, 0, 0); // Reset time to start of day
       
@@ -681,11 +712,11 @@
           </td>
           <td>
             <strong>${order.customerName || 'Unknown'}</strong><br>
-            <small>${order.customerEmail || ''}</small>
+            <small>${order.staffAdminEmail || order.customerEmail || ''}</small>
           </td>
           <td>${order.orderNumber || '-'}</td>
           <td>
-            ${formatDate(order.renewalDate)}
+            ${formattedRenewalDate}
             ${dateBadge}
           </td>
           <td>${order.quantity || 0}</td>
@@ -696,7 +727,7 @@
               ${order.status || 'Pending'}
             </span>
           </td>
-          <td>${order.lastAction ? formatDate(order.lastAction) : '-'}</td>
+          <td>${formatDate(order.lastAction)}</td>
           <td>
             <button class="renewal-edit-btn" onclick="VESPARenewals.editOrder('${order.id}')">
               Edit
@@ -1176,38 +1207,50 @@
     document.getElementById('renewal-count').textContent = `${filtered.length} renewal${filtered.length !== 1 ? 's' : ''}`;
   }
 
-  function formatDate(dateString) {
-    if (!dateString) return '-';
+  /**
+   * Format date for display - handles Knack date objects
+   */
+  function formatDate(dateValue) {
+    if (!dateValue) return '-';
     
     // Debug log the incoming date value
-    debugLog('formatDate input:', { dateString, type: typeof dateString });
+    debugLog('formatDate input:', { dateValue, type: typeof dateValue });
     
-    // Handle different date formats
     let date;
     
+    // Handle Knack date object format
+    if (dateValue && typeof dateValue === 'object' && dateValue.date_formatted) {
+      // Use the UK formatted date from Knack
+      const [day, month, year] = dateValue.date_formatted.split('/');
+      date = new Date(year, month - 1, day);
+    }
     // If it's already a Date object
-    if (dateString instanceof Date) {
-      date = dateString;
+    else if (dateValue instanceof Date) {
+      date = dateValue;
     }
     // If it's a number (timestamp)
-    else if (typeof dateString === 'number') {
-      date = new Date(dateString);
+    else if (typeof dateValue === 'number') {
+      date = new Date(dateValue);
     }
     // If it's a string
-    else if (typeof dateString === 'string') {
+    else if (typeof dateValue === 'string') {
       // Check if it's a Knack date format (MM/DD/YYYY)
-      if (dateString.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
-        const [month, day, year] = dateString.split('/');
-        date = new Date(year, month - 1, day);
-      }
-      // Check if it's UK format (DD/MM/YYYY)
-      else if (dateString.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/) && parseInt(dateString.split('/')[0]) > 12) {
-        const [day, month, year] = dateString.split('/');
-        date = new Date(year, month - 1, day);
+      if (dateValue.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+        const parts = dateValue.split('/');
+        // Determine if it's US or UK format based on the first value
+        if (parseInt(parts[0]) > 12) {
+          // Likely UK format (DD/MM/YYYY)
+          const [day, month, year] = parts;
+          date = new Date(year, month - 1, day);
+        } else {
+          // US format (MM/DD/YYYY)
+          const [month, day, year] = parts;
+          date = new Date(year, month - 1, day);
+        }
       }
       // Otherwise try parsing it normally
       else {
-        date = new Date(dateString);
+        date = new Date(dateValue);
       }
     }
     else {
@@ -1216,8 +1259,8 @@
     
     // Check if date is valid
     if (isNaN(date.getTime())) {
-      debugLog('Invalid date:', dateString, 'warning');
-      return 'Invalid Date';
+      debugLog('Invalid date:', dateValue, 'warning');
+      return '-';
     }
     
     return date.toLocaleDateString('en-GB', { 
@@ -1302,4 +1345,3 @@
   }
 
 })(window);
-
