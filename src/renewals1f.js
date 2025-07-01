@@ -575,6 +575,8 @@
     const today = new Date();
     const filters = {};
     
+    debugLog('Building date filters for:', dateRange);
+    
     switch (dateRange) {
       case 'overdue':
         filters.renewalDateEnd = today.toISOString().split('T')[0];
@@ -597,6 +599,7 @@
         break;
     }
     
+    debugLog('Date filters built:', filters);
     return filters;
   }
 
@@ -725,19 +728,39 @@
         const orderStatus = (order.status || 'Pending').toLowerCase().replace(/\s+/g, '_');
         const filterStatus = statusFilter.toLowerCase().replace(/\s+/g, '_');
         
-        debugLog('Status comparison:', { orderStatus, filterStatus, matches: orderStatus === filterStatus });
+        // Remove per-order logging to reduce console spam
         return orderStatus === filterStatus;
       });
+      
+      debugLog('Status filter applied:', { statusFilter, resultCount: filtered.length });
     }
     
     // Search filter
     const searchTerm = document.getElementById('renewal-search')?.value?.toLowerCase();
     if (searchTerm) {
-      filtered = filtered.filter(order => 
-        order.customerName?.toLowerCase().includes(searchTerm) ||
-        order.customerEmail?.toLowerCase().includes(searchTerm) ||
-        order.orderNumber?.toLowerCase().includes(searchTerm)
-      );
+      debugLog('Search term:', searchTerm);
+      debugLog('Sample order for search:', filtered[0]);
+      
+      filtered = filtered.filter(order => {
+        // Convert all searchable values to strings for searching
+        const searchableFields = {
+          customerName: order.customerName || '',
+          customerEmail: order.customerEmail || '',
+          orderNumber: order.orderNumber || '',
+          financeName: order.financeName || '',
+          financeEmail: order.financeEmail || '',
+          poNumber: order.poNumber || ''
+        };
+        
+        // Convert all fields to lowercase strings
+        const searchString = Object.values(searchableFields)
+          .map(value => value.toString().toLowerCase())
+          .join(' ');
+        
+        return searchString.includes(searchTerm);
+      });
+      
+      debugLog('Search results:', { searchTerm, resultCount: filtered.length });
     }
     
     // Sort by renewal date
@@ -1155,7 +1178,48 @@
 
   function formatDate(dateString) {
     if (!dateString) return '-';
-    const date = new Date(dateString);
+    
+    // Debug log the incoming date value
+    debugLog('formatDate input:', { dateString, type: typeof dateString });
+    
+    // Handle different date formats
+    let date;
+    
+    // If it's already a Date object
+    if (dateString instanceof Date) {
+      date = dateString;
+    }
+    // If it's a number (timestamp)
+    else if (typeof dateString === 'number') {
+      date = new Date(dateString);
+    }
+    // If it's a string
+    else if (typeof dateString === 'string') {
+      // Check if it's a Knack date format (MM/DD/YYYY)
+      if (dateString.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+        const [month, day, year] = dateString.split('/');
+        date = new Date(year, month - 1, day);
+      }
+      // Check if it's UK format (DD/MM/YYYY)
+      else if (dateString.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/) && parseInt(dateString.split('/')[0]) > 12) {
+        const [day, month, year] = dateString.split('/');
+        date = new Date(year, month - 1, day);
+      }
+      // Otherwise try parsing it normally
+      else {
+        date = new Date(dateString);
+      }
+    }
+    else {
+      return '-';
+    }
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      debugLog('Invalid date:', dateString, 'warning');
+      return 'Invalid Date';
+    }
+    
     return date.toLocaleDateString('en-GB', { 
       day: '2-digit', 
       month: 'short', 
