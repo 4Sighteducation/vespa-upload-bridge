@@ -1381,6 +1381,13 @@
           </div>
           
           <div class="vespa-form-group">
+            <label>
+              <input type="checkbox" id="bcc-admin" checked>
+              Send a copy to admin@vespa.academy (BCC)
+            </label>
+          </div>
+          
+          <div class="vespa-form-group">
             <label>Additional Notes (optional):</label>
             <textarea id="renewal-notes" style="width: 100%; height: 60px;"></textarea>
           </div>
@@ -1407,6 +1414,7 @@
     const orderIds = orderIdsString.split(',');
     const action = document.querySelector('input[name="renewal-action"]:checked')?.value;
     const autoUpdateStatus = document.getElementById('auto-update-status')?.checked;
+    const bccAdmin = document.getElementById('bcc-admin')?.checked;
     const notes = document.getElementById('renewal-notes')?.value;
     
     if (!action) {
@@ -1472,6 +1480,7 @@
               orderId: orderId,
               action: action,
               autoUpdateStatus: autoUpdateStatus,
+              bccAdmin: bccAdmin,
               notes: notes,
               emailTemplateId: action === 'reminder' ? 'RENEWAL_EMAIL_TEMPLATE_ID_2' : 'RENEWAL_EMAIL_TEMPLATE_ID'
             }),
