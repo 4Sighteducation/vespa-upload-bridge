@@ -311,7 +311,8 @@
       generateEstimates: () => processSelectedRenewals(),
       sendReminders: () => processSelectedRenewals(),
       formatDateForInput: formatDateForInput,
-      saveOrderChanges: saveOrderChanges
+      saveOrderChanges: saveOrderChanges,
+      toggleRenewalAmountField: toggleRenewalAmountField
     };
     
     // Add button to Super User interface
@@ -1388,6 +1389,19 @@
     // Show processing options modal
     showProcessingModal(selectedIds);
   }
+  
+  /**
+   * Toggle renewal amount field visibility
+   */
+  function toggleRenewalAmountField() {
+    const action = document.querySelector('input[name="renewal-action"]:checked')?.value;
+    const amountSection = document.getElementById('renewal-amount-section');
+    
+    if (amountSection) {
+      // Show for estimate and reminder, hide for invoice and cancel
+      amountSection.style.display = (action === 'estimate' || action === 'reminder') ? 'block' : 'none';
+    }
+  }
 
   /**
    * Show the processing options modal
@@ -1407,28 +1421,32 @@
         <div style="padding: 20px;">
           <div class="vespa-form-group">
             <label>
-              <input type="radio" name="renewal-action" value="estimate" checked>
+              <input type="radio" name="renewal-action" value="estimate" checked 
+                onchange="VESPARenewals.toggleRenewalAmountField()">
               Generate and Send Estimates (6-week reminder)
             </label>
           </div>
           
           <div class="vespa-form-group">
             <label>
-              <input type="radio" name="renewal-action" value="reminder">
+              <input type="radio" name="renewal-action" value="reminder"
+                onchange="VESPARenewals.toggleRenewalAmountField()">
               Send Reminder Emails (3-week reminder)
             </label>
           </div>
           
           <div class="vespa-form-group">
             <label>
-              <input type="radio" name="renewal-action" value="invoice">
+              <input type="radio" name="renewal-action" value="invoice"
+                onchange="VESPARenewals.toggleRenewalAmountField()">
               Generate Invoices and Send Welcome Emails
             </label>
           </div>
           
           <div class="vespa-form-group" style="margin-top: 25px; padding: 15px; border: 2px solid #dc3545; border-radius: 6px; background-color: #fff5f5;">
             <label style="color: #dc3545; font-weight: bold;">
-              <input type="radio" name="renewal-action" value="cancel">
+              <input type="radio" name="renewal-action" value="cancel"
+                onchange="VESPARenewals.toggleRenewalAmountField()">
               ⚠️ Cancel Account - Permanently deactivate all user accounts
             </label>
             <p style="margin: 10px 0 0 22px; font-size: 13px; color: #721c24; line-height: 1.4;">
@@ -1450,6 +1468,15 @@
             </label>
           </div>
           
+          <div class="vespa-form-group" id="renewal-amount-section" style="display: none;">
+            <label>Renewal Amount (£):</label>
+            <input type="number" id="renewal-amount-override" step="0.01" min="0" 
+              style="width: 150px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            <p style="margin: 5px 0 0 0; font-size: 12px; color: #666;">
+              Leave blank to use the existing order total, or enter a custom amount for the email
+            </p>
+          </div>
+          
           <div class="vespa-form-group">
             <label>Additional Notes (optional):</label>
             <textarea id="renewal-notes" style="width: 100%; height: 60px;"></textarea>
@@ -1468,6 +1495,11 @@
     `;
     
     document.body.appendChild(modal);
+    
+    // Initialize field visibility based on default selection
+    setTimeout(() => {
+      VESPARenewals.toggleRenewalAmountField();
+    }, 0);
   }
 
   /**
@@ -1479,6 +1511,7 @@
     const autoUpdateStatus = document.getElementById('auto-update-status')?.checked;
     const bccAdmin = document.getElementById('bcc-admin')?.checked;
     const notes = document.getElementById('renewal-notes')?.value;
+    const renewalAmountOverride = document.getElementById('renewal-amount-override')?.value;
     
     if (!action) {
       showError('Please select an action');
@@ -1588,19 +1621,26 @@
             }
           }
           
+          const requestData = {
+            orderId: orderId,
+            action: action,
+            autoUpdateStatus: autoUpdateStatus,
+            bccAdmin: bccAdmin,
+            notes: notes,
+            confirmNoInvoice: confirmNoInvoice,
+            emailTemplateId: action === 'reminder' ? 'RENEWAL_EMAIL_TEMPLATE_ID_2' : 'RENEWAL_EMAIL_TEMPLATE_ID'
+          };
+          
+          // Include renewal amount override if provided and action is estimate or reminder
+          if (renewalAmountOverride && (action === 'estimate' || action === 'reminder')) {
+            requestData.renewalAmount = renewalAmountOverride;
+          }
+          
           const response = await $.ajax({
             url: processUrl,
             type: 'POST',
             contentType: 'application/json',
-            data: JSON.stringify({
-              orderId: orderId,
-              action: action,
-              autoUpdateStatus: autoUpdateStatus,
-              bccAdmin: bccAdmin,
-              notes: notes,
-              confirmNoInvoice: confirmNoInvoice,
-              emailTemplateId: action === 'reminder' ? 'RENEWAL_EMAIL_TEMPLATE_ID_2' : 'RENEWAL_EMAIL_TEMPLATE_ID'
-            }),
+            data: JSON.stringify(requestData),
             xhrFields: { withCredentials: true },
             crossDomain: true
           });
