@@ -4320,28 +4320,6 @@ function bindStepEvents() {
               placeholder="https://example.com/logo.png">
           </div>
           
-          <h3 style="color: #007bff; margin-bottom: 20px;">Primary Administrator Account</h3>
-          
-          <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-            <div class="vespa-form-group">
-              <label for="admin-name" style="display: block; font-weight: bold; margin-bottom: 5px;">
-                Administrator Name <span style="color: red;">*</span>
-              </label>
-              <input type="text" id="admin-name" name="adminName" required 
-                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
-                placeholder="e.g., John Smith">
-            </div>
-            
-            <div class="vespa-form-group">
-              <label for="admin-email" style="display: block; font-weight: bold; margin-bottom: 5px;">
-                Administrator Email <span style="color: red;">*</span>
-              </label>
-              <input type="email" id="admin-email" name="adminEmail" required 
-                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
-                placeholder="e.g., admin@school.edu">
-            </div>
-          </div>
-          
           <h3 style="color: #007bff; margin-bottom: 20px;">Account Configuration</h3>
           
           <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
@@ -4390,6 +4368,26 @@ function bindStepEvents() {
           
           <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
             <div class="vespa-form-group">
+              <label for="admin-name" style="display: block; font-weight: bold; margin-bottom: 5px;">
+                Staff Admin Name <span style="color: red;">*</span>
+              </label>
+              <input type="text" id="admin-name" name="adminName" required 
+                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+                placeholder="e.g., John Smith">
+            </div>
+            
+            <div class="vespa-form-group">
+              <label for="admin-email" style="display: block; font-weight: bold; margin-bottom: 5px;">
+                Staff Admin Email <span style="color: red;">*</span>
+              </label>
+              <input type="email" id="admin-email" name="adminEmail" required 
+                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+                placeholder="e.g., admin@school.edu">
+            </div>
+          </div>
+          
+          <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+            <div class="vespa-form-group">
               <label for="finance-contact" style="display: block; font-weight: bold; margin-bottom: 5px;">
                 Finance Contact Name
               </label>
@@ -4410,8 +4408,8 @@ function bindStepEvents() {
           
           <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 20px;">
             <div class="vespa-form-group">
-              <label for="quantity" style="display: block; font-weight: bold; margin-bottom: 5px;">
-                Student Quantity <span style="color: red;">*</span>
+              <label for="quantity" id="quantity-label" style="display: block; font-weight: bold; margin-bottom: 5px;">
+                Quantity <span style="color: red;">*</span>
               </label>
               <input type="number" id="quantity" name="quantity" required min="1" value="100"
                 style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
@@ -4419,8 +4417,8 @@ function bindStepEvents() {
             </div>
             
             <div class="vespa-form-group">
-              <label for="rate" style="display: block; font-weight: bold; margin-bottom: 5px;">
-                Rate per Student (£) <span style="color: red;">*</span>
+              <label for="rate" id="rate-label" style="display: block; font-weight: bold; margin-bottom: 5px;">
+                Rate (£) <span style="color: red;">*</span>
               </label>
               <input type="number" id="rate" name="rate" required min="0" step="0.01" value="25.00"
                 style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
@@ -4468,6 +4466,18 @@ function bindStepEvents() {
               <div id="order-total" style="font-size: 24px; font-weight: bold; color: #28a745; padding: 8px;">
                 £0.00
               </div>
+            </div>
+          </div>
+          
+          <div class="vespa-form-group" style="margin-bottom: 20px;">
+            <label for="invoice-url" style="display: block; font-weight: bold; margin-bottom: 5px;">
+              Invoice/Estimate URL
+            </label>
+            <input type="url" id="invoice-url" name="invoiceUrl" 
+              style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+              placeholder="https://quickbooks.intuit.com/invoice/...">
+            <div class="help-text" style="font-size: 12px; color: #666; margin-top: 5px;">
+              Optional: Enter the QuickBooks invoice or estimate URL to include in the welcome email
             </div>
           </div>
           
@@ -4560,11 +4570,19 @@ function bindStepEvents() {
   window.handleAccountTypeChange = function() {
     const accountType = document.getElementById('account-type').value;
     const cycleSection = document.getElementById('cycle-section');
+    const quantityLabel = document.getElementById('quantity-label');
+    const rateLabel = document.getElementById('rate-label');
     
     if (accountType === 'COACHING PORTAL') {
       cycleSection.style.display = 'block';
+      // Update labels for coaching portal (student-based)
+      if (quantityLabel) quantityLabel.innerHTML = 'Student Quantity <span style="color: red;">*</span>';
+      if (rateLabel) rateLabel.innerHTML = 'Rate per Student (£) <span style="color: red;">*</span>';
     } else {
       cycleSection.style.display = 'none';
+      // Update labels for resource portal (generic)
+      if (quantityLabel) quantityLabel.innerHTML = 'Quantity <span style="color: red;">*</span>';
+      if (rateLabel) rateLabel.innerHTML = 'Rate (£) <span style="color: red;">*</span>';
     }
   }
   
@@ -4761,6 +4779,7 @@ function bindStepEvents() {
       rate: parseFloat(form.rate.value),
       discount: parseFloat(form.discount.value) || 0,
       vatChargeable: form.vatChargeable.value,
+      invoiceUrl: form.invoiceUrl.value.trim(),
       
       // Cycles (if COACHING PORTAL)
       cycleMode: form.accountType.value === 'COACHING PORTAL' ? form.cycleMode.value : null,
