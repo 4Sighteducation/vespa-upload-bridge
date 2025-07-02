@@ -83,12 +83,15 @@
       setupDate: 'field_3455', // Date/Time
       
       // Product Details
+      product: 'field_3460', // Product selection
       rate: 'field_3461', // Currency
       quantity: 'field_3462', // Number
-      discount: 'field_3465', // Number
+      discount: 'field_3465', // Number (percentage 0-100)
       vatChargeable: 'field_3467', // Yes/No
       total: 'field_3453', // Currency
       equation: 'field_3506', // Equation
+      addons: 'field_3503', // Dropdown for add-ons
+      addonsCost: 'field_3512', // Currency for add-ons total
       
       // Contact Information
       staffAdminEmail: 'field_3468', // Email
@@ -312,7 +315,9 @@
       sendReminders: () => processSelectedRenewals(),
       formatDateForInput: formatDateForInput,
       saveOrderChanges: saveOrderChanges,
-      toggleRenewalAmountField: toggleRenewalAmountField
+      toggleRenewalAmountField: toggleRenewalAmountField,
+      updateProductFields: updateProductFields,
+      toggleTotalOverride: toggleTotalOverride
     };
     
     // Add button to Super User interface
@@ -615,6 +620,54 @@
       
       .renewal-link-field a:hover {
         background: #0056b3;
+      }
+      
+      /* Additional styles for improved edit modal */
+      .vespa-form-group small {
+        display: block;
+        margin-top: 2px;
+        font-size: 12px;
+        color: #6c757d;
+      }
+      
+      .renewal-edit-section + .renewal-edit-section {
+        margin-top: 20px;
+      }
+      
+      #edit-override-total {
+        margin-right: 6px;
+      }
+      
+      #calculated-total-info {
+        font-size: 12px;
+        line-height: 1.3;
+      }
+      
+      /* Style for product selection section */
+      .renewal-edit-section[style*="background: #e3f2fd"] select {
+        border: 2px solid #1976d2;
+      }
+      
+      /* Improved spacing for form sections */
+      .renewal-modal-content form {
+        overflow-y: auto;
+        max-height: calc(90vh - 120px);
+      }
+      
+      /* Better visual hierarchy */
+      .renewal-edit-section h4 {
+        border-bottom: 2px solid #dee2e6;
+        padding-bottom: 8px;
+        margin-bottom: 20px;
+      }
+      
+      /* Responsive grid for smaller screens */
+      @media (max-width: 768px) {
+        .renewal-form-row.cols-2,
+        .renewal-form-row.cols-3,
+        .renewal-form-row.cols-4 {
+          grid-template-columns: 1fr;
+        }
       }
     `;
     
@@ -1004,7 +1057,7 @@
   }
 
   /**
-   * Show edit modal for a single order with ALL fields
+   * Show edit modal for a single order with ALL fields - IMPROVED VERSION
    */
   function showEditModal(order) {
     const modal = document.createElement('div');
@@ -1027,13 +1080,108 @@
     const address = formatAddress(order.address);
     
     modal.innerHTML = `
-      <div class="renewal-modal-content" style="width: 900px; height: auto; max-height: 90vh; overflow-y: auto;">
+      <div class="renewal-modal-content" style="width: 950px; height: auto; max-height: 90vh; overflow-y: auto;">
         <div class="renewal-header">
           <h3>Edit Renewal - ${order.customerName || 'Unknown Customer'}</h3>
           <button class="vespa-button secondary small-button" onclick="this.closest('.renewal-modal').remove()">× Close</button>
         </div>
         
         <form id="edit-renewal-form" style="padding: 20px;">
+          <!-- Product Selection - TOP PRIORITY -->
+          <div class="renewal-edit-section" style="background: #e3f2fd; border: 2px solid #1976d2; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <h4 style="margin-top: 0; color: #1976d2;">Product Selection</h4>
+            
+            <div class="vespa-form-group">
+              <label style="font-weight: bold; font-size: 16px;">Product Type: <span style="color: #dc3545;">*</span></label>
+              <select id="edit-product" name="product" onchange="VESPARenewals.updateProductFields()" style="font-size: 16px; padding: 10px;">
+                <option value="Coaching Portal" ${order.product === 'Coaching Portal' ? 'selected' : ''}>Coaching Portal</option>
+                <option value="Resource Portal" ${order.product === 'Resource Portal' ? 'selected' : ''}>Resource Portal</option>
+                <option value="Training" ${order.product === 'Training' ? 'selected' : ''}>Training</option>
+              </select>
+            </div>
+          </div>
+          
+          <!-- Product Details Section -->
+          <div class="renewal-edit-section">
+            <h4>Product Details & Pricing</h4>
+            
+            <div class="renewal-form-row cols-3">
+              <div class="vespa-form-group">
+                <label id="quantity-label">Quantity:</label>
+                <input type="number" id="edit-quantity" name="quantity" value="${order.quantity || 0}" 
+                       onchange="VESPARenewals.calculateEditTotal()" min="0">
+              </div>
+              
+              <div class="vespa-form-group">
+                <label id="rate-label">Rate (£):</label>
+                <input type="number" id="edit-rate" name="rate" value="${order.rate || 0}" step="0.01"
+                       onchange="VESPARenewals.calculateEditTotal()" min="0">
+              </div>
+              
+              <div class="vespa-form-group">
+                <label>Discount (%):</label>
+                <input type="number" id="edit-discount" name="discount" value="${order.discount || 0}" 
+                       min="0" max="100" onchange="VESPARenewals.calculateEditTotal()">
+                <small style="color: #666;">Enter percentage (0-100)</small>
+              </div>
+            </div>
+            
+            <div class="renewal-form-row cols-2">
+              <div class="vespa-form-group">
+                <label>Add-ons:</label>
+                <select id="edit-addons" name="addons" onchange="VESPARenewals.calculateEditTotal()">
+                  <option value="">-- No Add-ons --</option>
+                  <option value="Student Session" ${order.addons === 'Student Session' ? 'selected' : ''}>Student Session</option>
+                  <option value="Staff Session" ${order.addons === 'Staff Session' ? 'selected' : ''}>Staff Session</option>
+                  <option value="Additional Staff Accounts" ${order.addons === 'Additional Staff Accounts' ? 'selected' : ''}>Additional Staff Accounts</option>
+                  <option value="Additional Student Accounts" ${order.addons === 'Additional Student Accounts' ? 'selected' : ''}>Additional Student Accounts</option>
+                  <option value="Deep Dive Consultation" ${order.addons === 'Deep Dive Consultation' ? 'selected' : ''}>Deep Dive Consultation</option>
+                  <option value="Other" ${order.addons === 'Other' ? 'selected' : ''}>Other</option>
+                  <option value="Free Portal Training" ${order.addons === 'Free Portal Training' ? 'selected' : ''}>Free Portal Training</option>
+                </select>
+              </div>
+              
+              <div class="vespa-form-group">
+                <label>Add-ons Cost (£):</label>
+                <input type="number" id="edit-addons-cost" name="addonsCost" value="${order.addonsCost || 0}" 
+                       step="0.01" min="0" onchange="VESPARenewals.calculateEditTotal()">
+              </div>
+            </div>
+            
+            <div class="renewal-form-row cols-3">
+              <div class="vespa-form-group">
+                <label>VAT Chargeable:</label>
+                <select id="edit-vat" name="vatChargeable" onchange="VESPARenewals.calculateEditTotal()">
+                  <option value="Yes" ${order.vatChargeable === 'Yes' ? 'selected' : ''}>Yes (20%)</option>
+                  <option value="No" ${order.vatChargeable === 'No' ? 'selected' : ''}>No</option>
+                </select>
+              </div>
+              
+              <div class="vespa-form-group">
+                <label>Trust School:</label>
+                <select id="edit-trust-school" name="trustSchool">
+                  <option value="Yes" ${order.trustSchool === 'Yes' ? 'selected' : ''}>Yes</option>
+                  <option value="No" ${order.trustSchool === 'No' ? 'selected' : ''}>No</option>
+                </select>
+              </div>
+              
+              <div class="vespa-form-group">
+                <label>Total (£):</label>
+                <div style="position: relative;">
+                  <input type="number" id="edit-total" name="total" value="${parseFloat(order.total || 0).toFixed(2)}" 
+                         step="0.01" style="font-weight: bold; font-size: 16px; background: #fffde7;">
+                  <div style="margin-top: 5px;">
+                    <label style="font-size: 12px;">
+                      <input type="checkbox" id="edit-override-total" onchange="VESPARenewals.toggleTotalOverride()">
+                      Override calculated total
+                    </label>
+                  </div>
+                </div>
+                <small id="calculated-total-info" style="color: #666; display: block; margin-top: 5px;"></small>
+              </div>
+            </div>
+          </div>
+          
           <!-- Order Information Section -->
           <div class="renewal-edit-section">
             <h4>Order Information</h4>
@@ -1109,65 +1257,6 @@
             </div>
           </div>
           
-          <!-- Product Details Section -->
-          <div class="renewal-edit-section">
-            <h4>Product Details</h4>
-            
-            <div class="vespa-form-row cols-1">
-              <div class="vespa-form-group">
-                <label>Product:</label>
-                <select id="edit-product" name="product">
-                  <option value="Coaching Portal" ${order.product === 'Coaching Portal' ? 'selected' : ''}>Coaching Portal</option>
-                  <option value="Resource Portal" ${order.product === 'Resource Portal' ? 'selected' : ''}>Resource Portal</option>
-                  <option value="Training" ${order.product === 'Training' ? 'selected' : ''}>Training</option>
-                </select>
-              </div>
-            </div>
-            
-            <div class="vespa-form-row cols-4">
-              <div class="vespa-form-group">
-                <label>Student Logins:</label>
-                <input type="number" id="edit-quantity" name="quantity" value="${order.quantity || 0}" 
-                       onchange="VESPARenewals.calculateEditTotal()">
-              </div>
-              
-              <div class="vespa-form-group">
-                <label>Rate per Login (£):</label>
-                <input type="number" id="edit-rate" name="rate" value="${order.rate || 0}" step="0.01"
-                       onchange="VESPARenewals.calculateEditTotal()">
-              </div>
-              
-              <div class="vespa-form-group">
-                <label>Discount (%):</label>
-                <input type="number" id="edit-discount" name="discount" value="${order.discount || 0}" 
-                       min="0" max="100" onchange="VESPARenewals.calculateEditTotal()">
-              </div>
-              
-              <div class="vespa-form-group">
-                <label>VAT Chargeable:</label>
-                <select id="edit-vat" name="vatChargeable" onchange="VESPARenewals.calculateEditTotal()">
-                  <option value="Yes" ${order.vatChargeable === 'Yes' ? 'selected' : ''}>Yes</option>
-                  <option value="No" ${order.vatChargeable === 'No' ? 'selected' : ''}>No</option>
-                </select>
-              </div>
-            </div>
-            
-            <div class="renewal-form-row cols-2">
-              <div class="vespa-form-group">
-                <label>Total (£):</label>
-                <input type="text" id="edit-total" value="${parseFloat(order.total || 0).toFixed(2)}" 
-                       readonly style="font-weight: bold; font-size: 16px;">
-              </div>
-              
-              <div class="vespa-form-group">
-                <label>Trust School:</label>
-                <select id="edit-trust-school" name="trustSchool">
-                  <option value="Yes" ${order.trustSchool === 'Yes' ? 'selected' : ''}>Yes</option>
-                  <option value="No" ${order.trustSchool === 'No' ? 'selected' : ''}>No</option>
-                </select>
-              </div>
-            </div>
-          </div>
           
           <!-- Contact Information Section -->
           <div class="renewal-edit-section">
@@ -1221,18 +1310,18 @@
             
             <div class="renewal-form-row cols-1">
               <div class="vespa-form-group">
-                <label>Invoice Link:</label>
+                <label>Invoice Link: <small style="color: #666;">(Optional - leave blank if not available)</small></label>
                 <div class="renewal-link-field">
                   <input type="url" id="edit-invoice-link" name="invoiceLink" value="${order.invoiceLink || ''}" placeholder="https://...">
-                  ${order.invoiceLink ? `<a href="${order.invoiceLink}" target="_blank">View Invoice</a>` : ''}
+                  ${order.invoiceLink ? `<a href="${order.invoiceLink}" target="_blank" style="margin-left: 10px;">View Invoice</a>` : ''}
                 </div>
               </div>
               
               <div class="vespa-form-group">
-                <label>Estimate Link:</label>
+                <label>Estimate Link: <small style="color: #666;">(Optional - leave blank if not available)</small></label>
                 <div class="renewal-link-field">
                   <input type="url" id="edit-estimate-link" name="estimateLink" value="${order.estimateLink || ''}" placeholder="https://...">
-                  ${order.estimateLink ? `<a href="${order.estimateLink}" target="_blank">View Estimate</a>` : ''}
+                  ${order.estimateLink ? `<a href="${order.estimateLink}" target="_blank" style="margin-left: 10px;">View Estimate</a>` : ''}
                 </div>
               </div>
             </div>
@@ -1260,24 +1349,112 @@
     
     // Store order data for calculations
     window.currentEditOrder = order;
+    
+    // Initialize product fields
+    setTimeout(() => {
+      VESPARenewals.updateProductFields();
+      VESPARenewals.calculateEditTotal();
+    }, 0);
   }
 
   /**
    * Calculate total for edit form
    */
   function calculateEditTotal() {
+    // Don't calculate if override is checked
+    const overrideChecked = document.getElementById('edit-override-total')?.checked;
+    if (overrideChecked) {
+      return;
+    }
+    
     const quantity = parseFloat(document.getElementById('edit-quantity')?.value || 0);
     const rate = parseFloat(document.getElementById('edit-rate')?.value || 0);
     const discount = parseFloat(document.getElementById('edit-discount')?.value || 0);
+    const addonsCost = parseFloat(document.getElementById('edit-addons-cost')?.value || 0);
     const vat = document.getElementById('edit-vat')?.value === 'Yes';
     
-    let subtotal = quantity * rate;
+    // Formula: ((Quantity × Rate + Addons) × (1 - discount/100)) × (VAT ? 1.2 : 1)
+    let subtotal = quantity * rate + addonsCost;
     let discountAmount = subtotal * (discount / 100);
     let afterDiscount = subtotal - discountAmount;
     let vatAmount = vat ? afterDiscount * 0.20 : 0;
     let total = afterDiscount + vatAmount;
     
     document.getElementById('edit-total').value = total.toFixed(2);
+    
+    // Update the info text to show calculation breakdown
+    const infoElement = document.getElementById('calculated-total-info');
+    if (infoElement) {
+      let breakdown = `Base: £${(quantity * rate).toFixed(2)}`;
+      if (addonsCost > 0) {
+        breakdown += ` + Add-ons: £${addonsCost.toFixed(2)}`;
+      }
+      if (discount > 0) {
+        breakdown += ` - ${discount}% discount`;
+      }
+      if (vat) {
+        breakdown += ` + 20% VAT`;
+      }
+      infoElement.textContent = breakdown;
+    }
+  }
+
+  /**
+   * Update product fields based on selected product
+   */
+  function updateProductFields() {
+    const product = document.getElementById('edit-product')?.value;
+    const quantityLabel = document.getElementById('quantity-label');
+    const rateLabel = document.getElementById('rate-label');
+    
+    if (!quantityLabel || !rateLabel) return;
+    
+    switch(product) {
+      case 'Coaching Portal':
+        quantityLabel.textContent = 'Student Logins:';
+        rateLabel.textContent = 'Cost per Student (£):';
+        break;
+      case 'Resource Portal':
+        quantityLabel.textContent = 'Staff Accounts:';
+        rateLabel.textContent = 'Cost per Staff (£):';
+        break;
+      case 'Training':
+        quantityLabel.textContent = 'Number of Sessions:';
+        rateLabel.textContent = 'Cost per Session (£):';
+        break;
+      default:
+        quantityLabel.textContent = 'Quantity:';
+        rateLabel.textContent = 'Rate (£):';
+    }
+  }
+  
+  /**
+   * Toggle total override functionality
+   */
+  function toggleTotalOverride() {
+    const overrideCheckbox = document.getElementById('edit-override-total');
+    const totalField = document.getElementById('edit-total');
+    const infoElement = document.getElementById('calculated-total-info');
+    
+    if (overrideCheckbox?.checked) {
+      // Make total field editable
+      totalField.removeAttribute('readonly');
+      totalField.style.background = '#fff';
+      totalField.style.border = '2px solid #ff9800';
+      if (infoElement) {
+        infoElement.textContent = 'Manual override enabled - enter custom total';
+        infoElement.style.color = '#ff9800';
+      }
+    } else {
+      // Make total field readonly and recalculate
+      totalField.setAttribute('readonly', 'readonly');
+      totalField.style.background = '#fffde7';
+      totalField.style.border = '';
+      if (infoElement) {
+        infoElement.style.color = '#666';
+      }
+      calculateEditTotal();
+    }
   }
 
   /**
@@ -1334,10 +1511,10 @@
       
       // Process each form field
       for (let [key, value] of formData.entries()) {
-        // Skip empty values for optional fields
-        if (value !== '') {
+        // Skip empty values for optional fields (but not for numeric fields)
+        if (value !== '' || ['quantity', 'rate', 'discount', 'total', 'addonsCost'].includes(key)) {
           // Convert numeric fields
-          if (['quantity', 'rate', 'discount'].includes(key)) {
+          if (['quantity', 'rate', 'discount', 'total', 'addonsCost'].includes(key)) {
             data[key] = parseFloat(value) || 0;
           } else {
             data[key] = value;
