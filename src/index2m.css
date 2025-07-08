@@ -1463,6 +1463,150 @@ code {
   }
 }
 
+/* Manual Entry Form Styles */
+#staff-manual-entry-form,
+#student-manual-entry-form {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.vespa-form-row {
+  display: grid;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.vespa-form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.vespa-form-group label {
+  font-weight: 600;
+  margin-bottom: 5px;
+  color: #495057;
+  font-size: 14px;
+}
+
+.vespa-form-group label span[style*="color: red"] {
+  margin-left: 3px;
+}
+
+.vespa-form-group input,
+.vespa-form-group select,
+.vespa-form-group textarea {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.vespa-form-group input:focus,
+.vespa-form-group select:focus,
+.vespa-form-group textarea:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
+}
+
+.vespa-form-group small {
+  margin-top: 4px;
+  color: #6c757d;
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Multi-select specific styling */
+.vespa-form-group select[multiple] {
+  min-height: 80px;
+  padding: 4px 8px;
+}
+
+.vespa-form-group select[multiple] option {
+  padding: 4px 8px;
+  line-height: 1.4;
+}
+
+.vespa-form-group select[multiple] option:checked {
+  background: linear-gradient(0deg, #007bff 0%, #007bff 100%);
+  color: white;
+  font-weight: 500;
+}
+
+/* Form actions */
+.vespa-form-actions {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #dee2e6;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-start;
+}
+
+/* Fix for conflicting form-row styles */
+#staff-manual-entry-form .vespa-form-row,
+#student-manual-entry-form .vespa-form-row {
+  display: grid !important;
+  gap: 15px !important;
+  margin-bottom: 15px !important;
+}
+
+/* Ensure proper grid layouts */
+#staff-manual-entry-form .vespa-form-row:first-of-type,
+#student-manual-entry-form .vespa-form-row:first-of-type {
+  grid-template-columns: 1fr 2fr 2fr;
+}
+
+#staff-manual-entry-form .vespa-form-row:not(:first-of-type),
+#student-manual-entry-form .vespa-form-row:not(:first-of-type) {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* Manual entry results */
+#manual-entry-results {
+  margin-top: 20px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+#manual-entry-results .vespa-results-status {
+  margin-bottom: 20px;
+}
+
+#manual-entry-results .vespa-results-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Responsive design for manual entry forms */
+@media (max-width: 768px) {
+  .vespa-form-row {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .vespa-form-actions {
+    flex-direction: column;
+  }
+  
+  .vespa-form-actions .vespa-button {
+    width: 100%;
+  }
+  
+  #manual-entry-results .vespa-results-actions {
+    flex-direction: column;
+  }
+  
+  #manual-entry-results .vespa-results-actions .vespa-button {
+    width: 100%;
+  }
+}
+
 /* Super User Customer Management Form Styles */
 .vespa-customer-form-container {
   padding: 20px;
