@@ -1685,3 +1685,69 @@ code {
   font-size: 24px;
 }
 
+/* Renewal System Multi-Select Styles */
+select[multiple] {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  transition: border-color 0.2s;
+  cursor: pointer;
+}
+
+select[multiple]:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
+}
+
+select[multiple] option {
+  padding: 6px 10px;
+  line-height: 1.4;
+}
+
+/* Selected options style - works in most browsers */
+select[multiple] option:checked {
+  background: linear-gradient(0deg, #007bff 0%, #007bff 100%);
+  color: white;
+  font-weight: 500;
+}
+
+/* Style for the multi-select in renewal modal specifically */
+.renewal-form-row select[multiple] {
+  min-height: 100px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+/* Help text for multi-select */
+.renewal-form-row small {
+  display: block;
+  margin-top: 4px;
+  color: #666;
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Improve scrollbar appearance for the multi-select */
+.renewal-form-row select[multiple]::-webkit-scrollbar {
+  width: 8px;
+}
+
+.renewal-form-row select[multiple]::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.renewal-form-row select[multiple]::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.renewal-form-row select[multiple]::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
