@@ -1321,8 +1321,14 @@ function renderSelectTypeStep() {
    * @returns {string} HTML for the step
    */
   function renderUploadCsvStep() {
+    debugLog("renderUploadCsvStep called", { 
+      uploadMethod: window.uploadMethod, 
+      uploadType: uploadType 
+    });
+    
     // Check if manual entry is selected
     if (window.uploadMethod === 'manual') {
+      debugLog("Manual entry mode detected, rendering manual form");
       if (uploadType === 'staff') {
         return renderStaffManualEntryForm();
       } else if (uploadType === 'student-onboard') {
@@ -3270,17 +3276,23 @@ function prevStep() {
       }
     }
     
-    // Skip validation and processing steps for manual entry
+    // Handle manual entry navigation
     if (window.uploadMethod === 'manual') {
-      // For manual entry, skip directly to the upload/entry step
-      if ((isSuperUser && currentStep === 2) || (!isSuperUser && currentStep === 1)) {
-        currentStep = isSuperUser ? 3 : 2; // Go to upload/entry step
+      // Check if we're at the step where manual entry form should be shown
+      const uploadStepNumber = isSuperUser ? 3 : 2;
+      
+      // If we're moving TO the upload step (from type selection or school selection)
+      if (currentStep < uploadStepNumber) {
+        currentStep = uploadStepNumber;
         renderStep(currentStep);
         return;
       }
-      // Manual entry doesn't need validation or processing steps
-      showError('Use the form to add records manually. Click "Finish" when done.');
-      return;
+      
+      // If we're already at the manual entry form, don't allow moving to validation/processing
+      if (currentStep === uploadStepNumber) {
+        // Don't show error - user should use the form buttons
+        return;
+      }
     }
     
     // Handle special actions for certain steps
