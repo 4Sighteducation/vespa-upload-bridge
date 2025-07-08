@@ -274,7 +274,7 @@ function addStyles() {
   linkElement.id = 'vespa-upload-styles';
   linkElement.rel = 'stylesheet';
   linkElement.type = 'text/css';
-  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2k.css';
+  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2l.css';
   
   document.head.appendChild(linkElement);
   debugLog("Dynamically linked external CSS: " + linkElement.href, null, 'info');
@@ -4382,7 +4382,9 @@ function bindStepEvents() {
               </label>
               <input type="email" id="admin-email" name="adminEmail" required 
                 style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
-                placeholder="e.g., admin@school.edu">
+                placeholder="e.g., admin@school.edu"
+                onblur="checkEmailAvailability()">
+              <div id="email-availability-message" style="font-size: 12px; margin-top: 5px;"></div>
             </div>
           </div>
           
@@ -4478,6 +4480,17 @@ function bindStepEvents() {
               placeholder="https://quickbooks.intuit.com/invoice/...">
             <div class="help-text" style="font-size: 12px; color: #666; margin-top: 5px;">
               Optional: Enter the QuickBooks invoice or estimate URL to include in the welcome email
+            </div>
+          </div>
+          
+          <div class="vespa-form-group" style="margin-bottom: 20px; background: #f8f9fa; padding: 15px; border-radius: 4px;">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+              <input type="checkbox" id="bcc-admin" name="bccAdmin" value="true" 
+                style="margin-right: 10px; width: 18px; height: 18px;">
+              <span style="font-weight: bold;">BCC Welcome Email to Admin (Testing)</span>
+            </label>
+            <div class="help-text" style="font-size: 12px; color: #666; margin-top: 5px; margin-left: 28px;">
+              Send a copy of the welcome email to admin@vespa.academy for testing purposes
             </div>
           </div>
           
@@ -4780,6 +4793,7 @@ function bindStepEvents() {
       discount: parseFloat(form.discount.value) || 0,
       vatChargeable: form.vatChargeable.value,
       invoiceUrl: form.invoiceUrl.value.trim(),
+      bccAdmin: form.bccAdmin && form.bccAdmin.checked || false,
       
       // Cycles (if COACHING PORTAL)
       cycleMode: form.accountType.value === 'COACHING PORTAL' ? form.cycleMode.value : null,
@@ -4875,13 +4889,31 @@ function bindStepEvents() {
       statusDiv.style.display = 'block';
       statusDiv.style.background = '#f8d7da';
       statusDiv.style.color = '#721c24';
-      statusDiv.innerHTML = `
-        <h3>❌ Error Creating Account</h3>
-        <p>${error.responseJSON?.message || error.message || 'An unexpected error occurred'}</p>
-        <button class="vespa-button secondary" onclick="document.getElementById('creation-status').style.display='none'; document.getElementById('new-customer-form').style.display='block';">
+      
+      let errorMessage = error.responseJSON?.message || error.message || 'An unexpected error occurred';
+      let errorContent = `<h3>❌ Error Creating Account</h3><p>${errorMessage}</p>`;
+      
+      // Add helpful tips for common errors
+      if (errorMessage.includes('already registered as a staff admin')) {
+        errorContent += `
+          <div style="margin-top: 15px; padding: 10px; background: #fff3cd; color: #856404; border-radius: 4px;">
+            <strong>💡 Tip:</strong> You can either:
+            <ul style="margin: 10px 0 0 20px;">
+              <li>Use a different email address for this new customer</li>
+              <li>Use the "Update current user" flow to modify the existing customer</li>
+              <li>Contact support if this staff admin should manage multiple customers</li>
+            </ul>
+          </div>
+        `;
+      }
+      
+      errorContent += `
+        <button class="vespa-button secondary" onclick="document.getElementById('creation-status').style.display='none'; document.getElementById('new-customer-form').style.display='block';" style="margin-top: 20px;">
           Try Again
         </button>
       `;
+      
+      statusDiv.innerHTML = errorContent;
     } finally {
       // Re-enable submit button
       submitBtn.disabled = false;
@@ -5330,7 +5362,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       
       // Load the renewal module from your CDN
       // You'll need to update this URL to match where you host your renewals.js file
-      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/renewals1o.js';
+      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/renewals1m.js';
       
       try {
         await loadScript(scriptUrl);
