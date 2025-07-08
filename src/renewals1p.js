@@ -245,6 +245,24 @@
   }
 
   /**
+   * Extract URL from Knack link field
+   */
+  function extractLinkUrl(linkField) {
+    if (!linkField) return '';
+    
+    // If it's already a string, return it
+    if (typeof linkField === 'string') return linkField;
+    
+    // If it's an object with url property
+    if (linkField.url) return linkField.url;
+    
+    // If it's an object with href property
+    if (linkField.href) return linkField.href;
+    
+    return '';
+  }
+
+  /**
    * Format address field
    */
   function formatAddress(addressField) {
@@ -879,7 +897,10 @@
             rate: extractCurrencyValue(order.rate),
             total: extractCurrencyValue(order.total),
             discount: extractCurrencyValue(order.discount),
-            addonsCost: extractCurrencyValue(order.addonsCost)
+            addonsCost: extractCurrencyValue(order.addonsCost),
+            // Extract link URLs properly
+            invoiceLink: extractLinkUrl(order.invoiceLink),
+            estimateLink: extractLinkUrl(order.estimateLink)
           };
         });
         
@@ -1171,16 +1192,15 @@
             
             <div class="renewal-form-row cols-2">
               <div class="vespa-form-group">
-                <label>Add-ons:</label>
-                <select id="edit-addons" name="addons" onchange="VESPARenewals.calculateEditTotal()">
-                  <option value="">-- No Add-ons --</option>
-                  <option value="Student Session" ${order.addons === 'Student Session' ? 'selected' : ''}>Student Session</option>
-                  <option value="Staff Session" ${order.addons === 'Staff Session' ? 'selected' : ''}>Staff Session</option>
-                  <option value="Additional Staff Accounts" ${order.addons === 'Additional Staff Accounts' ? 'selected' : ''}>Additional Staff Accounts</option>
-                  <option value="Additional Student Accounts" ${order.addons === 'Additional Student Accounts' ? 'selected' : ''}>Additional Student Accounts</option>
-                  <option value="Deep Dive Consultation" ${order.addons === 'Deep Dive Consultation' ? 'selected' : ''}>Deep Dive Consultation</option>
-                  <option value="Other" ${order.addons === 'Other' ? 'selected' : ''}>Other</option>
-                  <option value="Free Portal Training" ${order.addons === 'Free Portal Training' ? 'selected' : ''}>Free Portal Training</option>
+                <label>Add-ons: <small style="color: #666;">(Hold Ctrl/Cmd to select multiple)</small></label>
+                <select id="edit-addons" name="addons" multiple style="height: 120px;" onchange="VESPARenewals.calculateEditTotal()">
+                  <option value="Student Session" ${order.addons && order.addons.includes('Student Session') ? 'selected' : ''}>Student Session</option>
+                  <option value="Staff Session" ${order.addons && order.addons.includes('Staff Session') ? 'selected' : ''}>Staff Session</option>
+                  <option value="Additional Staff Accounts" ${order.addons && order.addons.includes('Additional Staff Accounts') ? 'selected' : ''}>Additional Staff Accounts</option>
+                  <option value="Additional Student Accounts" ${order.addons && order.addons.includes('Additional Student Accounts') ? 'selected' : ''}>Additional Student Accounts</option>
+                  <option value="Deep Dive Consultation" ${order.addons && order.addons.includes('Deep Dive Consultation') ? 'selected' : ''}>Deep Dive Consultation</option>
+                  <option value="Other" ${order.addons && order.addons.includes('Other') ? 'selected' : ''}>Other</option>
+                  <option value="Free Portal Training" ${order.addons && order.addons.includes('Free Portal Training') ? 'selected' : ''}>Free Portal Training</option>
                 </select>
               </div>
               
@@ -1355,16 +1375,16 @@
               <div class="vespa-form-group">
                 <label>Invoice Link: <small style="color: #666;">(Optional - leave blank if not available)</small></label>
                 <div class="renewal-link-field">
-                  <input type="url" id="edit-invoice-link" name="invoiceLink" value="${order.invoiceLink || ''}" placeholder="https://...">
-                  ${order.invoiceLink ? `<a href="${order.invoiceLink}" target="_blank" style="margin-left: 10px;">View Invoice</a>` : ''}
+                  <input type="text" id="edit-invoice-link" name="invoiceLink" value="${extractLinkUrl(order.invoiceLink)}" placeholder="https://...">
+                  ${extractLinkUrl(order.invoiceLink) ? `<a href="${extractLinkUrl(order.invoiceLink)}" target="_blank" style="margin-left: 10px;">View Invoice</a>` : ''}
                 </div>
               </div>
               
               <div class="vespa-form-group">
                 <label>Estimate Link: <small style="color: #666;">(Optional - leave blank if not available)</small></label>
                 <div class="renewal-link-field">
-                  <input type="url" id="edit-estimate-link" name="estimateLink" value="${order.estimateLink || ''}" placeholder="https://...">
-                  ${order.estimateLink ? `<a href="${order.estimateLink}" target="_blank" style="margin-left: 10px;">View Estimate</a>` : ''}
+                  <input type="text" id="edit-estimate-link" name="estimateLink" value="${extractLinkUrl(order.estimateLink)}" placeholder="https://...">
+                  ${extractLinkUrl(order.estimateLink) ? `<a href="${extractLinkUrl(order.estimateLink)}" target="_blank" style="margin-left: 10px;">View Estimate</a>` : ''}
                 </div>
               </div>
             </div>
@@ -1552,8 +1572,18 @@
       // Build update data object with all fields
       const data = {};
       
+      // Handle multi-select addons field specially
+      const addonsSelect = document.getElementById('edit-addons');
+      if (addonsSelect) {
+        const selectedAddons = Array.from(addonsSelect.selectedOptions).map(opt => opt.value);
+        data.addons = selectedAddons.length > 0 ? selectedAddons.join(', ') : '';
+      }
+      
       // Process each form field
       for (let [key, value] of formData.entries()) {
+        // Skip addons as we handled it above
+        if (key === 'addons') continue;
+        
         // Skip empty values for optional fields (but not for numeric fields)
         if (value !== '' || ['quantity', 'rate', 'discount', 'total', 'addonsCost'].includes(key)) {
           // Convert numeric fields
