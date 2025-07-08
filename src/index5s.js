@@ -274,7 +274,7 @@ function addStyles() {
   linkElement.id = 'vespa-upload-styles';
   linkElement.rel = 'stylesheet';
   linkElement.type = 'text/css';
-  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2l.css';
+  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2m.css';
   
   document.head.appendChild(linkElement);
   debugLog("Dynamically linked external CSS: " + linkElement.href, null, 'info');
@@ -309,6 +309,19 @@ function validateCurrentStep() {
         }
         uploadType = subTypeSelection.value; // Set the more granular type
       }
+      
+      // Check if upload method needs to be selected for staff/student uploads
+      if (uploadType === 'staff' || uploadType === 'student-onboard') {
+        const methodSelection = document.querySelector('input[name="upload-method"]:checked');
+        if (!methodSelection) {
+          showError('Please select an upload method (CSV or Manual Entry).');
+          return false;
+        }
+        // Store the method in a global variable
+        window.uploadMethod = methodSelection.value;
+        debugLog("Upload method selected:", window.uploadMethod);
+      }
+      
       debugLog("Upload type selected:", uploadType);
       return true;
       
@@ -943,7 +956,11 @@ debugLog(`Rendering step ${step}, User is SuperUser: ${isSuperUser}`, {
   const maxSteps = isSuperUser ? 6 : 5;
   
   if (nextButton) {
-    if (step === maxSteps) {
+    // Hide next button for manual entry on the entry step
+    if (window.uploadMethod === 'manual' && 
+        ((isSuperUser && step === 3) || (!isSuperUser && step === 2))) {
+      nextButton.style.display = 'none';
+    } else if (step === maxSteps) {
       nextButton.style.display = 'none';
     } else {
       nextButton.style.display = 'block';
@@ -1148,6 +1165,30 @@ function renderSelectTypeStep() {
             </label>
           </div>
         </div>
+        
+        <!-- Manual Entry Option -->
+        <div class="vespa-upload-sub-options" style="display: none; margin-top: 20px;" id="upload-method-container">
+          <h4 style="margin-bottom: 10px;">Select Upload Method:</h4>
+          <div class="vespa-upload-options">
+            <div class="vespa-upload-option sub-option">
+              <input type="radio" id="method-csv" name="upload-method" value="csv" checked>
+              <label for="method-csv">
+                <div class="vespa-option-icon">📁</div>
+                <div class="vespa-option-title">CSV Upload</div>
+                <div class="vespa-option-description">Upload multiple records via CSV file</div>
+              </label>
+            </div>
+            
+            <div class="vespa-upload-option sub-option">
+              <input type="radio" id="method-manual" name="upload-method" value="manual">
+              <label for="method-manual">
+                <div class="vespa-option-icon">✏️</div>
+                <div class="vespa-option-title">Manual Entry</div>
+                <div class="vespa-option-description">Add individual records one by one</div>
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
       
       <div class="vespa-stage-container" style="padding: 20px; background: #f0f7ff; border-radius: 8px;">
@@ -1174,7 +1215,7 @@ function renderSelectTypeStep() {
             <label for="upload-ks5-workflow">
               <div class="vespa-option-icon">🎯</div>
               <div class="vespa-option-title">B) Key Stage 5 Workflow (Years 12-13)</div>
-              <div class="vespa-option-description">Prior Attainment Calculator &AAcademic Profile Upload</div>
+              <div class="vespa-option-description">Prior Attainment Calculator & Academic Profile Upload</div>
             </label>
           </div>
           
@@ -1280,6 +1321,16 @@ function renderSelectTypeStep() {
    * @returns {string} HTML for the step
    */
   function renderUploadCsvStep() {
+    // Check if manual entry is selected
+    if (window.uploadMethod === 'manual') {
+      if (uploadType === 'staff') {
+        return renderStaffManualEntryForm();
+      } else if (uploadType === 'student-onboard') {
+        return renderStudentManualEntryForm();
+      }
+    }
+    
+    // Otherwise render the CSV upload interface
     // Create the button text and requirements outside the template string
     let buttonText = 'Template';
     let requirementsHtml = '';
@@ -1683,11 +1734,210 @@ function renderSelectTypeStep() {
           <button class="vespa-button primary" id="start-new-upload">Start New Upload</button>
         </div>
       </div>
+        `;
+  }
+
+  /**
+   * Render the staff manual entry form
+   * @returns {string} HTML for the staff manual entry form
+   */
+  function renderStaffManualEntryForm() {
+    return `
+      <h2>Add Staff Member</h2>
+      <p>Enter the details for a single staff member.</p>
+      
+      <form id="staff-manual-entry-form" style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
+        <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 2fr 2fr; gap: 10px; margin-bottom: 15px;">
+          <div class="vespa-form-group">
+            <label for="staff-title">Title <span style="color: red;">*</span></label>
+            <input type="text" id="staff-title" name="title" required placeholder="Mr/Ms/Dr">
+          </div>
+          <div class="vespa-form-group">
+            <label for="staff-first-name">First Name <span style="color: red;">*</span></label>
+            <input type="text" id="staff-first-name" name="firstName" required>
+          </div>
+          <div class="vespa-form-group">
+            <label for="staff-last-name">Last Name <span style="color: red;">*</span></label>
+            <input type="text" id="staff-last-name" name="lastName" required>
+          </div>
+        </div>
+        
+        <div class="vespa-form-group" style="margin-bottom: 15px;">
+          <label for="staff-email">Email Address <span style="color: red;">*</span></label>
+          <input type="email" id="staff-email" name="email" required>
+        </div>
+        
+        <div class="vespa-form-group" style="margin-bottom: 15px;">
+          <label for="staff-types">Staff Type(s) <span style="color: red;">*</span></label>
+          <select id="staff-types" name="staffTypes" multiple required style="height: 120px;">
+            <option value="admin">Staff Admin</option>
+            <option value="tut">Tutor</option>
+            <option value="hoy">Head of Year</option>
+            <option value="hod">Head of Department</option>
+            <option value="sub">Subject Teacher</option>
+            <option value="gen">General Staff</option>
+          </select>
+          <small>Hold Ctrl/Cmd to select multiple</small>
+        </div>
+        
+        <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+          <div class="vespa-form-group">
+            <label for="staff-year-group">Year Group (Optional)</label>
+            <select id="staff-year-group" name="yearGroup">
+              <option value="">-- Select --</option>
+              <option value="9">Year 9</option>
+              <option value="10">Year 10</option>
+              <option value="11">Year 11</option>
+              <option value="12">Year 12</option>
+              <option value="13">Year 13</option>
+            </select>
+          </div>
+          <div class="vespa-form-group">
+            <label for="staff-group">Group (Optional)</label>
+            <input type="text" id="staff-group" name="group" placeholder="e.g., 12A">
+          </div>
+        </div>
+        
+        <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+          <div class="vespa-form-group">
+            <label for="staff-faculty">Faculty/Dept (Optional)</label>
+            <input type="text" id="staff-faculty" name="faculty" placeholder="e.g., Science">
+          </div>
+          <div class="vespa-form-group">
+            <label for="staff-subject">Subject (Optional)</label>
+            <input type="text" id="staff-subject" name="subject" placeholder="e.g., Physics">
+          </div>
+        </div>
+        
+        <div class="vespa-form-actions" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #dee2e6;">
+          <button type="submit" class="vespa-button primary">Add Staff Member</button>
+          <button type="button" class="vespa-button secondary" onclick="resetManualEntryForm('staff')">Clear Form</button>
+        </div>
+      </form>
+      
+      <div id="manual-entry-results" style="display: none; margin-top: 20px;"></div>
     `;
   }
 
   /**
- * VESPA Upload Bridge - API Functions
+   * Render the student manual entry form
+   * @returns {string} HTML for the student manual entry form
+   */
+  function renderStudentManualEntryForm() {
+    // Load dropdown options when form is rendered
+    setTimeout(() => loadStudentFormOptions(), 100);
+    
+    return `
+      <h2>Add Student</h2>
+      <p>Enter the details for a single student.</p>
+      
+      <form id="student-manual-entry-form" style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
+        <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+          <div class="vespa-form-group">
+            <label for="student-uln">ULN <span style="color: red;">*</span></label>
+            <input type="text" id="student-uln" name="uln" required placeholder="10-digit ULN">
+          </div>
+          <div class="vespa-form-group">
+            <label for="student-upn">UPN (Optional)</label>
+            <input type="text" id="student-upn" name="upn" placeholder="e.g., A123456">
+          </div>
+        </div>
+        
+        <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+          <div class="vespa-form-group">
+            <label for="student-first-name">First Name <span style="color: red;">*</span></label>
+            <input type="text" id="student-first-name" name="firstName" required>
+          </div>
+          <div class="vespa-form-group">
+            <label for="student-last-name">Last Name <span style="color: red;">*</span></label>
+            <input type="text" id="student-last-name" name="lastName" required>
+          </div>
+        </div>
+        
+        <div class="vespa-form-group" style="margin-bottom: 15px;">
+          <label for="student-email">Student Email <span style="color: red;">*</span></label>
+          <input type="email" id="student-email" name="email" required>
+        </div>
+        
+        <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+          <div class="vespa-form-group">
+            <label for="student-gender">Gender (Optional)</label>
+            <select id="student-gender" name="gender">
+              <option value="">-- Select --</option>
+              <option value="Female">Female</option>
+              <option value="Male">Male</option>
+              <option value="Non-Binary">Non-Binary</option>
+              <option value="Prefer Not to Say">Prefer Not to Say</option>
+              <option value="Unspecified">Unspecified</option>
+            </select>
+          </div>
+          <div class="vespa-form-group">
+            <label for="student-dob">Date of Birth (Optional)</label>
+            <input type="date" id="student-dob" name="dob">
+          </div>
+        </div>
+        
+        <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+          <div class="vespa-form-group">
+            <label for="student-year-group">Year Group <span style="color: red;">*</span></label>
+            <select id="student-year-group" name="yearGroup" required>
+              <option value="">-- Select --</option>
+              <option value="9">Year 9</option>
+              <option value="10">Year 10</option>
+              <option value="11">Year 11</option>
+              <option value="12">Year 12</option>
+              <option value="13">Year 13</option>
+            </select>
+          </div>
+          <div class="vespa-form-group">
+            <label for="student-level">Level <span style="color: red;">*</span></label>
+            <select id="student-level" name="level" required>
+              <option value="">-- Select --</option>
+              <option value="Level 2">Level 2</option>
+              <option value="Level 3">Level 3</option>
+            </select>
+          </div>
+          <div class="vespa-form-group">
+            <label for="student-group">Group (Optional)</label>
+            <input type="text" id="student-group" name="group" placeholder="e.g., 12B">
+          </div>
+        </div>
+        
+        <div class="vespa-form-group" style="margin-bottom: 15px;">
+          <label for="student-tutors">Tutor(s) <span style="color: red;">*</span></label>
+          <select id="student-tutors" name="tutors" multiple required style="height: 100px;">
+            <option value="">Loading tutors...</option>
+          </select>
+          <small>Hold Ctrl/Cmd to select multiple</small>
+        </div>
+        
+        <div class="vespa-form-group" style="margin-bottom: 15px;">
+          <label for="student-hoy">Head of Year <span style="color: red;">*</span></label>
+          <select id="student-hoy" name="headOfYear" required>
+            <option value="">Loading heads of year...</option>
+          </select>
+        </div>
+        
+        <div class="vespa-form-group" style="margin-bottom: 15px;">
+          <label for="student-subject-teachers">Subject Teacher(s) (Optional)</label>
+          <select id="student-subject-teachers" name="subjectTeachers" multiple style="height: 100px;">
+            <option value="">Loading subject teachers...</option>
+          </select>
+          <small>Hold Ctrl/Cmd to select multiple</small>
+        </div>
+        
+        <div class="vespa-form-actions" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #dee2e6;">
+          <button type="submit" class="vespa-button primary">Add Student</button>
+          <button type="button" class="vespa-button secondary" onclick="resetManualEntryForm('student')">Clear Form</button>
+        </div>
+      </form>
+      
+      <div id="manual-entry-results" style="display: none; margin-top: 20px;"></div>
+    `;
+  }
+
+  /**
+   * VESPA Upload Bridge - API Functions
  * 
  * This file contains functions for communicating with the VESPA Upload API,
  * handling template downloads, CSV validation, and data processing.
@@ -3020,6 +3270,19 @@ function prevStep() {
       }
     }
     
+    // Skip validation and processing steps for manual entry
+    if (window.uploadMethod === 'manual') {
+      // For manual entry, skip directly to the upload/entry step
+      if ((isSuperUser && currentStep === 2) || (!isSuperUser && currentStep === 1)) {
+        currentStep = isSuperUser ? 3 : 2; // Go to upload/entry step
+        renderStep(currentStep);
+        return;
+      }
+      // Manual entry doesn't need validation or processing steps
+      showError('Use the form to add records manually. Click "Finish" when done.');
+      return;
+    }
+    
     // Handle special actions for certain steps
     if ((isSuperUser && currentStep === 4) || (!isSuperUser && currentStep === 3)) {
       // Validation step
@@ -3062,9 +3325,24 @@ function bindStepEvents() {
     case 1: // Select upload type
       const uploadTypeRadios = document.querySelectorAll('input[name="upload-type"]');
       const subTypesContainer = document.getElementById('student-subject-subtypes-container');
+      const uploadMethodContainer = document.getElementById('upload-method-container');
 
       uploadTypeRadios.forEach(radio => {
         radio.addEventListener('change', () => {
+          // Handle staff or student selection - show upload method choice
+          if ((radio.value === 'staff' || radio.value === 'student-onboard') && radio.checked) {
+            if (uploadMethodContainer) {
+              uploadMethodContainer.style.display = 'block';
+            }
+            uploadType = radio.value;
+            return;
+          }
+          
+          // Hide upload method choice for other selections
+          if (uploadMethodContainer) {
+            uploadMethodContainer.style.display = 'none';
+          }
+          
           // Handle KS5 workflow selection
           if (radio.value === 'ks5-workflow' && radio.checked) {
             debugLog("KS5 Workflow selected", null, 'info');
@@ -3080,6 +3358,9 @@ function bindStepEvents() {
             uploadType = 'academic-data';
             return;
           }
+          
+          // For other types, just set the upload type
+          uploadType = radio.value;
         });
       });
       // Trigger change once on load to set initial state
@@ -3157,44 +3438,68 @@ function bindStepEvents() {
       }
       break;
       
-    case 3: // Upload CSV
-      const downloadBtn = document.getElementById('download-template');
-      const fileInput = document.getElementById('csv-file');
-      
-      if (downloadBtn) {
-        debugLog("Found download button, attaching event");
-        downloadBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          debugLog("Download template button clicked");
-          downloadTemplateFile();
-        });
-      }
-      
-      if (fileInput) {
-        debugLog("Found file input, attaching event");
-        fileInput.addEventListener('change', (e) => {
-          const file = e.target.files[0];
-          if (file) {
-            // Store the file in the global variable
-            selectedFile = file;
-            debugLog(`File selected and stored globally: ${file.name} (${file.size} bytes)`);
-            const fileNameElement = document.createElement('div');
-            fileNameElement.className = 'vespa-file-selected';
-            fileNameElement.innerHTML = '<strong>Selected file:</strong> ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
-            fileNameElement.style.marginTop = '10px';
-            fileNameElement.style.padding = '8px';
-            fileNameElement.style.backgroundColor = '#f0f7ff';
-            fileNameElement.style.borderRadius = '4px';
-            
-            // Replace existing notification or add new one
-            const existingNotification = document.querySelector('.vespa-file-selected');
-            if (existingNotification) {
-              existingNotification.parentNode.replaceChild(fileNameElement, existingNotification);
-            } else {
-              document.querySelector('.vespa-file-input').after(fileNameElement);
+    case 3: // Upload CSV or Manual Entry
+      // Check if this is manual entry mode
+      if (window.uploadMethod === 'manual') {
+        // Bind manual entry form handlers
+        const staffForm = document.getElementById('staff-manual-entry-form');
+        const studentForm = document.getElementById('student-manual-entry-form');
+        
+        if (staffForm) {
+          debugLog("Found staff manual entry form, attaching submit handler");
+          staffForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await handleManualEntrySubmit('staff');
+          });
+        }
+        
+        if (studentForm) {
+          debugLog("Found student manual entry form, attaching submit handler");
+          studentForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await handleManualEntrySubmit('student');
+          });
+        }
+      } else {
+        // CSV upload mode
+        const downloadBtn = document.getElementById('download-template');
+        const fileInput = document.getElementById('csv-file');
+        
+        if (downloadBtn) {
+          debugLog("Found download button, attaching event");
+          downloadBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            debugLog("Download template button clicked");
+            downloadTemplateFile();
+          });
+        }
+        
+        if (fileInput) {
+          debugLog("Found file input, attaching event");
+          fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+              // Store the file in the global variable
+              selectedFile = file;
+              debugLog(`File selected and stored globally: ${file.name} (${file.size} bytes)`);
+              const fileNameElement = document.createElement('div');
+              fileNameElement.className = 'vespa-file-selected';
+              fileNameElement.innerHTML = '<strong>Selected file:</strong> ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+              fileNameElement.style.marginTop = '10px';
+              fileNameElement.style.padding = '8px';
+              fileNameElement.style.backgroundColor = '#f0f7ff';
+              fileNameElement.style.borderRadius = '4px';
+              
+              // Replace existing notification or add new one
+              const existingNotification = document.querySelector('.vespa-file-selected');
+              if (existingNotification) {
+                existingNotification.parentNode.replaceChild(fileNameElement, existingNotification);
+              } else {
+                document.querySelector('.vespa-file-input').after(fileNameElement);
+              }
             }
-          }
-        });
+          });
+        }
       }
       break;
       
@@ -3316,6 +3621,268 @@ function bindStepEvents() {
     showSuccess('School search completed');
   }
   
+  /**
+   * Load dropdown options for student manual entry form
+   */
+  async function loadStudentFormOptions() {
+    try {
+      const customerId = selectedSchool?.id || userContext?.customerId;
+      if (!customerId) {
+        debugLog("No customer ID available for loading form options", null, 'error');
+        return;
+      }
+      
+      // Fetch options from API
+      const response = await $.ajax({
+        url: `${API_BASE_URL}validation/get-form-options?customerId=${customerId}`,
+        type: 'GET',
+        xhrFields: { withCredentials: true }
+      });
+      
+      if (response.success && response.options) {
+        // Populate tutors dropdown
+        const tutorsSelect = document.getElementById('student-tutors');
+        if (tutorsSelect && response.options.tutors) {
+          tutorsSelect.innerHTML = '';
+          response.options.tutors.forEach(tutor => {
+            const option = document.createElement('option');
+            option.value = tutor.email;
+            option.textContent = tutor.name || tutor.email;
+            tutorsSelect.appendChild(option);
+          });
+        }
+        
+        // Populate heads of year dropdown
+        const hoySelect = document.getElementById('student-hoy');
+        if (hoySelect && response.options.headsOfYear) {
+          hoySelect.innerHTML = '<option value="">-- Select --</option>';
+          response.options.headsOfYear.forEach(hoy => {
+            const option = document.createElement('option');
+            option.value = hoy.email;
+            option.textContent = hoy.name || hoy.email;
+            hoySelect.appendChild(option);
+          });
+        }
+        
+        // Populate subject teachers dropdown
+        const teachersSelect = document.getElementById('student-subject-teachers');
+        if (teachersSelect && response.options.subjectTeachers) {
+          teachersSelect.innerHTML = '';
+          response.options.subjectTeachers.forEach(teacher => {
+            const option = document.createElement('option');
+            option.value = teacher.email;
+            option.textContent = teacher.subject ? `${teacher.name} (${teacher.subject})` : teacher.name || teacher.email;
+            teachersSelect.appendChild(option);
+          });
+        }
+      }
+    } catch (error) {
+      debugLog("Error loading form options:", error, 'error');
+      showError('Failed to load dropdown options. Please refresh and try again.');
+    }
+  }
+  
+  /**
+   * Handle manual entry form submission
+   */
+  async function handleManualEntrySubmit(type) {
+    debugLog(`Handling manual entry submission for ${type}`, null, 'info');
+    
+    const form = document.getElementById(`${type}-manual-entry-form`);
+    if (!form) return;
+    
+    // Disable submit button during processing
+    const submitBtn = form.querySelector('button[type="submit"]');
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Processing...';
+    }
+    
+    try {
+      let csvData = {};
+      
+      if (type === 'staff') {
+        // Get selected staff types
+        const selectedTypes = Array.from(document.getElementById('staff-types').selectedOptions)
+          .map(opt => opt.value)
+          .join(',');
+        
+        csvData = {
+          'Title': form.title.value.trim(),
+          'First Name': form.firstName.value.trim(),
+          'Last Name': form.lastName.value.trim(),
+          'Email Address': form.email.value.trim(),
+          'Staff Type': selectedTypes,
+          'Year Group': form.yearGroup.value || '',
+          'Group': form.group.value.trim() || '',
+          'Faculty/Dept': form.faculty.value.trim() || '',
+          'Subject': form.subject.value.trim() || ''
+        };
+        
+      } else if (type === 'student') {
+        // Get selected tutors
+        const selectedTutors = Array.from(document.getElementById('student-tutors').selectedOptions)
+          .map(opt => opt.value)
+          .join(',');
+        
+        // Get selected subject teachers
+        const selectedTeachers = Array.from(document.getElementById('student-subject-teachers').selectedOptions)
+          .map(opt => opt.value)
+          .join(',');
+        
+        // Format DOB if provided
+        let dobFormatted = '';
+        if (form.dob.value) {
+          const date = new Date(form.dob.value);
+          dobFormatted = `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+        }
+        
+        csvData = {
+          'ULN': form.uln.value.trim(),
+          'UPN': form.upn.value.trim() || '',
+          'Firstname': form.firstName.value.trim(),
+          'Lastname': form.lastName.value.trim(),
+          'Student Email': form.email.value.trim(),
+          'Gender': form.gender.value || '',
+          'DOB': dobFormatted,
+          'Group': form.group.value.trim() || '',
+          'Year Gp': form.yearGroup.value,
+          'Level': form.level.value,
+          'Tutors': selectedTutors,
+          'Head of Year': form.headOfYear.value,
+          'Subject Teachers': selectedTeachers || ''
+        };
+      }
+      
+      // Prepare the data as if it's a single-row CSV
+      const endpoint = type === 'staff' ? 'staff/process' : 'students/onboard/process';
+      
+      const response = await $.ajax({
+        url: `${API_BASE_URL}${endpoint}`,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+          csvData: [csvData], // Send as array with single item
+          options: {
+            sendNotifications: true,
+            notificationEmail: userContext?.userEmail || '',
+            percentile: selectedPercentile,
+            manualEntry: true // Flag to indicate manual entry
+          },
+          context: {
+            userId: userContext?.userId,
+            userEmail: userContext?.userEmail,
+            isEmulating: VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID && selectedSchool?.id,
+            customerId: selectedSchool?.id || userContext?.customerId
+          }
+        }),
+        xhrFields: { withCredentials: true }
+      });
+      
+      if (response.success) {
+        // Show success message
+        showSuccess(`${type === 'staff' ? 'Staff member' : 'Student'} added successfully!`);
+        
+        // Show results with "Add Another" option
+        showManualEntryResults(type, csvData, true);
+        
+        // Clear the form
+        form.reset();
+        
+      } else {
+        throw new Error(response.message || 'Failed to add record');
+      }
+      
+    } catch (error) {
+      debugLog(`Error in manual entry submission:`, error, 'error');
+      showError(`Failed to add ${type}: ${error.responseJSON?.message || error.message}`);
+    } finally {
+      // Re-enable submit button
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = `Add ${type === 'staff' ? 'Staff Member' : 'Student'}`;
+      }
+    }
+  }
+  
+  /**
+   * Show results after manual entry
+   */
+  function showManualEntryResults(type, data, success) {
+    const resultsDiv = document.getElementById('manual-entry-results');
+    if (!resultsDiv) return;
+    
+    resultsDiv.style.display = 'block';
+    
+    const name = type === 'staff' 
+      ? `${data['First Name']} ${data['Last Name']}` 
+      : `${data['Firstname']} ${data['Lastname']}`;
+    
+    resultsDiv.innerHTML = `
+      <div class="vespa-results-status ${success ? 'success' : 'error'}">
+        <div class="vespa-status-icon">${success ? '✅' : '❌'}</div>
+        <div class="vespa-status-text">${success ? 'Successfully Added' : 'Failed to Add'}: ${name}</div>
+      </div>
+      
+      <div class="vespa-results-actions" style="margin-top: 20px;">
+        <button class="vespa-button primary" onclick="continueManualEntry('${type}')">
+          Add Another ${type === 'staff' ? 'Staff Member' : 'Student'}
+        </button>
+        <button class="vespa-button secondary" onclick="finishManualEntry()">
+          Finish
+        </button>
+      </div>
+    `;
+  }
+  
+  /**
+   * Continue with another manual entry
+   */
+  window.continueManualEntry = function(type) {
+    // Hide results and show form again
+    const resultsDiv = document.getElementById('manual-entry-results');
+    if (resultsDiv) resultsDiv.style.display = 'none';
+    
+    // Clear form and focus on first field
+    const form = document.getElementById(`${type}-manual-entry-form`);
+    if (form) {
+      form.reset();
+      const firstInput = form.querySelector('input');
+      if (firstInput) firstInput.focus();
+    }
+    
+    // Reload dropdown options for student form
+    if (type === 'student') {
+      loadStudentFormOptions();
+    }
+  }
+  
+  /**
+   * Finish manual entry and go to results
+   */
+  window.finishManualEntry = function() {
+    // Move to the results step
+    currentStep = VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID ? 6 : 5;
+    processingResults = {
+      status: 'completed',
+      message: 'Manual entry completed successfully',
+      finalMessage: 'All manually entered records have been processed.'
+    };
+    renderStep(currentStep);
+  }
+  
+  /**
+   * Reset manual entry form
+   */
+  window.resetManualEntryForm = function(type) {
+    const form = document.getElementById(`${type}-manual-entry-form`);
+    if (form) {
+      form.reset();
+      const resultsDiv = document.getElementById('manual-entry-results');
+      if (resultsDiv) resultsDiv.style.display = 'none';
+    }
+  }
+
   // === IMPORTANT: Expose functions to global scope ===
   // This is critical for the system to be able to call our functions
   window.initializeUploadBridge = initializeUploadBridge;
@@ -5362,7 +5929,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       
       // Load the renewal module from your CDN
       // You'll need to update this URL to match where you host your renewals.js file
-      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/renewals1p.js';
+      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/renewals1m.js';
       
       try {
         await loadScript(scriptUrl);
