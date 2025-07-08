@@ -5362,7 +5362,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       
       // Load the renewal module from your CDN
       // You'll need to update this URL to match where you host your renewals.js file
-      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/renewals1m.js';
+      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/renewals1p.js';
       
       try {
         await loadScript(scriptUrl);
