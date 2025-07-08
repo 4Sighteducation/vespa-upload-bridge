@@ -214,6 +214,37 @@
   }
 
   /**
+   * Extract numeric value from Knack currency field
+   */
+  function extractCurrencyValue(currencyField) {
+    if (!currencyField) return 0;
+    
+    // If it's already a number, return it
+    if (typeof currencyField === 'number') return currencyField;
+    
+    // If it's a string, try to parse it
+    if (typeof currencyField === 'string') {
+      // Remove currency symbols and parse
+      const cleanValue = currencyField.replace(/[£$,]/g, '');
+      return parseFloat(cleanValue) || 0;
+    }
+    
+    // If it's an object with value property
+    if (currencyField.value !== undefined) return parseFloat(currencyField.value) || 0;
+    
+    // If it's an object with formatted property
+    if (currencyField.formatted) {
+      const cleanValue = currencyField.formatted.replace(/[£$,]/g, '');
+      return parseFloat(cleanValue) || 0;
+    }
+    
+    // If it's an object with amount property
+    if (currencyField.amount !== undefined) return parseFloat(currencyField.amount) || 0;
+    
+    return 0;
+  }
+
+  /**
    * Format address field
    */
   function formatAddress(addressField) {
@@ -843,7 +874,12 @@
             staffAdminEmail: extractEmail(order.staffAdminEmail),
             financeEmail: extractEmail(order.financeEmail),
             staffAdminName: extractPersonName(order.staffAdminName),
-            product: order.product || 'Coaching Portal' // Default to Coaching Portal if not set
+            product: order.product || 'Coaching Portal', // Default to Coaching Portal if not set
+            // Extract currency values properly
+            rate: extractCurrencyValue(order.rate),
+            total: extractCurrencyValue(order.total),
+            discount: extractCurrencyValue(order.discount),
+            addonsCost: extractCurrencyValue(order.addonsCost)
           };
         });
         
@@ -1079,6 +1115,13 @@
     const secondaryContactName = extractPersonName(order.secondaryContact);
     const address = formatAddress(order.address);
     
+    // Extract currency values properly
+    const rate = extractCurrencyValue(order.rate);
+    const total = extractCurrencyValue(order.total);
+    const discount = extractCurrencyValue(order.discount);
+    const addonsCost = extractCurrencyValue(order.addonsCost);
+    const quantity = order.quantity || 0;
+    
     modal.innerHTML = `
       <div class="renewal-modal-content" style="width: 950px; height: auto; max-height: 90vh; overflow-y: auto;">
         <div class="renewal-header">
@@ -1108,19 +1151,19 @@
             <div class="renewal-form-row cols-3">
               <div class="vespa-form-group">
                 <label id="quantity-label">Quantity:</label>
-                <input type="number" id="edit-quantity" name="quantity" value="${order.quantity || 0}" 
+                <input type="number" id="edit-quantity" name="quantity" value="${quantity}" 
                        onchange="VESPARenewals.calculateEditTotal()" min="0">
               </div>
               
               <div class="vespa-form-group">
                 <label id="rate-label">Rate (£):</label>
-                <input type="number" id="edit-rate" name="rate" value="${order.rate || 0}" step="0.01"
+                <input type="number" id="edit-rate" name="rate" value="${rate}" step="0.01"
                        onchange="VESPARenewals.calculateEditTotal()" min="0">
               </div>
               
               <div class="vespa-form-group">
                 <label>Discount (%):</label>
-                <input type="number" id="edit-discount" name="discount" value="${order.discount || 0}" 
+                <input type="number" id="edit-discount" name="discount" value="${discount}" 
                        min="0" max="100" onchange="VESPARenewals.calculateEditTotal()">
                 <small style="color: #666;">Enter percentage (0-100)</small>
               </div>
@@ -1143,7 +1186,7 @@
               
               <div class="vespa-form-group">
                 <label>Add-ons Cost (£):</label>
-                <input type="number" id="edit-addons-cost" name="addonsCost" value="${order.addonsCost || 0}" 
+                <input type="number" id="edit-addons-cost" name="addonsCost" value="${addonsCost}" 
                        step="0.01" min="0" onchange="VESPARenewals.calculateEditTotal()">
               </div>
             </div>
@@ -1168,7 +1211,7 @@
               <div class="vespa-form-group">
                 <label>Total (£):</label>
                 <div style="position: relative;">
-                  <input type="number" id="edit-total" name="total" value="${parseFloat(order.total || 0).toFixed(2)}" 
+                  <input type="number" id="edit-total" name="total" value="${total.toFixed(2)}" 
                          step="0.01" style="font-weight: bold; font-size: 16px; background: #fffde7;">
                   <div style="margin-top: 5px;">
                     <label style="font-size: 12px;">
@@ -1798,6 +1841,41 @@
             }
           }
           
+          // Get the order data
+          const order = renewalState.orders.find(o => o.id === orderId);
+          if (!order) {
+            results.failed++;
+            results.errors.push(`Order ${orderId}: Order not found`);
+            continue;
+          }
+          
+          // Get renewal amount from override or use order total
+          const renewalAmount = parseFloat(renewalAmountOverride) || order.total || 0;
+          
+          // Prepare order for processing
+          const orderData = {
+            orderId: order.id,
+            customerName: order.customerName,
+            customerEmail: order.customerEmail,
+            staffAdminEmail: order.staffAdminEmail,
+            staffAdminName: order.staffAdminName,
+            financeEmail: order.financeEmail,
+            financeName: order.financeName,
+            product: order.product || 'Coaching Portal',
+            quantity: order.quantity || 0,
+            rate: order.rate || 0,  // Already extracted as number
+            discount: order.discount || 0,  // Already extracted as number
+            total: order.total || 0,  // Already extracted as number
+            addons: order.addons || '',
+            addonsCost: order.addonsCost || 0,  // Already extracted as number
+            vatChargeable: order.vatChargeable === 'Yes',
+            renewalDate: order.renewalDate,
+            paymentDue: order.paymentDue,
+            renewalAmount: renewalAmount
+          };
+          
+          debugLog(`Processing order ${order.orderNumber}:`, orderData);
+          
           const requestData = {
             orderId: orderId,
             action: action,
@@ -1805,12 +1883,13 @@
             bccAdmin: bccAdmin,
             notes: notes,
             confirmNoInvoice: confirmNoInvoice,
-            emailTemplateId: action === 'reminder' ? 'RENEWAL_EMAIL_TEMPLATE_ID_2' : 'RENEWAL_EMAIL_TEMPLATE_ID'
+            emailTemplateId: action === 'reminder' ? 'RENEWAL_EMAIL_TEMPLATE_ID_2' : 'RENEWAL_EMAIL_TEMPLATE_ID',
+            orderData: orderData  // Include the order data with all the fields
           };
           
           // Include renewal amount override if provided and action is estimate or reminder
           if (renewalAmountOverride && (action === 'estimate' || action === 'reminder')) {
-            requestData.renewalAmount = renewalAmountOverride;
+            requestData.renewalAmount = parseFloat(renewalAmountOverride);
           }
           
           const response = await $.ajax({
