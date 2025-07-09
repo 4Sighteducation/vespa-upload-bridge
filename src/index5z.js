@@ -3818,14 +3818,17 @@ function bindStepEvents() {
       });
       
       if (response.success && response.options) {
+        debugLog("Form options received from API:", response.options);
+        
         // Populate tutors dropdown
         const tutorsSelect = document.getElementById('student-tutors');
         if (tutorsSelect && response.options.tutors) {
-          tutorsSelect.innerHTML = '';
+          tutorsSelect.innerHTML = '<option value="">-- None Selected --</option>';
           response.options.tutors.forEach(tutor => {
+            debugLog("Processing tutor:", tutor);
             const option = document.createElement('option');
-            option.value = tutor.email;
-            option.textContent = tutor.name || tutor.email;
+            option.value = tutor.email || '';
+            option.textContent = tutor.name || tutor.email || 'Unknown';
             tutorsSelect.appendChild(option);
           });
         }
@@ -3833,11 +3836,12 @@ function bindStepEvents() {
         // Populate heads of year dropdown
         const hoySelect = document.getElementById('student-hoy');
         if (hoySelect && response.options.headsOfYear) {
-          hoySelect.innerHTML = '<option value="">-- Select --</option>';
+          hoySelect.innerHTML = '<option value="">-- None Selected --</option>';
           response.options.headsOfYear.forEach(hoy => {
+            debugLog("Processing head of year:", hoy);
             const option = document.createElement('option');
-            option.value = hoy.email;
-            option.textContent = hoy.name || hoy.email;
+            option.value = hoy.email || '';
+            option.textContent = hoy.name || hoy.email || 'Unknown';
             hoySelect.appendChild(option);
           });
         }
@@ -3845,11 +3849,12 @@ function bindStepEvents() {
         // Populate subject teachers dropdown
         const teachersSelect = document.getElementById('student-subject-teachers');
         if (teachersSelect && response.options.subjectTeachers) {
-          teachersSelect.innerHTML = '';
+          teachersSelect.innerHTML = '<option value="">-- None Selected --</option>';
           response.options.subjectTeachers.forEach(teacher => {
+            debugLog("Processing subject teacher:", teacher);
             const option = document.createElement('option');
-            option.value = teacher.email;
-            option.textContent = teacher.subject ? `${teacher.name} (${teacher.subject})` : teacher.name || teacher.email;
+            option.value = teacher.email || '';
+            option.textContent = teacher.subject ? `${teacher.name || teacher.email || 'Unknown'} (${teacher.subject})` : (teacher.name || teacher.email || 'Unknown');
             teachersSelect.appendChild(option);
           });
         }
@@ -3898,14 +3903,16 @@ function bindStepEvents() {
         };
         
       } else if (type === 'student') {
-        // Get selected tutors
+        // Get selected tutors (filter out empty values)
         const selectedTutors = Array.from(document.getElementById('student-tutors').selectedOptions)
           .map(opt => opt.value)
+          .filter(val => val)  // Filter out empty values
           .join(',');
         
-        // Get selected subject teachers
+        // Get selected subject teachers (filter out empty values)
         const selectedTeachers = Array.from(document.getElementById('student-subject-teachers').selectedOptions)
           .map(opt => opt.value)
+          .filter(val => val)  // Filter out empty values
           .join(',');
         
         // Format DOB if provided
@@ -3926,14 +3933,40 @@ function bindStepEvents() {
           'Group': form.group.value.trim() || '',
           'Year Gp': form.yearGroup.value,
           'Level': form.level.value,
-          'Tutors': selectedTutors,
-          'Head of Year': form.headOfYear.value,
+          'Tutors': selectedTutors || '',
+          'Head of Year': form.headOfYear.value || '',
           'Subject Teachers': selectedTeachers || ''
         };
       }
       
       // Prepare the data as if it's a single-row CSV
       const endpoint = type === 'staff' ? 'staff/process' : 'students/onboard/process';
+      
+      // Build the context object similar to processUploadData function
+      const isEmulating = VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID && (selectedSchool?.id || getEmulationState()?.school?.id);
+      const emulationState = getEmulationState();
+      
+      const uploaderContextForAPI = {
+        // Always include userId at the top level for the API
+        userId: userContext?.userId,
+        userEmail: userContext?.userEmail || '',
+        isEmulating: isEmulating,
+        loggedInUser: { // Always send the actual logged-in user
+          userId: userContext?.userId,
+          userEmail: userContext?.userEmail || '',
+          userRole: userContext?.userRole || null,
+          customerId: userContext?.customerId || null
+        },
+        emulatedSchool: isEmulating ? {
+          customerId: selectedSchool?.id || emulationState?.school?.id,
+          customerName: selectedSchool?.name || emulationState?.school?.name,
+          admins: selectedSchool?.emulatedAdmins || emulationState?.admins || [] // The array of admin objects
+        } : null,
+        // Pass the direct customer ID when not emulating
+        customerId: !isEmulating ? userContext?.customerId : null
+      };
+      
+      debugLog("Manual entry context prepared for API:", uploaderContextForAPI);
       
       const response = await $.ajax({
         url: `${API_BASE_URL}${endpoint}`,
@@ -3947,12 +3980,7 @@ function bindStepEvents() {
             percentile: selectedPercentile,
             manualEntry: true // Flag to indicate manual entry
           },
-          context: {
-            userId: userContext?.userId,
-            userEmail: userContext?.userEmail,
-            isEmulating: VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID && (selectedSchool?.id || getEmulationState()?.school?.id),
-            customerId: selectedSchool?.id || getEmulationState()?.school?.id || userContext?.customerId
-          }
+          context: uploaderContextForAPI
         }),
         xhrFields: { withCredentials: true }
       });
@@ -6210,6 +6238,8 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       renderStep(1);
     }
   }
+
+
 
 
 
