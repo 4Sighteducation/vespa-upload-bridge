@@ -4948,14 +4948,20 @@ function bindStepEvents() {
       });
       
       document.getElementById('download-qr-btn').addEventListener('click', () => {
-        const canvas = document.querySelector('#qrcode canvas');
-        if (canvas) {
-          const link = document.createElement('a');
-          const schoolName = response.configSettings.customerName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-          link.download = `vespa_qr_${schoolName}_${new Date().toISOString().slice(0,10)}.png`;
-          link.href = canvas.toDataURL();
-          link.click();
-        }
+        // Add a small delay to ensure QR code is fully rendered
+        setTimeout(() => {
+          const canvas = document.querySelector('#qrcode canvas');
+          if (canvas) {
+            const link = document.createElement('a');
+            const schoolName = response.configSettings.customerName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            link.download = `vespa_qr_${schoolName}_${new Date().toISOString().slice(0,10)}.png`;
+            link.href = canvas.toDataURL();
+            link.click();
+          } else {
+            debugLog('QR code canvas not found!', null, 'error');
+            showError('Please wait for the QR code to generate before downloading.');
+          }
+        }, 200);
       });
       
       document.getElementById('view-links-btn').addEventListener('click', () => {
@@ -5130,7 +5136,8 @@ function bindStepEvents() {
    * View a QR code
    */
   window.viewQRCode = async function(linkId) {
-    const registrationUrl = `https://4sighteducation.github.io/vespa-upload-bridge/self-registration-form.html?id=${linkId}`;
+    const baseUrl = window.REGISTRATION_FORM_URL || 'https://4sighteducation.github.io/vespa-upload-bridge/root/self-registration-form.html';
+    const registrationUrl = `${baseUrl}?id=${linkId}`;
     
     // Load QR code library if needed
     if (typeof QRCode === 'undefined') {
@@ -6690,6 +6697,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       renderStep(1);
     }
   }
+
 
 
 
