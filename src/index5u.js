@@ -31,6 +31,118 @@ let universalPassword = null; // For student universal password feature
 let useUniversalPassword = false; // Flag to track if universal password is being used
 
 /**
+ * Helper function to get/set emulation state persistently
+ */
+function getEmulationState() {
+  try {
+    const stored = sessionStorage.getItem('vespa_emulation_state');
+    return stored ? JSON.parse(stored) : null;
+  } catch (e) {
+    debugLog("Error reading emulation state", e, 'error');
+    return null;
+  }
+}
+
+function setEmulationState(state) {
+  try {
+    if (state) {
+      sessionStorage.setItem('vespa_emulation_state', JSON.stringify(state));
+    } else {
+      sessionStorage.removeItem('vespa_emulation_state');
+    }
+    // Update the global selectedSchool variable
+    if (state && state.school) {
+      selectedSchool = {
+        ...state.school,
+        emulatedAdmins: state.admins
+      };
+    } else {
+      selectedSchool = null;
+    }
+  } catch (e) {
+    debugLog("Error saving emulation state", e, 'error');
+  }
+}
+
+function clearEmulationState() {
+  setEmulationState(null);
+  selectedSchool = null;
+  updateEmulationStatusBar();
+}
+
+/**
+ * Update the emulation status bar visibility and content
+ */
+function updateEmulationStatusBar() {
+  const statusBar = document.getElementById('emulation-status-bar');
+  if (!statusBar) return;
+  
+  const emulationState = getEmulationState();
+  
+  if (emulationState && emulationState.school) {
+    // Show the status bar with emulation info
+    const adminEmailsList = emulationState.admins.map(admin => 
+      `<span style="background: #fff; padding: 2px 8px; border-radius: 3px; margin-right: 5px;">${admin.email}</span>`
+    ).join('');
+    
+    statusBar.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <strong>🏢 Emulation Mode Active:</strong> ${emulationState.school.name} | 
+          <strong>Admin(s):</strong> 
+          <span style="display: inline-flex; flex-wrap: wrap; gap: 5px;">
+            ${adminEmailsList}
+          </span>
+        </div>
+        <div>
+          <button class="vespa-button secondary small-button" onclick="showChangeEmulationModal()">Change School</button>
+          <button class="vespa-button secondary small-button" onclick="clearEmulationMode()">Exit Emulation</button>
+        </div>
+      </div>
+    `;
+    statusBar.style.display = 'block';
+  } else {
+    // Hide the status bar
+    statusBar.style.display = 'none';
+    statusBar.innerHTML = '';
+  }
+}
+
+/**
+ * Clear emulation mode and return to normal operation
+ */
+window.clearEmulationMode = function() {
+  if (confirm('Are you sure you want to exit emulation mode?')) {
+    clearEmulationState();
+    showSuccess('Exited emulation mode');
+    // Reset to step 1
+    currentStep = 1;
+    uploadType = null;
+    renderStep(currentStep);
+  }
+}
+
+/**
+ * Show modal to change emulated school
+ */
+window.showChangeEmulationModal = function() {
+  // Store current state
+  const currentUploadType = uploadType;
+  const currentValidationResults = validationResults;
+  
+  // Go back to school selection step
+  currentStep = 2; // School selection step for super users
+  renderStep(currentStep);
+  
+  // Restore state after render
+  uploadType = currentUploadType;
+  validationResults = currentValidationResults;
+  
+  // Scroll to top
+  window.scrollTo(0, 0);
+}
+
+/**
  * Debug logging helper
  * @param {string} title - Log title
  * @param {any} data - Optional data to log
@@ -490,6 +602,17 @@ function initializeUploadBridge() {
     userContext = context;
     debugLog("User context set:", userContext);
     
+    // Check for existing emulation state
+    const emulationState = getEmulationState();
+    if (emulationState && emulationState.school) {
+      debugLog("Restoring emulation state from session storage", emulationState);
+      selectedSchool = {
+        ...emulationState.school,
+        emulatedAdmins: emulationState.admins
+      };
+      updateEmulationStatusBar();
+    }
+    
     if (!context || !context.userId) {
       debugLog("ERROR: Failed to get user context after retries", null, 'error');
       showError('Unable to load user information. Please refresh the page and try again.');
@@ -614,7 +737,7 @@ function initializeUploadInterface(container) {
   // Create the wizard container
   const wizardHTML = `
     <div id="vespa-upload-wizard" class="vespa-upload-wizard">
-      <div id="emulation-status-bar" style="display: none;"></div>
+      <div id="emulation-status-bar" style="display: none; background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; margin-bottom: 10px; border-radius: 4px;"></div>
       <div class="vespa-upload-header">
         <h1>VESPA Data Upload</h1>
         <p>Upload staff and student data to your VESPA account</p>
@@ -677,6 +800,13 @@ function initializeUploadInterface(container) {
   
   // Render the first step
   renderStep(currentStep);
+  
+  // Check and restore emulation state after the interface is created
+  const emulationState = getEmulationState();
+  if (emulationState && emulationState.school) {
+    debugLog("Restoring emulation status bar from saved state", emulationState);
+    updateEmulationStatusBar();
+  }
   
   // Auto-load renewal module for super users
   if (isSuperUser) {
@@ -1057,11 +1187,9 @@ debugLog(`Rendering step ${step}, User is SuperUser: ${isSuperUser}`, {
         const newUploadBtn = document.getElementById('start-new-upload');
         if (newUploadBtn) {
           newUploadBtn.addEventListener('click', function() {
-            // Hide the emulation status bar
-            const statusBar = document.getElementById('emulation-status-bar');
-            if (statusBar) {
-              statusBar.style.display = 'none';
-              statusBar.innerHTML = '';
+            // Clear emulation state if not a super user
+            if (VESPA_UPLOAD_CONFIG.userRole !== SUPER_USER_ROLE_ID) {
+              clearEmulationState();
             }
             
             // Reset the wizard and go back to step 1
@@ -3638,9 +3766,37 @@ function bindStepEvents() {
    */
   async function loadStudentFormOptions() {
     try {
-      const customerId = selectedSchool?.id || userContext?.customerId;
+      // Check for emulation state first
+      const emulationState = getEmulationState();
+      let customerId = null;
+      
+      if (emulationState && emulationState.school) {
+        customerId = emulationState.school.id;
+        debugLog("Using emulated customer ID for form options", { customerId, school: emulationState.school.name });
+      } else if (selectedSchool?.id) {
+        customerId = selectedSchool.id;
+        debugLog("Using selected school ID for form options", { customerId });
+      } else if (userContext?.customerId) {
+        customerId = userContext.customerId;
+        debugLog("Using user context customer ID for form options", { customerId });
+      }
+      
       if (!customerId) {
-        debugLog("No customer ID available for loading form options", null, 'error');
+        debugLog("No customer ID available for loading form options", { 
+          emulationState: emulationState, 
+          selectedSchool: selectedSchool, 
+          userContext: userContext 
+        }, 'error');
+        
+        // Update dropdowns to show error state
+        const tutorsSelect = document.getElementById('student-tutors');
+        const hoySelect = document.getElementById('student-hoy');
+        const teachersSelect = document.getElementById('student-subject-teachers');
+        
+        if (tutorsSelect) tutorsSelect.innerHTML = '<option value="">Error: Unable to load tutors</option>';
+        if (hoySelect) hoySelect.innerHTML = '<option value="">Error: Unable to load heads of year</option>';
+        if (teachersSelect) teachersSelect.innerHTML = '<option value="">Error: Unable to load teachers</option>';
+        
         return;
       }
       
@@ -3784,8 +3940,8 @@ function bindStepEvents() {
           context: {
             userId: userContext?.userId,
             userEmail: userContext?.userEmail,
-            isEmulating: VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID && selectedSchool?.id,
-            customerId: selectedSchool?.id || userContext?.customerId
+            isEmulating: VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID && (selectedSchool?.id || getEmulationState()?.school?.id),
+            customerId: selectedSchool?.id || getEmulationState()?.school?.id || userContext?.customerId
           }
         }),
         xhrFields: { withCredentials: true }
@@ -4078,14 +4234,14 @@ function bindStepEvents() {
       if (response.success && response.admins && response.admins.length > 0) {
         selectedSchool.emulatedAdmins = response.admins; // Store array of admins
         
+        // Save emulation state to session storage
+        setEmulationState({
+          school: selectedSchool,
+          admins: response.admins
+        });
+        
         // --- Update the main emulation status bar ---
-        const statusBar = document.getElementById('emulation-status-bar');
-        const adminEmailsList = response.admins.map(admin => `<li>${admin.email}</li>`).join('');
-        statusBar.innerHTML = `
-          <strong>Emulating:</strong> ${selectedSchool.name} | 
-          <strong>Admin(s):</strong> <ul>${adminEmailsList}</ul>
-        `;
-        statusBar.style.display = 'block';
+        updateEmulationStatusBar();
 
         // --- Update the in-step details (for clarity within the step) ---
         const adminEmailsHtml = response.admins.map(admin => `<li>${admin.email}</li>`).join('');
@@ -4093,21 +4249,23 @@ function bindStepEvents() {
         
         if (emulationStatusDiv) emulationStatusDiv.textContent = 'Emulation ready.';
         showSuccess(`Emulation configured for ${selectedSchool.name} with ${response.admins.length} admin(s).`);
-      } else {
+              } else {
+          selectedSchool.emulatedAdmins = [];
+          clearEmulationState(); // Clear any stored emulation state
+          updateEmulationStatusBar(); // This will hide the bar
+          emulationAdminEmailDiv.innerHTML = '<strong>No primary admins found for emulation.</strong>';
+          if (emulationStatusDiv) emulationStatusDiv.textContent = 'Emulation setup failed.';
+          showError(response.message || "Could not fetch admin details for emulation.");
+        }
+      } catch (error) {
+        debugLog("Error fetching emulation admin details:", error, 'error');
         selectedSchool.emulatedAdmins = [];
-        document.getElementById('emulation-status-bar').style.display = 'none'; // Hide status bar on failure
-        emulationAdminEmailDiv.innerHTML = '<strong>No primary admins found for emulation.</strong>';
-        if (emulationStatusDiv) emulationStatusDiv.textContent = 'Emulation setup failed.';
-        showError(response.message || "Could not fetch admin details for emulation.");
+        clearEmulationState(); // Clear any stored emulation state
+        updateEmulationStatusBar(); // This will hide the bar
+        if (emulationAdminEmailDiv) emulationAdminEmailDiv.innerHTML = '<strong>Error fetching admin details.</strong>';
+        if (emulationStatusDiv) emulationStatusDiv.textContent = 'Error.';
+        showError(`Failed to fetch admin details: ${error.message || error.statusText || 'Unknown error'}`);
       }
-    } catch (error) {
-      debugLog("Error fetching emulation admin details:", error, 'error');
-      selectedSchool.emulatedAdmins = [];
-      document.getElementById('emulation-status-bar').style.display = 'none'; // Hide status bar on error
-      if (emulationAdminEmailDiv) emulationAdminEmailDiv.innerHTML = '<strong>Error fetching admin details.</strong>';
-      if (emulationStatusDiv) emulationStatusDiv.textContent = 'Error.';
-      showError(`Failed to fetch admin details: ${error.message || error.statusText || 'Unknown error'}`);
-    }
   }
 
   /**
@@ -5977,6 +6135,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       renderStep(1);
     }
   }
+
 
 
 
