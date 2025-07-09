@@ -94,7 +94,8 @@ function updateEmulationStatusBar() {
             ${adminEmailsList}
           </span>
         </div>
-        <div>
+        <div style="display: flex; gap: 5px;">
+          <button class="vespa-button secondary small-button" onclick="showEmulationSettingsModal()">⚙️ Settings</button>
           <button class="vespa-button secondary small-button" onclick="showChangeEmulationModal()">Change School</button>
           <button class="vespa-button secondary small-button" onclick="clearEmulationMode()">Exit Emulation</button>
         </div>
@@ -745,6 +746,7 @@ function initializeUploadInterface(container) {
           <button id="select-percentile-button" class="vespa-button secondary small-button">Target: ${selectedPercentileName}</button>
           <button id="universal-password-button" class="vespa-button secondary small-button" style="display: none;">Set Universal Password</button>
           <button id="self-registration-button" class="vespa-button secondary small-button">Generate Self-Registration Link</button>
+          ${isSuperUser ? `<button id="header-emulation-button" class="vespa-button secondary small-button">🏢 Emulation Settings</button>` : ''}
         </div>
       </div>
       
@@ -797,6 +799,14 @@ function initializeUploadInterface(container) {
   document.getElementById('select-percentile-button').addEventListener('click', showPercentileModal);
   document.getElementById('universal-password-button').addEventListener('click', showUniversalPasswordModal);
   document.getElementById('self-registration-button').addEventListener('click', showSelfRegistrationModal);
+  
+  // Add emulation button listener for super users
+  if (isSuperUser) {
+    const emulationBtn = document.getElementById('header-emulation-button');
+    if (emulationBtn) {
+      emulationBtn.addEventListener('click', showEmulationSettingsModal);
+    }
+  }
   
   // Render the first step
   renderStep(currentStep);
@@ -4058,6 +4068,7 @@ function bindStepEvents() {
   window.downloadTemplate = downloadTemplateFile;
   window.showModal = showModal;
   window.closeModal = closeModal;
+  window.showEmulationSettingsModal = showEmulationSettingsModal;
   
   // Add an initialization complete flag
   window.VESPA_UPLOAD_BRIDGE_INITIALIZED = true;
@@ -4203,11 +4214,18 @@ function bindStepEvents() {
         schoolSelect.innerHTML = '<option value="">-- No schools found --</option>';
         showError(response.message || "Could not load schools.");
       }
-    } catch (error) {
-      debugLog("Error fetching VESPA customers:", error, 'error');
-      schoolSelect.innerHTML = '<option value="">-- Error loading schools --</option>';
-      showError(`Failed to fetch schools: ${error.message || error.statusText || 'Unknown error'}`);
-    } finally {
+          } catch (error) {
+        debugLog("Error fetching VESPA customers:", error, 'error');
+        schoolSelect.innerHTML = '<option value="">-- Error loading schools --</option>';
+        
+        // Check if it's a CORS error
+        if (error.status === 0 && error.statusText === 'error') {
+          debugLog("Possible CORS error detected", error, 'error');
+          showError(`Failed to fetch schools. This may be a CORS issue. Please try refreshing the page.`);
+        } else {
+          showError(`Failed to fetch schools: ${error.responseJSON?.message || error.message || error.statusText || 'Unknown error'}`);
+        }
+      } finally {
       schoolSelect.disabled = false;
     }
   }
@@ -4264,8 +4282,65 @@ function bindStepEvents() {
         updateEmulationStatusBar(); // This will hide the bar
         if (emulationAdminEmailDiv) emulationAdminEmailDiv.innerHTML = '<strong>Error fetching admin details.</strong>';
         if (emulationStatusDiv) emulationStatusDiv.textContent = 'Error.';
-        showError(`Failed to fetch admin details: ${error.message || error.statusText || 'Unknown error'}`);
+        
+        // Check if it's a CORS error
+        if (error.status === 0 && error.statusText === 'error') {
+          debugLog("Possible CORS error detected", error, 'error');
+          showError(`Failed to fetch admin details. This may be a CORS issue. Please try refreshing the page.`);
+        } else {
+          showError(`Failed to fetch admin details: ${error.responseJSON?.message || error.message || error.statusText || 'Unknown error'}`);
+        }
       }
+  }
+
+  /**
+   * Shows the emulation settings modal for super users
+   */
+  function showEmulationSettingsModal() {
+    const emulationState = getEmulationState();
+    const currentSchoolName = emulationState?.school?.name || 'None';
+    
+    const modalContent = `
+      <div class="vespa-emulation-settings">
+        <p>Manage emulation settings for testing and support purposes.</p>
+        
+        <div class="vespa-current-emulation" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+          <h4>Current Emulation Status</h4>
+          ${emulationState && emulationState.school ? `
+            <p><strong>School:</strong> ${currentSchoolName}</p>
+            <p><strong>Admin(s):</strong></p>
+            <ul style="margin: 10px 0; padding-left: 20px;">
+              ${emulationState.admins.map(admin => `<li>${admin.email}</li>`).join('')}
+            </ul>
+          ` : `
+            <p>No school currently being emulated.</p>
+          `}
+        </div>
+        
+        <div class="vespa-emulation-actions" style="margin-top: 20px;">
+          ${emulationState && emulationState.school ? `
+            <button class="vespa-button secondary" onclick="showChangeEmulationModal(); closeModal();">Change School</button>
+            <button class="vespa-button secondary" onclick="clearEmulationMode(); closeModal();">Exit Emulation</button>
+            <button class="vespa-button secondary" onclick="location.reload();">🔄 Refresh Page</button>
+          ` : `
+            <button class="vespa-button primary" onclick="currentStep = 2; renderStep(2); closeModal();">Select School to Emulate</button>
+          `}
+        </div>
+        
+        <div class="vespa-info-box" style="margin-top: 20px; background: #e3f2fd; border-left: 4px solid #2196f3; padding: 12px;">
+          <div class="vespa-info-icon" style="display: inline-block; margin-right: 8px;">ℹ️</div>
+          <div class="vespa-info-content" style="display: inline-block; width: calc(100% - 30px); vertical-align: top;">
+            <strong>Tip:</strong> When emulating a school, all uploads and actions will be performed as if you were logged in as that school's admin.
+          </div>
+        </div>
+        
+        <div class="vespa-modal-actions" style="margin-top: 20px; text-align: right;">
+          <button class="vespa-button primary" onclick="closeModal()">Close</button>
+        </div>
+      </div>
+    `;
+    
+    showModal('Emulation Settings', modalContent);
   }
 
   /**
@@ -6135,6 +6210,9 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       renderStep(1);
     }
   }
+
+
+
 
 
 
