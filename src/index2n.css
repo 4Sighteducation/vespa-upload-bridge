@@ -1758,6 +1758,48 @@ code {
   margin-left: 3px;
 }
 
+/* Emulation Settings Modal Styles */
+.vespa-emulation-settings {
+  padding: 20px;
+}
+
+.vespa-current-emulation {
+  margin: 20px 0;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.vespa-current-emulation h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #495057;
+}
+
+.vespa-current-emulation ul {
+  margin: 10px 0;
+  padding-left: 20px;
+}
+
+.vespa-emulation-actions {
+  margin-top: 20px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Emulation settings button in header */
+#emulation-settings-button {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
+#emulation-settings-button:hover {
+  background: #ffe8a1;
+  border-color: #ffd700;
+}
+
 /* Responsive design for customer form */
 @media (max-width: 768px) {
   .vespa-form-header {
@@ -1775,6 +1817,14 @@ code {
   
   #order-total {
     font-size: 20px;
+  }
+  
+  .vespa-emulation-actions {
+    flex-direction: column;
+  }
+  
+  .vespa-emulation-actions .vespa-button {
+    width: 100%;
   }
 }
 
