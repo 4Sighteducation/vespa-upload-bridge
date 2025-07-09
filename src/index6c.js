@@ -387,7 +387,7 @@ function addStyles() {
   linkElement.id = 'vespa-upload-styles';
   linkElement.rel = 'stylesheet';
   linkElement.type = 'text/css';
-  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index2o.css';
+  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index6c.css';
   
   document.head.appendChild(linkElement);
   debugLog("Dynamically linked external CSS: " + linkElement.href, null, 'info');
@@ -622,12 +622,23 @@ function initializeUploadBridge() {
     // Enable/disable self-registration button based on context
     const selfRegBtn = document.getElementById('self-registration-button');
     if (selfRegBtn) {
-      if (!context || !context.customerId) {
+      const isSuperUser = VESPA_UPLOAD_CONFIG && VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID;
+      debugLog("Checking self-registration button context", { 
+        context, 
+        hasCustomerId: context?.customerId,
+        isSuperUser: isSuperUser
+      }, 'info');
+      
+      // For Super Users, always enable the button (they select school in the modal)
+      // For regular users, they need a customerId
+      if (!context || (!isSuperUser && !context.customerId)) {
         selfRegBtn.disabled = true;
         selfRegBtn.title = 'User context not available - please refresh the page';
+        debugLog("Self-registration button disabled - no context/customerId", null, 'warn');
       } else {
         selfRegBtn.disabled = false;
         selfRegBtn.title = 'Generate a link for students to self-register';
+        debugLog("Self-registration button enabled", null, 'info');
       }
     }
   }).catch(error => {
@@ -803,14 +814,57 @@ function initializeUploadInterface(container) {
   
   // Add super user only buttons
   if (isSuperUser) {
+    debugLog("Super user detected, looking for self-registration button", null, 'info');
+    
+    // Debug: Check if buttons exist in DOM
+    const allButtons = document.querySelectorAll('.vespa-button');
+    debugLog(`Found ${allButtons.length} buttons with class 'vespa-button'`, null, 'info');
+    
     const selfRegBtn = document.getElementById('self-registration-button');
     if (selfRegBtn) {
-      selfRegBtn.addEventListener('click', showSelfRegistrationModal);
+      debugLog("Self-registration button found in DOM", {
+        id: selfRegBtn.id,
+        className: selfRegBtn.className,
+        textContent: selfRegBtn.textContent,
+        disabled: selfRegBtn.disabled,
+        style: selfRegBtn.style.cssText
+      }, 'info');
+      
+      // Add a visual indicator that the button is ready
+      selfRegBtn.style.border = '2px solid #007bff';
+      
+      debugLog("Attaching click handler to self-registration button", null, 'info');
+      selfRegBtn.addEventListener('click', function(e) {
+        debugLog("Self-registration button clicked", null, 'info');
+        e.preventDefault();
+        e.stopPropagation();
+        
+        try {
+          if (typeof showSelfRegistrationModal === 'function') {
+            showSelfRegistrationModal();
+          } else if (typeof window.showSelfRegistrationModal === 'function') {
+            window.showSelfRegistrationModal();
+          } else {
+            debugLog("showSelfRegistrationModal function not found!", null, 'error');
+            showError('Unable to open registration modal. Please refresh the page and try again.');
+          }
+        } catch (error) {
+          debugLog("Error calling showSelfRegistrationModal:", error, 'error');
+          showError('An error occurred. Please try again.');
+        }
+      });
+    } else {
+      debugLog("Self-registration button not found in DOM", null, 'error');
     }
     
     const emulationBtn = document.getElementById('header-emulation-button');
     if (emulationBtn) {
-      emulationBtn.addEventListener('click', showEmulationSettingsModal);
+      debugLog("Attaching click handler to emulation button", null, 'info');
+      emulationBtn.addEventListener('click', function(e) {
+        debugLog("Emulation button clicked", null, 'info');
+        e.preventDefault();
+        showEmulationSettingsModal();
+      });
     }
   }
   
@@ -4103,6 +4157,11 @@ function bindStepEvents() {
   window.showModal = showModal;
   window.closeModal = closeModal;
   window.showEmulationSettingsModal = showEmulationSettingsModal;
+  window.showSelfRegistrationModal = showSelfRegistrationModal;
+  window.generateRegistrationLink = generateRegistrationLink;
+  window.viewQRCode = viewQRCode;
+  window.downloadQRFromView = downloadQRFromView;
+  window.regenerateQRLink = regenerateQRLink;
   
   // Add an initialization complete flag
   window.VESPA_UPLOAD_BRIDGE_INITIALIZED = true;
@@ -4563,9 +4622,12 @@ function bindStepEvents() {
    * Shows the self-registration QR code generation modal (Super Users only).
    */
   function showSelfRegistrationModal() {
-    debugLog("Opening self-registration modal for super user");
+    debugLog("showSelfRegistrationModal called", null, 'info');
     
-    const modalContent = `
+    try {
+      debugLog("Opening self-registration modal for super user");
+      
+      const modalContent = `
       <div class="vespa-self-registration-content">
         <h3>Generate Student Registration QR Code</h3>
         <p>Create a QR code for students to self-register during webinars or events.</p>
@@ -4669,6 +4731,11 @@ function bindStepEvents() {
     });
 
     document.getElementById('cancel-registration-link-btn').addEventListener('click', closeModal);
+    
+    } catch (error) {
+      debugLog("Error in showSelfRegistrationModal:", error, 'error');
+      showError('Failed to open registration modal. Please try again.');
+    }
   }
 
   /**
