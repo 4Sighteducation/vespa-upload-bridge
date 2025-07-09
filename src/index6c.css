@@ -60,6 +60,14 @@
 .vespa-button.small-button {
   padding: 6px 12px;
   font-size: 13px;
+  cursor: pointer;
+  position: relative;
+  z-index: 10;
+}
+
+.vespa-button.small-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Percentile Modal Specific Styles */
@@ -1944,4 +1952,5 @@ select[multiple] option:checked {
 .renewal-form-row select[multiple]::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
+
 
