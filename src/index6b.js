@@ -745,8 +745,10 @@ function initializeUploadInterface(container) {
         <div class="vespa-header-actions">
           <button id="select-percentile-button" class="vespa-button secondary small-button">Target: ${selectedPercentileName}</button>
           <button id="universal-password-button" class="vespa-button secondary small-button" style="display: none;">Set Universal Password</button>
-          <button id="self-registration-button" class="vespa-button secondary small-button">Generate Self-Registration Link</button>
-          ${isSuperUser ? `<button id="header-emulation-button" class="vespa-button secondary small-button">🏢 Emulation Settings</button>` : ''}
+          ${isSuperUser ? `
+            <button id="self-registration-button" class="vespa-button secondary small-button">📱 Generate Student QR Code</button>
+            <button id="header-emulation-button" class="vespa-button secondary small-button">🏢 Emulation Settings</button>
+          ` : ''}
         </div>
       </div>
       
@@ -798,10 +800,14 @@ function initializeUploadInterface(container) {
   document.getElementById('vespa-next-button').addEventListener('click', nextStep);
   document.getElementById('select-percentile-button').addEventListener('click', showPercentileModal);
   document.getElementById('universal-password-button').addEventListener('click', showUniversalPasswordModal);
-  document.getElementById('self-registration-button').addEventListener('click', showSelfRegistrationModal);
   
-  // Add emulation button listener for super users
+  // Add super user only buttons
   if (isSuperUser) {
+    const selfRegBtn = document.getElementById('self-registration-button');
+    if (selfRegBtn) {
+      selfRegBtn.addEventListener('click', showSelfRegistrationModal);
+    }
+    
     const emulationBtn = document.getElementById('header-emulation-button');
     if (emulationBtn) {
       emulationBtn.addEventListener('click', showEmulationSettingsModal);
@@ -4554,39 +4560,52 @@ function bindStepEvents() {
   }
 
   /**
-   * Shows the self-registration link generation modal.
+   * Shows the self-registration QR code generation modal (Super Users only).
    */
   function showSelfRegistrationModal() {
-    // First check if we have the necessary context
-    if (!userContext || !userContext.customerId) {
-      // Try to use VESPA_UPLOAD_CONFIG as fallback
-      if (VESPA_UPLOAD_CONFIG && VESPA_UPLOAD_CONFIG.userRole) {
-        debugLog("Using VESPA_UPLOAD_CONFIG as fallback for user context", VESPA_UPLOAD_CONFIG);
-        // Create a temporary context from config
-        userContext = {
-          userId: 'temp-user-id',
-          userName: 'Current User',
-          userEmail: VESPA_UPLOAD_CONFIG.userEmail || 'user@school.edu',
-          userRole: VESPA_UPLOAD_CONFIG.userRole,
-          customerId: selectedSchool?.id || 'temp-customer-id',
-          schoolId: null
-        };
-      } else {
-        showError('Unable to generate registration link. User context not available. Please refresh the page and try again.');
-        return;
-      }
-    }
-
+    debugLog("Opening self-registration modal for super user");
+    
     const modalContent = `
       <div class="vespa-self-registration-content">
-        <p>Generate a self-registration link for students to sign up directly. The link will be valid for 1 year.</p>
+        <h3>Generate Student Registration QR Code</h3>
+        <p>Create a QR code for students to self-register during webinars or events.</p>
         
-        <div class="vespa-registration-options">
-          <h4>Registration Form Settings:</h4>
+        <div class="vespa-school-selection" style="margin: 20px 0;">
+          <label for="qr-school-select" style="display: block; font-weight: bold; margin-bottom: 10px;">
+            Select School/Customer <span style="color: red;">*</span>
+          </label>
+          <select id="qr-school-select" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+            <option value="">-- Loading schools... --</option>
+          </select>
+        </div>
+        
+        <div id="qr-school-details" style="display: none; background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+          <h4 style="margin-top: 0;">Selected School Details</h4>
+          <div><strong>School Name:</strong> <span id="qr-school-name"></span></div>
+          <div><strong>Current Logo:</strong> <span id="qr-current-logo">None</span></div>
+          <div><strong>Staff Admins:</strong> <span id="qr-admin-count">0</span> found</div>
+        </div>
+        
+        <div class="vespa-logo-section" style="margin: 20px 0;">
+          <label for="qr-logo-url" style="display: block; font-weight: bold; margin-bottom: 10px;">
+            School Logo URL (optional)
+          </label>
+          <input type="url" id="qr-logo-url" placeholder="https://example.com/logo.png" 
+            style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          <div class="help-text" style="font-size: 12px; color: #666; margin-top: 5px;">
+            Leave empty to use existing logo, or enter a new URL to update
+          </div>
+          <div id="logo-preview" style="margin-top: 10px; display: none;">
+            <img id="logo-preview-img" style="max-width: 200px; max-height: 100px; border: 1px solid #ddd; padding: 5px;">
+          </div>
+        </div>
+        
+        <div class="vespa-registration-options" style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+          <h4 style="margin-top: 0;">Registration Settings:</h4>
           
           <div class="vespa-checkbox-group" style="margin: 10px 0;">
             <input type="checkbox" id="require-school-email" checked>
-            <label for="require-school-email">Require school email addresses only (recommended)</label>
+            <label for="require-school-email">Require school email addresses only</label>
           </div>
           
           <div class="vespa-checkbox-group" style="margin: 10px 0;">
@@ -4595,35 +4614,172 @@ function bindStepEvents() {
           </div>
           
           <div class="vespa-input-group" style="margin: 15px 0;">
+            <label for="qr-expiry-days">Link expires in (days):</label>
+            <input type="number" id="qr-expiry-days" value="365" min="1" max="730" 
+              style="width: 100px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+          
+          <div class="vespa-input-group" style="margin: 15px 0;">
             <label for="registration-message">Custom welcome message (optional):</label>
-            <textarea id="registration-message" placeholder="Enter a message to display on the registration form..." style="width: 100%; padding: 8px; margin: 5px 0; border: 1px solid #ddd; border-radius: 4px; min-height: 60px;"></textarea>
+            <textarea id="registration-message" placeholder="e.g., Welcome to today's VESPA webinar! Please register below..." 
+              style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; min-height: 60px;"></textarea>
           </div>
         </div>
         
         <div class="vespa-modal-actions" style="margin-top: 20px; text-align: right;">
           <button id="cancel-registration-link-btn" class="vespa-button secondary">Cancel</button>
-          <button id="generate-registration-link-btn" class="vespa-button primary">Generate Link</button>
+          <button id="generate-registration-link-btn" class="vespa-button primary" disabled>Generate QR Code</button>
         </div>
       </div>
     `;
 
-    showModal('Generate Self-Registration Link', modalContent);
+    showModal('Generate Student Registration QR Code', modalContent);
+
+    // Load schools for dropdown
+    loadSchoolsForQRGeneration();
 
     // Add event listeners
+    document.getElementById('qr-school-select').addEventListener('change', handleQRSchoolSelection);
+    document.getElementById('qr-logo-url').addEventListener('input', handleLogoPreview);
+    
     document.getElementById('generate-registration-link-btn').addEventListener('click', async () => {
+      const schoolSelect = document.getElementById('qr-school-select');
+      const customerId = schoolSelect.value;
+      
+      if (!customerId) {
+        showError('Please select a school first');
+        return;
+      }
+      
+      const logoUrl = document.getElementById('qr-logo-url').value.trim();
       const requireSchoolEmail = document.getElementById('require-school-email').checked;
       const autoApprove = document.getElementById('auto-approve-registration').checked;
+      const expiresIn = parseInt(document.getElementById('qr-expiry-days').value) || 365;
       const customMessage = document.getElementById('registration-message').value.trim();
       
       // Generate the registration link
       await generateRegistrationLink({
+        customerId,
+        logoUrl,
         requireSchoolEmail,
         autoApprove,
+        expiresIn,
         customMessage
       });
     });
 
     document.getElementById('cancel-registration-link-btn').addEventListener('click', closeModal);
+  }
+
+  /**
+   * Load schools for QR generation dropdown
+   */
+  async function loadSchoolsForQRGeneration() {
+    try {
+      const response = await $.ajax({
+        url: `${API_BASE_URL}vespa-customers`,
+        type: 'GET',
+        xhrFields: { withCredentials: true }
+      });
+      
+      const schoolSelect = document.getElementById('qr-school-select');
+      if (!schoolSelect) return;
+      
+      if (response.success && response.customers && response.customers.length > 0) {
+        schoolSelect.innerHTML = '<option value="">-- Select a school --</option>';
+        response.customers.forEach(customer => {
+          const option = document.createElement('option');
+          option.value = customer.id;
+          option.textContent = customer.name;
+          option.dataset.logo = customer.logoUrl || '';
+          schoolSelect.appendChild(option);
+        });
+      } else {
+        schoolSelect.innerHTML = '<option value="">-- No schools found --</option>';
+      }
+    } catch (error) {
+      debugLog('Error loading schools for QR generation:', error, 'error');
+      showError('Failed to load schools. Please refresh and try again.');
+    }
+  }
+
+  /**
+   * Handle school selection for QR generation
+   */
+  async function handleQRSchoolSelection(event) {
+    const customerId = event.target.value;
+    const schoolDetails = document.getElementById('qr-school-details');
+    const generateBtn = document.getElementById('generate-registration-link-btn');
+    
+    if (!customerId) {
+      schoolDetails.style.display = 'none';
+      generateBtn.disabled = true;
+      return;
+    }
+    
+    try {
+      // Get school details
+      const selectedOption = event.target.selectedOptions[0];
+      document.getElementById('qr-school-name').textContent = selectedOption.textContent;
+      
+      // Get current logo from dataset or fetch from API
+      const response = await $.ajax({
+        url: `${API_BASE_URL}customer-admin-details?customerId=${customerId}`,
+        type: 'GET',
+        xhrFields: { withCredentials: true }
+      });
+      
+      if (response.success) {
+        // Show current logo
+        const currentLogo = response.customer?.field_3206 || '';
+        document.getElementById('qr-current-logo').textContent = currentLogo || 'None';
+        
+        // Show admin count
+        document.getElementById('qr-admin-count').textContent = response.admins?.length || 0;
+        
+        // If there's a logo, set it in the input for preview
+        if (currentLogo) {
+          document.getElementById('qr-logo-url').value = currentLogo;
+          handleLogoPreview({ target: { value: currentLogo } });
+        }
+      }
+      
+      schoolDetails.style.display = 'block';
+      generateBtn.disabled = false;
+      
+    } catch (error) {
+      debugLog('Error fetching school details:', error, 'error');
+      schoolDetails.style.display = 'block';
+      generateBtn.disabled = false;
+    }
+  }
+
+  /**
+   * Handle logo URL preview
+   */
+  function handleLogoPreview(event) {
+    const logoUrl = event.target.value.trim();
+    const previewDiv = document.getElementById('logo-preview');
+    const previewImg = document.getElementById('logo-preview-img');
+    
+    if (!logoUrl) {
+      previewDiv.style.display = 'none';
+      return;
+    }
+    
+    // Simple URL validation
+    try {
+      new URL(logoUrl);
+      previewImg.src = logoUrl;
+      previewDiv.style.display = 'block';
+      
+      previewImg.onerror = () => {
+        previewDiv.style.display = 'none';
+        showError('Unable to load logo preview. Please check the URL.');
+      };
+    } catch (e) {
+      previewDiv.style.display = 'none';
+    }
   }
 
   /**
@@ -4635,28 +4791,22 @@ function bindStepEvents() {
       closeModal();
       
       // Show loading
-      showModal('Generating Registration Link', '<div style="text-align: center; padding: 20px;">Generating link and QR code...</div>');
+      showModal('Generating Registration Link', '<div style="text-align: center; padding: 20px;"><div class="vespa-spinner"></div><p>Generating link and QR code...</p></div>');
       
-      // Prepare the data for the link
-      const linkData = {
-        customerId: selectedSchool?.id || userContext.customerId,
-        customerName: selectedSchool?.name || 'Your School',
-        adminId: userContext.userId,
-        adminEmail: userContext.userEmail,
-        requireSchoolEmail: options.requireSchoolEmail,
-        autoApprove: options.autoApprove,
-        customMessage: options.customMessage,
-        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() // 1 year from now
-      };
+      // Call the new API endpoint to generate and store the link
+      const response = await $.ajax({
+        url: `${API_BASE_URL}self-registration/generate-link`,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(options),
+        xhrFields: { withCredentials: true }
+      });
       
-      // Encode the data
-      const encodedData = btoa(JSON.stringify(linkData));
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to generate link');
+      }
       
-      // Create the registration URL using jsDelivr CDN
-      const registrationUrl = `https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/self-registration-form1a.html?data=${encodedData}`;
-      
-      // Generate QR code
-      const qrCanvas = document.createElement('canvas');
+      debugLog('Registration link generated:', response);
       
       // Load QR code library if not already loaded
       if (typeof QRCode === 'undefined') {
@@ -4666,52 +4816,56 @@ function bindStepEvents() {
       // Display the link and QR code
       const resultContent = `
         <div class="vespa-registration-link-result">
-          <h4>Self-Registration Link Generated Successfully!</h4>
+          <h4>✅ Student Registration QR Code Generated!</h4>
+          
+          <div class="vespa-qr-code" style="text-align: center; margin: 20px 0;">
+            <div id="qrcode" style="display: inline-block; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></div>
+          </div>
           
           <div class="vespa-link-display" style="margin: 20px 0;">
-            <label>Registration URL:</label>
+            <label style="font-weight: bold;">Registration URL:</label>
             <div style="display: flex; align-items: center; margin-top: 5px;">
-              <input type="text" id="registration-url" value="${registrationUrl}" readonly style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px 0 0 4px;">
+              <input type="text" id="registration-url" value="${response.registrationUrl}" readonly 
+                style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px 0 0 4px; font-size: 12px;">
               <button id="copy-url-btn" class="vespa-button primary" style="border-radius: 0 4px 4px 0; margin: 0;">Copy</button>
             </div>
           </div>
           
-          <div class="vespa-qr-code" style="text-align: center; margin: 20px 0;">
-            <div id="qrcode" style="display: inline-block;"></div>
-          </div>
-          
           <div class="vespa-link-details" style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0;">
-            <h5>Link Details:</h5>
+            <h5>QR Code Details:</h5>
             <ul style="margin: 10px 0; padding-left: 20px;">
-              <li>Valid until: ${new Date(linkData.expiresAt).toLocaleDateString()}</li>
-              <li>School email required: ${options.requireSchoolEmail ? 'Yes' : 'No'}</li>
-              <li>Auto-approve: ${options.autoApprove ? 'Yes' : 'No'}</li>
-              ${options.customMessage ? `<li>Custom message included</li>` : ''}
+              <li><strong>School:</strong> ${response.configSettings.customerName}</li>
+              <li><strong>Valid until:</strong> ${new Date(response.expiresAt).toLocaleDateString()}</li>
+              <li><strong>School email required:</strong> ${response.configSettings.requireSchoolEmail ? 'Yes' : 'No'}</li>
+              <li><strong>Auto-approve:</strong> ${response.configSettings.autoApprove ? 'Yes' : 'No'}</li>
+              ${response.configSettings.customMessage ? `<li><strong>Custom message:</strong> ${response.configSettings.customMessage}</li>` : ''}
+              <li><strong>Link ID:</strong> <code>${response.linkId}</code></li>
             </ul>
           </div>
           
           <div class="vespa-info-box" style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 12px; margin: 15px 0;">
-            <div class="vespa-info-icon" style="display: inline-block; margin-right: 8px;">ℹ️</div>
+            <div class="vespa-info-icon" style="display: inline-block; margin-right: 8px;">💡</div>
             <div class="vespa-info-content" style="display: inline-block; width: calc(100% - 30px); vertical-align: top;">
-              Share this link or QR code with students. They will be able to self-register with their school email and select their tutors and teachers.
+              <strong>For your webinar:</strong> Display this QR code on screen. Students can scan it with their phones to register immediately. All staff admins will be automatically connected to registering students.
             </div>
           </div>
           
-          <div class="vespa-modal-actions" style="margin-top: 20px; text-align: right;">
-            <button id="download-qr-btn" class="vespa-button secondary">Download QR Code</button>
+          <div class="vespa-modal-actions" style="margin-top: 20px; text-align: right; display: flex; gap: 10px; justify-content: flex-end;">
+            <button id="download-qr-btn" class="vespa-button secondary">📥 Download QR Code</button>
+            <button id="view-links-btn" class="vespa-button secondary">📋 View All Links</button>
             <button id="close-registration-result-btn" class="vespa-button primary">Close</button>
           </div>
         </div>
       `;
       
-      showModal('Registration Link Generated', resultContent);
+      showModal('QR Code Generated Successfully', resultContent);
       
       // Generate the QR code
       setTimeout(() => {
         new QRCode(document.getElementById("qrcode"), {
-          text: registrationUrl,
-          width: 256,
-          height: 256,
+          text: response.registrationUrl,
+          width: 300,
+          height: 300,
           colorDark: "#000000",
           colorLight: "#ffffff",
           correctLevel: QRCode.CorrectLevel.H
@@ -4730,17 +4884,23 @@ function bindStepEvents() {
         const canvas = document.querySelector('#qrcode canvas');
         if (canvas) {
           const link = document.createElement('a');
-          link.download = 'vespa-registration-qr.png';
+          const schoolName = response.configSettings.customerName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+          link.download = `vespa_qr_${schoolName}_${new Date().toISOString().slice(0,10)}.png`;
           link.href = canvas.toDataURL();
           link.click();
         }
+      });
+      
+      document.getElementById('view-links-btn').addEventListener('click', () => {
+        closeModal();
+        showQRLinksManagement();
       });
       
       document.getElementById('close-registration-result-btn').addEventListener('click', closeModal);
       
     } catch (error) {
       debugLog('Error generating registration link:', error, 'error');
-      showError('Failed to generate registration link. Please try again.');
+      showError(`Failed to generate registration link: ${error.message}`);
       closeModal();
     }
   }
@@ -4756,6 +4916,231 @@ function bindStepEvents() {
       script.onerror = reject;
       document.head.appendChild(script);
     });
+  }
+
+  /**
+   * Show QR Links Management interface (Super Users only)
+   */
+  function showQRLinksManagement() {
+    debugLog("Opening QR Links Management interface");
+    
+    const modalContent = `
+      <div class="vespa-qr-links-management">
+        <h3>Manage Registration QR Codes</h3>
+        <p>View and manage all generated registration links.</p>
+        
+        <div id="qr-links-loading" style="text-align: center; padding: 20px;">
+          <div class="vespa-spinner"></div>
+          <p>Loading registration links...</p>
+        </div>
+        
+        <div id="qr-links-container" style="display: none;">
+          <div id="qr-links-list"></div>
+        </div>
+        
+        <div class="vespa-modal-actions" style="margin-top: 20px; text-align: right;">
+          <button id="create-new-qr-btn" class="vespa-button primary">➕ Create New QR Code</button>
+          <button id="close-qr-management-btn" class="vespa-button secondary">Close</button>
+        </div>
+      </div>
+    `;
+    
+    showModal('QR Code Management', modalContent);
+    
+    // Load QR links
+    loadQRLinks();
+    
+    // Add event listeners
+    document.getElementById('create-new-qr-btn').addEventListener('click', () => {
+      closeModal();
+      showSelfRegistrationModal();
+    });
+    
+    document.getElementById('close-qr-management-btn').addEventListener('click', closeModal);
+  }
+
+  /**
+   * Load all QR links
+   */
+  async function loadQRLinks() {
+    try {
+      // For super users, we need to get all QR links across all customers
+      // This would require a new API endpoint to fetch QR links
+      const response = await $.ajax({
+        url: `${API_BASE_URL}self-registration/links`,
+        type: 'GET',
+        xhrFields: { withCredentials: true }
+      });
+      
+      const container = document.getElementById('qr-links-container');
+      const listContainer = document.getElementById('qr-links-list');
+      const loadingDiv = document.getElementById('qr-links-loading');
+      
+      if (response.success && response.links && response.links.length > 0) {
+        let linksHtml = `
+          <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <thead>
+                <tr style="background: #f8f9fa;">
+                  <th style="padding: 10px; text-align: left; border-bottom: 2px solid #dee2e6;">School</th>
+                  <th style="padding: 10px; text-align: left; border-bottom: 2px solid #dee2e6;">Created</th>
+                  <th style="padding: 10px; text-align: left; border-bottom: 2px solid #dee2e6;">Expires</th>
+                  <th style="padding: 10px; text-align: center; border-bottom: 2px solid #dee2e6;">Usage</th>
+                  <th style="padding: 10px; text-align: center; border-bottom: 2px solid #dee2e6;">Status</th>
+                  <th style="padding: 10px; text-align: center; border-bottom: 2px solid #dee2e6;">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+        `;
+        
+        response.links.forEach(link => {
+          const configSettings = JSON.parse(link.field_3519 || '{}');
+          const isExpired = new Date(configSettings.expiresAt) < new Date();
+          const customerName = link.field_3514_raw?.[0]?.identifier || 'Unknown School';
+          
+          linksHtml += `
+            <tr style="border-bottom: 1px solid #dee2e6;">
+              <td style="padding: 10px;">${customerName}</td>
+              <td style="padding: 10px;">${new Date(link.field_3516).toLocaleDateString()}</td>
+              <td style="padding: 10px;">${new Date(configSettings.expiresAt).toLocaleDateString()}</td>
+              <td style="padding: 10px; text-align: center;">${link.field_3518 || 0}</td>
+              <td style="padding: 10px; text-align: center;">
+                <span style="
+                  padding: 4px 8px;
+                  border-radius: 4px;
+                  font-size: 12px;
+                  background: ${isExpired ? '#f8d7da' : '#d4edda'};
+                  color: ${isExpired ? '#721c24' : '#155724'};
+                ">
+                  ${isExpired ? 'Expired' : 'Active'}
+                </span>
+              </td>
+              <td style="padding: 10px; text-align: center;">
+                <button class="vespa-button secondary small-button" onclick="viewQRCode('${link.field_3513}')">
+                  View QR
+                </button>
+                ${isExpired ? `
+                  <button class="vespa-button secondary small-button" onclick="regenerateQRLink('${link.id}')">
+                    Regenerate
+                  </button>
+                ` : ''}
+              </td>
+            </tr>
+          `;
+        });
+        
+        linksHtml += `
+              </tbody>
+            </table>
+          </div>
+        `;
+        
+        listContainer.innerHTML = linksHtml;
+      } else {
+        listContainer.innerHTML = `
+          <div style="text-align: center; padding: 40px; color: #666;">
+            <p>No registration links found.</p>
+            <p>Create your first QR code to get started.</p>
+          </div>
+        `;
+      }
+      
+      loadingDiv.style.display = 'none';
+      container.style.display = 'block';
+      
+    } catch (error) {
+      debugLog('Error loading QR links:', error, 'error');
+      document.getElementById('qr-links-loading').innerHTML = `
+        <div style="color: #dc3545; padding: 20px;">
+          <p>Failed to load registration links.</p>
+          <p>${error.message || 'Please try again.'}</p>
+        </div>
+      `;
+    }
+  }
+
+  /**
+   * View a QR code
+   */
+  window.viewQRCode = async function(linkId) {
+    const registrationUrl = `https://4sighteducation.github.io/vespa-upload-bridge/self-registration-form.html?id=${linkId}`;
+    
+    // Load QR code library if needed
+    if (typeof QRCode === 'undefined') {
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js');
+    }
+    
+    const modalContent = `
+      <div style="text-align: center;">
+        <div id="qr-view" style="display: inline-block; background: white; padding: 20px; border-radius: 8px;"></div>
+        <div style="margin-top: 20px;">
+          <p><strong>Registration URL:</strong></p>
+          <code style="background: #f8f9fa; padding: 8px; border-radius: 4px; display: block; margin: 10px 0;">
+            ${registrationUrl}
+          </code>
+        </div>
+        <div class="vespa-modal-actions" style="margin-top: 20px;">
+          <button class="vespa-button secondary" onclick="downloadQRFromView('${linkId}')">Download QR</button>
+          <button class="vespa-button primary" onclick="closeModal()">Close</button>
+        </div>
+      </div>
+    `;
+    
+    showModal('View QR Code', modalContent);
+    
+    // Generate QR code
+    setTimeout(() => {
+      new QRCode(document.getElementById("qr-view"), {
+        text: registrationUrl,
+        width: 300,
+        height: 300,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.H
+      });
+    }, 100);
+  }
+
+  /**
+   * Download QR from view modal
+   */
+  window.downloadQRFromView = function(linkId) {
+    const canvas = document.querySelector('#qr-view canvas');
+    if (canvas) {
+      const link = document.createElement('a');
+      link.download = `vespa_qr_${linkId}_${new Date().toISOString().slice(0,10)}.png`;
+      link.href = canvas.toDataURL();
+      link.click();
+    }
+  }
+
+  /**
+   * Regenerate an expired QR link
+   */
+  window.regenerateQRLink = async function(qrLinkId) {
+    if (!confirm('Regenerate this QR code for another year?')) return;
+    
+    try {
+      const response = await $.ajax({
+        url: `${API_BASE_URL}self-registration/regenerate-link`,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ qrLinkId, expiresIn: 365 }),
+        xhrFields: { withCredentials: true }
+      });
+      
+      if (response.success) {
+        showSuccess('QR code regenerated successfully!');
+        // Reload the list
+        loadQRLinks();
+      } else {
+        throw new Error(response.message || 'Failed to regenerate link');
+      }
+      
+    } catch (error) {
+      debugLog('Error regenerating link:', error, 'error');
+      showError(`Failed to regenerate link: ${error.message}`);
+    }
   }
 
   /**
@@ -6238,6 +6623,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       renderStep(1);
     }
   }
+
 
 
 
