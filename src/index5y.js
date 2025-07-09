@@ -2048,16 +2048,16 @@ function renderSelectTypeStep() {
         </div>
         
         <div class="vespa-form-group" style="margin-bottom: 15px;">
-          <label for="student-tutors">Tutor(s) <span style="color: red;">*</span></label>
-          <select id="student-tutors" name="tutors" multiple required style="height: 100px;">
+          <label for="student-tutors">Tutor(s) (Optional)</label>
+          <select id="student-tutors" name="tutors" multiple style="height: 100px;">
             <option value="">Loading tutors...</option>
           </select>
           <small>Hold Ctrl/Cmd to select multiple</small>
         </div>
         
         <div class="vespa-form-group" style="margin-bottom: 15px;">
-          <label for="student-hoy">Head of Year <span style="color: red;">*</span></label>
-          <select id="student-hoy" name="headOfYear" required>
+          <label for="student-hoy">Head of Year (Optional)</label>
+          <select id="student-hoy" name="headOfYear">
             <option value="">Loading heads of year...</option>
           </select>
         </div>
@@ -6210,9 +6210,6 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       renderStep(1);
     }
   }
-
-
-
 
 
 
