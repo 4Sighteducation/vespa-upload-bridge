@@ -1982,8 +1982,8 @@ function renderSelectTypeStep() {
             <input type="text" id="student-uln" name="uln" required placeholder="10-digit ULN">
           </div>
           <div class="vespa-form-group">
-            <label for="student-upn">UPN (Optional)</label>
-            <input type="text" id="student-upn" name="upn" placeholder="e.g., A123456">
+            <label for="student-upn">UPN <span style="color: red;">*</span></label>
+            <input type="text" id="student-upn" name="upn" required placeholder="e.g., A123456">
           </div>
         </div>
         
@@ -3924,7 +3924,7 @@ function bindStepEvents() {
         
         csvData = {
           'ULN': form.uln.value.trim(),
-          'UPN': form.upn.value.trim() || '',
+          'UPN': form.upn.value.trim(), // Required field
           'Firstname': form.firstName.value.trim(),
           'Lastname': form.lastName.value.trim(),
           'Student Email': form.email.value.trim(),
@@ -3950,7 +3950,7 @@ function bindStepEvents() {
         // Always include userId at the top level for the API
         userId: userContext?.userId,
         userEmail: userContext?.userEmail || '',
-        isEmulating: isEmulating,
+        isEmulating: !!isEmulating, // Force to boolean
         loggedInUser: { // Always send the actual logged-in user
           userId: userContext?.userId,
           userEmail: userContext?.userEmail || '',
@@ -6238,6 +6238,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       renderStep(1);
     }
   }
+
 
 
 
