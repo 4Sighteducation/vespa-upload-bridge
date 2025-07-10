@@ -312,16 +312,14 @@
                     
                     <div class="form-group">
                         <label for="tutor-group">Tutor Group</label>
-                        <select id="tutor-group" name="tutorGroup">
-                            <option value="">Select tutor group</option>
-                        </select>
-                        <div class="help-text">Select your year group first</div>
+                        <input type="text" id="tutor-group" name="tutorGroup" placeholder="e.g., 12A, 13B">
+                        <div class="help-text">Enter your tutor group if you know it</div>
                         <div class="error-text" id="tutor-group-error"></div>
                     </div>
                 </div>
                 
                 <div class="form-group">
-                    <label for="tutors">Tutor(s)</label>
+                    <label for="tutors">Tutor(s) *</label>
                     <div class="multi-select" id="tutors-select">
                         <div class="multi-select-display" id="tutors-display">
                             <span style="color: #999;">Select your tutor(s)</span>
@@ -384,8 +382,7 @@
         let staffData = {
             tutors: [],
             headsOfYear: [],
-            subjectTeachers: [],
-            tutorGroups: []
+            subjectTeachers: []
         };
         let selectedData = {
             tutors: [],
@@ -476,6 +473,14 @@
                         updateMultiSelectOptions('tutors', staffData.tutors);
                         updateMultiSelectOptions('hoy', staffData.headsOfYear);
                         updateMultiSelectOptions('teachers', staffData.subjectTeachers);
+                        
+                        // Hide dropdowns if no data available
+                        if (!data.showHeadsOfYear) {
+                            document.getElementById('hoy-select').closest('.form-group').style.display = 'none';
+                        }
+                        if (!data.showSubjectTeachers) {
+                            document.getElementById('teachers-select').closest('.form-group').style.display = 'none';
+                        }
                     }
                 } else {
                     console.error('Failed to load staff data');
@@ -495,7 +500,7 @@
             document.getElementById('year-group').addEventListener('change', handleYearGroupChange);
             
             // Tutor group change
-            document.getElementById('tutor-group').addEventListener('change', handleTutorGroupChange);
+            document.getElementById('tutor-group').addEventListener('blur', handleTutorGroupChange); // Changed to blur
             
             // Multi-select handlers
             setupMultiSelect('tutors');
@@ -509,26 +514,10 @@
         // Handle year group change
         function handleYearGroupChange(e) {
             const yearGroup = e.target.value;
-            const tutorGroupSelect = document.getElementById('tutor-group');
+            const tutorGroupInput = document.getElementById('tutor-group');
             
-            // Clear tutor group
-            tutorGroupSelect.innerHTML = '<option value="">Select tutor group</option>';
-            
-            if (yearGroup) {
-                // Filter tutor groups based on year
-                // This would come from the API data
-                const groups = staffData.tutorGroups.filter(g => g.yearGroup === yearGroup);
-                
-                groups.forEach(group => {
-                    const option = document.createElement('option');
-                    option.value = group.id;
-                    option.textContent = group.name;
-                    tutorGroupSelect.appendChild(option);
-                });
-                
-                // Update help text
-                tutorGroupSelect.nextElementSibling.textContent = groups.length ? 'Select your tutor group' : 'No tutor groups available for this year';
-            }
+            // Clear tutor group input
+            tutorGroupInput.value = '';
             
             // Reset dependent fields
             handleTutorGroupChange({ target: { value: '' } });
@@ -536,21 +525,12 @@
         
         // Handle tutor group change
         function handleTutorGroupChange(e) {
-            const tutorGroup = e.target.value;
+            const tutorGroup = e.target.value.trim();
             const yearGroup = document.getElementById('year-group').value;
             
-            if (yearGroup && tutorGroup) {
-                // Filter tutors based on year and group
-                const filteredTutors = staffData.tutors.filter(t => 
-                    t.yearGroups.includes(yearGroup) && t.tutorGroups.includes(tutorGroup)
-                );
-                
-                // Update tutors dropdown
-                updateMultiSelectOptions('tutors', filteredTutors);
-                
-                // Show warning if tutor doesn't match but allow selection
-                // This is handled in the multi-select logic
-            }
+            // No filtering needed since we don't have yearGroups/tutorGroups data on staff
+            // Just update the multi-select with all available tutors
+            updateMultiSelectOptions('tutors', staffData.tutors);
         }
         
         // Setup multi-select dropdown
@@ -578,10 +558,10 @@
             options.forEach(option => {
                 const div = document.createElement('div');
                 div.className = 'multi-select-option';
-                div.textContent = option.name;
-                div.dataset.value = option.id;
+                div.textContent = option.displayName || option.name; // Use displayName if available
+                div.dataset.value = option.email; // Store email as value
                 
-                if (selectedData[id].includes(option.id)) {
+                if (selectedData[id].includes(option.email)) { // Check against email
                     div.classList.add('selected');
                 }
                 
@@ -595,12 +575,12 @@
         
         // Toggle multi-select option
         function toggleMultiSelectOption(id, option) {
-            const index = selectedData[id].indexOf(option.id);
+            const index = selectedData[id].indexOf(option.email); // Use email instead of id
             
             if (index > -1) {
                 selectedData[id].splice(index, 1);
             } else {
-                selectedData[id].push(option.id);
+                selectedData[id].push(option.email); // Store email instead of id
             }
             
             updateMultiSelectDisplay(id);
@@ -615,12 +595,12 @@
             if (selectedData[id].length === 0) {
                 display.innerHTML = '<span style="color: #999;">Select...</span>';
             } else {
-                selectedData[id].forEach(selectedId => {
-                    const item = staffData[id].find(s => s.id === selectedId);
+                selectedData[id].forEach(selectedEmail => {
+                    const item = staffData[id].find(s => s.email === selectedEmail);
                     if (item) {
                         const tag = document.createElement('span');
                         tag.className = 'selected-tag';
-                        tag.innerHTML = `${item.name} <span class="remove" data-id="${selectedId}">&times;</span>`;
+                        tag.innerHTML = `${item.displayName || item.name} <span class="remove" data-id="${item.email}">&times;</span>`;
                         
                         tag.querySelector('.remove').addEventListener('click', (e) => {
                             e.stopPropagation();
@@ -686,7 +666,7 @@
                 lastname: document.getElementById('lastname').value.trim(),
                 email: document.getElementById('email').value.trim(),
                 yearGroup: document.getElementById('year-group').value,
-                tutorGroup: document.getElementById('tutor-group').value,
+                tutorGroup: document.getElementById('tutor-group').value.trim(),
                 tutors: selectedData.tutors,
                 headsOfYear: selectedData.headsOfYear,
                 subjectTeachers: selectedData.subjectTeachers,
@@ -755,6 +735,16 @@
                 isValid = false;
             }
             
+            // Validate at least one tutor is selected
+            if (selectedData.tutors.length === 0) {
+                const tutorsError = document.getElementById('tutors-error');
+                tutorsError.textContent = 'Please select at least one tutor';
+                tutorsError.style.display = 'block';
+                isValid = false;
+            } else {
+                document.getElementById('tutors-error').style.display = 'none';
+            }
+            
             return isValid;
         }
         
@@ -779,5 +769,7 @@
         }
     </script>
 </body>
+</html>
+
 </html>
 
