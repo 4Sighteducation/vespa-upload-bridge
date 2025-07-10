@@ -1,0 +1,1956 @@
+/* VESPA Upload Wizard Styles */
+.vespa-upload-wizard {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  max-width: 900px;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 24px;
+  color: #333;
+  position: relative; /* Added for positioning the status bar */
+}
+
+#emulation-status-bar {
+  background-color: #fff8e1; /* A light yellow */
+  color: #856404;
+  padding: 12px 20px;
+  margin: -24px -24px 24px -24px; /* Extend to the edges of the parent padding */
+  border-bottom: 1px solid #ffeeba;
+  border-radius: 8px 8px 0 0; /* Match parent container's top radius */
+  font-size: 14px;
+}
+
+#emulation-status-bar strong {
+  color: #664d03;
+}
+
+#emulation-status-bar ul {
+  list-style-type: none;
+  padding-left: 0;
+  margin: 8px 0 0 0;
+  display: inline-block;
+}
+
+#emulation-status-bar li {
+  display: inline;
+  margin-right: 8px;
+  background-color: #fff0c2;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.vespa-upload-header {
+  text-align: center;
+  margin-bottom: 24px;
+  position: relative; /* For positioning header actions */
+}
+
+.vespa-upload-header h1 {
+  color: #007bff;
+  margin: 0 0 8px 0;
+  font-size: 28px;
+}
+
+.vespa-header-actions {
+  margin-top: 10px;
+  /* Removed absolute positioning to allow button to flow naturally */
+}
+
+.vespa-button.small-button {
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  position: relative;
+  z-index: 10;
+}
+
+.vespa-button.small-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Percentile Modal Specific Styles */
+.vespa-percentile-modal-content p {
+  margin-bottom: 16px;
+  line-height: 1.6;
+}
+
+.vespa-percentile-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.vespa-percentile-option {
+  display: flex;
+  align-items: center;
+}
+
+.vespa-percentile-option input[type="radio"] {
+  margin-right: 10px;
+  transform: scale(1.2); /* Slightly larger radio buttons */
+}
+
+.vespa-percentile-option label {
+  font-size: 1em;
+  cursor: pointer;
+}
+
+.vespa-percentile-info-trigger {
+  margin-bottom: 20px;
+  text-align: left; 
+}
+
+.vespa-info-btn {
+  background: none;
+  border: none;
+  color: #007bff;
+  cursor: pointer;
+  font-size: 0.9em;
+  padding: 5px;
+}
+
+.vespa-info-btn:hover {
+  text-decoration: underline;
+}
+
+.vespa-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid #eee;
+}
+
+/* Styles for the info modal within another modal */
+.vespa-modal .vespa-modal-body ul {
+  padding-left: 20px;
+  margin-top: 10px;
+}
+
+.vespa-modal .vespa-modal-body li {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.vespa-upload-steps {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  position: relative;
+}
+
+.vespa-upload-steps::before {
+  content: '';
+  position: absolute;
+  top: 24px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #e0e0e0;
+  z-index: 1;
+}
+
+.vespa-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 2;
+}
+
+.vespa-step-number {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #e0e0e0;
+  color: #666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  margin-bottom: 8px;
+  transition: all 0.3s;
+}
+
+.vespa-step.active .vespa-step-number {
+  background: #007bff;
+  color: #fff;
+}
+
+.vespa-step.completed .vespa-step-number {
+  background: #28a745;
+  color: #fff;
+}
+
+.vespa-step-title {
+  font-size: 14px;
+  color: #666;
+  text-align: center;
+}
+
+.vespa-step.active .vespa-step-title {
+  color: #007bff;
+  font-weight: bold;
+}
+
+.vespa-step.completed .vespa-step-title {
+  color: #28a745;
+}
+
+.vespa-upload-content {
+  min-height: 400px;
+  margin-bottom: 24px;
+}
+
+.vespa-upload-content h2 {
+  color: #007bff;
+  margin: 0 0 16px 0;
+}
+
+.vespa-upload-actions {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 16px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.vespa-button {
+  padding: 10px 20px;
+  border-radius: 4px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.vespa-button.primary {
+  background: #007bff;
+  color: #fff;
+}
+
+.vespa-button.primary:hover {
+  background: #0069d9;
+}
+
+.vespa-button.secondary {
+  background: #f8f9fa;
+  color: #212529;
+  border: 1px solid #ddd;
+}
+
+.vespa-button.secondary:hover {
+  background: #e2e6ea;
+}
+
+.vespa-button-container {
+  margin-top: 20px;
+  text-align: center;
+}
+
+/* Error and info boxes */
+.vespa-error {
+  background: #fff5f5;
+  border-left: 4px solid #f44336;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+}
+
+.vespa-error-icon {
+  margin-right: 12px;
+  font-size: 20px;
+}
+
+.vespa-info-box {
+  background: #f8f9fa;
+  border-radius: 4px;
+  padding: 16px;
+  margin: 16px 0;
+  display: flex;
+}
+
+.vespa-info-box.warning {
+  background: #fff3cd;
+  border-left: 4px solid #ffc107;
+}
+
+.vespa-info-icon {
+  margin-right: 12px;
+  font-size: 24px;
+}
+
+/* Success messages */
+.vespa-success {
+  background: #d4edda;
+  border-left: 4px solid #28a745;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+}
+
+.vespa-success-icon {
+  margin-right: 12px;
+  font-size: 20px;
+}
+
+/* Upload options */
+.vespa-upload-options {
+  display: flex;
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.vespa-upload-option {
+  flex: 1;
+  position: relative;
+}
+
+.vespa-upload-option input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.vespa-upload-option label {
+  display: block;
+  padding: 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.vespa-upload-option input[type="radio"]:checked + label {
+  border-color: #007bff;
+  background: #f0f7ff;
+}
+
+.vespa-option-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.vespa-option-title {
+  font-weight: bold;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.vespa-option-description {
+  font-size: 14px;
+  color: #666;
+}
+
+/* Style for sub-options to make them visually grouped */
+.vespa-upload-sub-options {
+  display: flex;
+  gap: 12px; /* Smaller gap for sub-options */
+  padding: 12px;
+  background-color: #e9f2ff; /* Slightly different background for distinction */
+  border-radius: 6px;
+  margin-top: 10px;
+}
+
+.vespa-upload-option.sub-option label {
+  padding: 12px; /* Slightly smaller padding */
+  /* background-color: #ffffff; /* Ensure sub-options have their own distinct background if needed */
+}
+
+.vespa-upload-option.sub-option .vespa-option-icon {
+  font-size: 28px; /* Smaller icon for sub-options */
+  margin-bottom: 6px;
+}
+
+.vespa-upload-option.sub-option .vespa-option-title {
+  font-size: 1em; /* Adjust title size if needed */
+}
+
+.vespa-upload-option.sub-option .vespa-option-description {
+  font-size: 0.85em; /* Smaller description */
+}
+
+/* File upload styles */
+.vespa-file-input {
+  position: relative;
+  margin-bottom: 24px;
+}
+
+.vespa-file-input input[type="file"] {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.vespa-file-input label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  background: #f8f9fa;
+  transition: all 0.2s;
+}
+
+.vespa-file-input:hover label {
+  background: #e9ecef;
+  border-color: #adb5bd;
+}
+
+.vespa-file-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.vespa-file-text {
+  text-align: center;
+  color: #666;
+}
+
+/* Table styles */
+.vespa-preview-table {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.vespa-preview-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.vespa-preview-table th,
+.vespa-preview-table td {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  text-align: left;
+}
+
+.vespa-preview-table th {
+  background: #f2f2f2;
+  font-weight: bold;
+}
+
+.vespa-preview-table .vespa-placeholder {
+  text-align: center;
+  color: #999;
+  padding: 32px;
+}
+
+/* Results styles */
+.vespa-results-status {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+
+.vespa-results-status.success {
+  background: #d4edda;
+  color: #155724;
+}
+
+.vespa-results-status.warning {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.vespa-results-status.error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.vespa-status-icon {
+  font-size: 32px;
+  margin-right: 16px;
+}
+
+.vespa-status-text {
+  font-weight: bold;
+}
+
+.vespa-summary-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.vespa-summary-item {
+  background: #f8f9fa;
+  padding: 12px;
+  border-radius: 4px;
+}
+
+.vespa-summary-label {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.vespa-validation-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.vespa-validation-badge.success {
+  background: #d4edda;
+  color: #155724;
+}
+
+.vespa-validation-badge.error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+/* Added style for the centered summary message in results step */
+.vespa-results-summary.centered-summary {
+  text-align: center;
+  padding: 20px;
+  /* Inherits other .vespa-results-summary styles like gap, margin-bottom if not overridden */
+  /* If it should not be a grid, override display property */
+  display: block; /* Or any other appropriate display type if not grid */
+}
+
+/* Modal styles */
+.vespa-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.3s ease;
+}
+
+.vespa-modal {
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  width: 90%;
+  max-width: 800px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: zoomIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes zoomIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.vespa-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.vespa-modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #2c3e50;
+  margin: 0;
+}
+
+.vespa-modal-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #6c757d;
+  line-height: 1;
+}
+
+.vespa-modal-body {
+  padding: 20px;
+}
+
+.vespa-modal-footer {
+  padding: 12px 20px;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* Template modal specific styles */
+.vespa-templates-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.vespa-template-card {
+  flex: 1;
+  min-width: 300px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  background-color: #fff;
+}
+
+.vespa-template-card h3 {
+  margin-top: 0;
+  color: #2c3e50;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 10px;
+}
+
+.vespa-template-preview {
+  margin-bottom: 15px;
+  overflow-x: auto;
+}
+
+.vespa-template-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.vespa-template-preview th,
+.vespa-template-preview td {
+  padding: 6px 8px;
+  border: 1px solid #e0e0e0;
+  text-align: left;
+}
+
+.vespa-template-preview th {
+  background-color: #f8f9fa;
+  font-weight: 500;
+}
+
+.vespa-template-info {
+  margin-bottom: 15px;
+}
+
+.vespa-template-info ul {
+  padding-left: 20px;
+  margin: 10px 0;
+}
+
+.vespa-template-info li {
+  margin-bottom: 5px;
+  font-size: 14px;
+}
+
+/* Debug panel styles */
+#vespa-upload-debug-indicator {
+  position: fixed;
+  bottom: 10px;
+  right: 10px;
+  background-color: #007bff;
+  color: white;
+  padding: 5px 10px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: monospace;
+  z-index: 9999;
+  opacity: 0.8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+#vespa-debug-panel {
+  position: fixed;
+  bottom: 50px;
+  right: 10px;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  padding: 15px;
+  width: 350px;
+  max-height: 500px;
+  overflow-y: auto;
+  z-index: 9998;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+/* School selection styles */
+.vespa-school-search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.vespa-school-search input {
+  flex: 1;
+  min-width: 200px;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.vespa-school-search select {
+  flex: 2;
+  min-width: 250px;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.vespa-school-details {
+  margin-top: 20px;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 4px;
+}
+
+.vespa-info-row {
+  display: flex;
+  margin-bottom: 8px;
+}
+
+.vespa-info-label {
+  width: 120px;
+  font-weight: bold;
+}
+
+/* Checkbox and input styles */
+.vespa-checkbox-group {
+  margin-bottom: 12px;
+}
+
+.vespa-input-group {
+  margin-bottom: 12px;
+}
+
+.vespa-input-group label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.vespa-input-group input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+/* Validation results specific styles */
+.vespa-validation-container {
+  margin-bottom: 24px;
+}
+
+.vespa-validation-status {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  background: #f8f9fa;
+}
+
+.vespa-validation-status.processing {
+  background: #e0f7fa;
+  color: #0288d1;
+}
+
+.vespa-validation-status.success {
+  background: #d4edda;
+  color: #155724;
+}
+
+.vespa-validation-status.error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.vespa-validation-preview {
+  margin-top: 24px;
+}
+
+.vespa-validation-preview h3 {
+  margin-bottom: 12px;
+}
+
+.vespa-results-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.vespa-result-item {
+  background: #f8f9fa;
+  padding: 12px;
+  border-radius: 4px;
+  min-width: 150px;
+}
+
+.vespa-result-label {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.vespa-result-value {
+  font-size: 18px;
+}
+
+.vespa-errors-container {
+  margin-top: 16px;
+}
+
+.vespa-error-item {
+  background: #f8f9fa;
+  border-left: 4px solid #f44336;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+}
+
+/* Spinner Animation */
+@keyframes vespa-spinner-anim {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.vespa-spinner {
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  border-left-color: #007bff; /* Spinner color */
+  border-radius: 50%;
+  width: 24px; /* Adjust size as needed */
+  height: 24px; /* Adjust size as needed */
+  animation: vespa-spinner-anim 1s linear infinite;
+}
+
+/* Generic Status Display Styling (if used as a fallback) */
+.vespa-status-display-generic {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border-radius: 4px;
+  font-size: 1em;
+}
+
+.vespa-status-display-generic .vespa-status-icon {
+  margin-right: 10px;
+  font-size: 20px; /* Default icon size */
+  display: flex; /* To center spinner if it's the icon */
+  align-items: center;
+}
+
+.vespa-status-display-generic .vespa-status-text {
+  font-weight: 500;
+}
+
+/* Specific styles for status types on the generic display */
+.vespa-status-display-generic.processing {
+  background-color: #e0f7fa;
+  color: #0288d1;
+  border-left: 4px solid #0288d1;
+}
+.vespa-status-display-generic.success {
+  background-color: #d4edda;
+  color: #155724;
+  border-left: 4px solid #155724;
+}
+.vespa-status-display-generic.error {
+  background-color: #f8d7da;
+  color: #721c24;
+  border-left: 4px solid #721c24;
+}
+.vespa-status-display-generic.info {
+  background-color: #e7e7e7;
+  color: #333;
+  border-left: 4px solid #6c757d;
+}
+.vespa-status-display-generic.ready {
+  background-color: #f8f9fa;
+  color: #333;
+  border-left: 4px solid #adb5bd;
+}
+
+/* Ensure .vespa-processing-status also benefits from icon centering for spinner */
+.vespa-processing-status .vespa-status-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center; /* If icon is larger than spinner */
+}
+
+/* In copyofindex2.css - Optional style for <code> tags in error messages */
+.vespa-error-item .vespa-error-value code {
+    background-color: #fee; /* Light pink/red background */
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-family: monospace;
+    color: #c00; /* Darker red text for the code */
+  }
+
+/* Error details styling */
+.vespa-error-details {
+  background-color: #fff5f5;
+  border: 1px solid #ffcdd2;
+  border-radius: 4px;
+  padding: 15px;
+  margin-top: 20px;
+}
+
+.vespa-error-details h4 {
+  color: #d32f2f;
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.vespa-errors-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.vespa-errors-list .vespa-error-item {
+  background-color: #ffebee;
+  border-left: 3px solid #f44336;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+/* Success message styling in results */
+.vespa-success-message {
+  color: #2e7d32;
+  font-weight: 500;
+  padding: 10px;
+  background-color: #e8f5e9;
+  border-radius: 4px;
+  text-align: center;
+}
+
+/* Error message styling in results */
+.vespa-error-message {
+  color: #c62828;
+  font-weight: 500;
+  padding: 10px;
+  background-color: #ffebee;
+  border-radius: 4px;
+  margin: 10px 0;
+}
+
+/* Code styling for job IDs */
+code {
+  background-color: #f5f5f5;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.9em;
+}
+
+/* Results status specific styling */
+.vespa-results-status.info {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.vespa-results-status.warning {
+  background: #fff3cd;
+  color: #856404;
+}
+
+/* Academic Data Management Styles */
+.vespa-academic-interface {
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  min-height: 500px;
+}
+
+.vespa-academic-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.vespa-academic-header h2 {
+  margin: 0;
+  color: #007bff;
+}
+
+.vespa-academic-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #dee2e6;
+}
+
+.vespa-tab {
+  padding: 10px 20px;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  font-weight: 500;
+  color: #6c757d;
+  transition: all 0.3s;
+}
+
+.vespa-tab:hover {
+  color: #007bff;
+}
+
+.vespa-tab.active {
+  color: #007bff;
+  border-bottom-color: #007bff;
+}
+
+.vespa-tab-content {
+  padding: 20px 0;
+}
+
+/* Prior Attainment Calculator Styles */
+.vespa-calculator-section {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.vespa-calculator-section h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #495057;
+}
+
+.vespa-calculator-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.vespa-calc-step {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+.vespa-calc-step h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #007bff;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vespa-calc-step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: #007bff;
+  color: white;
+  border-radius: 50%;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.vespa-calc-results {
+  margin-top: 20px;
+  padding: 15px;
+  background: #e7f3ff;
+  border-radius: 8px;
+  border: 1px solid #b3d7ff;
+}
+
+.vespa-calc-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.vespa-calc-stat {
+  text-align: center;
+  padding: 10px;
+  background: white;
+  border-radius: 6px;
+}
+
+.vespa-calc-stat-value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #007bff;
+}
+
+.vespa-calc-stat-label {
+  font-size: 14px;
+  color: #6c757d;
+  margin-top: 5px;
+}
+
+/* KS4 and KS5 specific styles */
+.vespa-stage-selector {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 20px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.vespa-stage-option {
+  flex: 1;
+  padding: 20px;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+  text-align: center;
+}
+
+.vespa-stage-option:hover {
+  border-color: #007bff;
+  background: #e7f3ff;
+}
+
+.vespa-stage-option.selected {
+  border-color: #007bff;
+  background: #007bff;
+  color: white;
+}
+
+.vespa-stage-icon {
+  font-size: 48px;
+  margin-bottom: 10px;
+}
+
+.vespa-stage-title {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.vespa-stage-description {
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+/* KS5 Workflow styles */
+.vespa-ks5-workflow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.vespa-workflow-step {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+  text-align: center;
+  transition: all 0.3s;
+}
+
+.vespa-workflow-step:hover {
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  transform: translateY(-2px);
+}
+
+.vespa-workflow-step.completed {
+  border-color: #28a745;
+  background: #d4edda;
+}
+
+.vespa-workflow-icon {
+  font-size: 48px;
+  margin-bottom: 15px;
+  color: #007bff;
+}
+
+.vespa-workflow-title {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 10px;
+  color: #495057;
+}
+
+.vespa-workflow-description {
+  font-size: 14px;
+  color: #6c757d;
+  margin-bottom: 15px;
+}
+
+.vespa-workflow-step .vespa-button {
+  width: 100%;
+}
+
+/* Staff check indicator */
+.vespa-staff-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.vespa-staff-indicator.exists {
+  background: #d4edda;
+  color: #155724;
+}
+
+.vespa-staff-indicator.missing {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+/* Disabled state for student upload when no staff */
+.vespa-upload-option.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.vespa-upload-option.disabled label {
+  cursor: not-allowed;
+}
+
+.vespa-upload-option.disabled input[type="radio"] {
+  pointer-events: none;
+}
+
+/* GCSE Prior Attainment Calculator Modal Styles */
+.vespa-prior-attainment-calculator {
+  padding: 20px;
+}
+
+.vespa-prior-attainment-calculator h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #007bff;
+}
+
+.vespa-calculator-info {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.vespa-calculator-info h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #495057;
+}
+
+.vespa-calculator-info ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.vespa-calculator-info li {
+  margin-bottom: 5px;
+}
+
+.vespa-file-upload-section {
+  margin: 20px 0;
+  text-align: center;
+}
+
+#gcse-file-info {
+  margin-top: 10px;
+  padding: 10px;
+  background: #e7f3ff;
+  border-radius: 4px;
+  border: 1px solid #b3d7ff;
+}
+
+#gcse-preview-section {
+  margin-top: 20px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+#gcse-preview-section h4 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #495057;
+}
+
+#gcse-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+}
+
+#gcse-preview-table thead {
+  background: #e9ecef;
+}
+
+#gcse-preview-table th,
+#gcse-preview-table td {
+  padding: 10px;
+  text-align: left;
+  border: 1px solid #dee2e6;
+}
+
+#gcse-preview-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+/* KS5 Workflow Container Styles */
+.vespa-ks5-workflow-container {
+  padding: 20px;
+}
+
+.vespa-workflow-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #dee2e6;
+}
+
+.vespa-workflow-header h2 {
+  margin: 0;
+  color: #007bff;
+}
+
+.vespa-workflow-steps {
+  display: grid;
+  gap: 20px;
+}
+
+.vespa-workflow-step {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  border-left: 4px solid #007bff;
+  transition: all 0.3s;
+}
+
+.vespa-workflow-step:hover {
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  transform: translateX(5px);
+}
+
+.vespa-workflow-step h3 {
+  color: #007bff;
+  margin-bottom: 15px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vespa-workflow-step p {
+  margin-bottom: 15px;
+  line-height: 1.6;
+}
+
+.vespa-workflow-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.vespa-workflow-tips {
+  margin-top: 30px;
+  padding: 20px;
+  background: #fff3cd;
+  border-radius: 8px;
+  border: 1px solid #ffeaa7;
+}
+
+.vespa-workflow-tips h4 {
+  color: #856404;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vespa-workflow-tips ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.vespa-workflow-tips li {
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+
+/* KS5 specific info boxes */
+.vespa-workflow-step .vespa-info-box {
+  padding: 12px;
+  margin-bottom: 15px;
+  border-radius: 6px;
+  border-left: 4px solid;
+}
+
+.vespa-workflow-step .vespa-info-box strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.vespa-workflow-step .vespa-info-box ul {
+  margin: 5px 0 0 20px;
+  padding: 0;
+}
+
+.vespa-workflow-step .vespa-info-box li {
+  margin-bottom: 5px;
+}
+
+/* Step-specific colors */
+.vespa-workflow-step:nth-child(1) {
+  border-left-color: #007bff;
+}
+
+.vespa-workflow-step:nth-child(2) {
+  border-left-color: #28a745;
+}
+
+.vespa-workflow-step:nth-child(2) .vespa-info-box {
+  background: #e8f5e9;
+  border-left-color: #28a745;
+}
+
+/* Button styles in workflow */
+.vespa-workflow-actions .vespa-button {
+  flex: 1;
+  min-width: 200px;
+}
+
+.vespa-workflow-actions .vespa-button.secondary {
+  background: #6c757d;
+  color: white;
+}
+
+.vespa-workflow-actions .vespa-button.secondary:hover {
+  background: #5a6268;
+}
+
+/* Responsive design for workflow */
+@media (max-width: 768px) {
+  .vespa-workflow-header {
+    flex-direction: column;
+    gap: 15px;
+    text-align: center;
+  }
+  
+  .vespa-workflow-actions {
+    flex-direction: column;
+  }
+  
+  .vespa-workflow-actions .vespa-button {
+    width: 100%;
+  }
+}
+
+/* Manual Entry Form Styles */
+#staff-manual-entry-form,
+#student-manual-entry-form {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.vespa-form-row {
+  display: grid;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.vespa-form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.vespa-form-group label {
+  font-weight: 600;
+  margin-bottom: 5px;
+  color: #495057;
+  font-size: 14px;
+}
+
+.vespa-form-group label span[style*="color: red"] {
+  margin-left: 3px;
+}
+
+.vespa-form-group input,
+.vespa-form-group select,
+.vespa-form-group textarea {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.vespa-form-group input:focus,
+.vespa-form-group select:focus,
+.vespa-form-group textarea:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
+}
+
+.vespa-form-group small {
+  margin-top: 4px;
+  color: #6c757d;
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Multi-select specific styling */
+.vespa-form-group select[multiple] {
+  min-height: 80px;
+  padding: 4px 8px;
+}
+
+.vespa-form-group select[multiple] option {
+  padding: 4px 8px;
+  line-height: 1.4;
+}
+
+.vespa-form-group select[multiple] option:checked {
+  background: linear-gradient(0deg, #007bff 0%, #007bff 100%);
+  color: white;
+  font-weight: 500;
+}
+
+/* Form actions */
+.vespa-form-actions {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #dee2e6;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-start;
+}
+
+/* Fix for conflicting form-row styles */
+#staff-manual-entry-form .vespa-form-row,
+#student-manual-entry-form .vespa-form-row {
+  display: grid !important;
+  gap: 15px !important;
+  margin-bottom: 15px !important;
+}
+
+/* Ensure proper grid layouts */
+#staff-manual-entry-form .vespa-form-row:first-of-type,
+#student-manual-entry-form .vespa-form-row:first-of-type {
+  grid-template-columns: 1fr 2fr 2fr;
+}
+
+#staff-manual-entry-form .vespa-form-row:not(:first-of-type),
+#student-manual-entry-form .vespa-form-row:not(:first-of-type) {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* Manual entry results */
+#manual-entry-results {
+  margin-top: 20px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+#manual-entry-results .vespa-results-status {
+  margin-bottom: 20px;
+}
+
+#manual-entry-results .vespa-results-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Responsive design for manual entry forms */
+@media (max-width: 768px) {
+  .vespa-form-row {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .vespa-form-actions {
+    flex-direction: column;
+  }
+  
+  .vespa-form-actions .vespa-button {
+    width: 100%;
+  }
+  
+  #manual-entry-results .vespa-results-actions {
+    flex-direction: column;
+  }
+  
+  #manual-entry-results .vespa-results-actions .vespa-button {
+    width: 100%;
+  }
+}
+
+/* Super User Customer Management Form Styles */
+.vespa-customer-form-container {
+  padding: 20px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.vespa-form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.vespa-form-header h2 {
+  margin: 0;
+  color: #007bff;
+}
+
+.vespa-flow-selector {
+  background: #e3f2fd;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.vespa-flow-selector label {
+  display: block;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.vespa-flow-selector select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+#new-customer-form {
+  background: #f8f9fa;
+  padding: 30px;
+  border-radius: 8px;
+}
+
+#new-customer-form h3 {
+  color: #007bff;
+  margin-bottom: 20px;
+  margin-top: 30px;
+}
+
+#new-customer-form h3:first-child {
+  margin-top: 0;
+}
+
+.vespa-form-group {
+  margin-bottom: 20px;
+}
+
+.vespa-form-group label {
+  display: block;
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.vespa-form-group input,
+.vespa-form-group select,
+.vespa-form-group textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.vespa-form-row {
+  display: grid;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.vespa-form-row.two-columns {
+  grid-template-columns: 1fr 1fr;
+}
+
+.vespa-form-row.three-columns {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+/* Order total display */
+#order-total {
+  font-size: 24px;
+  font-weight: bold;
+  color: #28a745;
+  padding: 8px;
+  background: #d4edda;
+  border-radius: 4px;
+  text-align: center;
+}
+
+/* Cycle configuration section */
+#cycle-section {
+  background: #fff8e1;
+  padding: 20px;
+  border-radius: 8px;
+  margin-top: 20px;
+}
+
+#cycle-section h3 {
+  color: #ff6f00;
+  margin-bottom: 20px;
+}
+
+#automatic-cycles-info {
+  background: #fff3cd;
+  padding: 15px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+#manual-cycles .vespa-form-row {
+  align-items: center;
+}
+
+#manual-cycles .vespa-form-row > div:first-child {
+  padding: 8px;
+  font-weight: bold;
+}
+
+.vespa-form-actions {
+  margin-top: 30px;
+  text-align: right;
+  padding-top: 20px;
+  border-top: 1px solid #ddd;
+}
+
+/* Radio button styling */
+.vespa-form-group input[type="radio"] {
+  width: auto;
+  margin-right: 8px;
+}
+
+.vespa-form-group label input[type="radio"] {
+  margin-right: 5px;
+}
+
+/* Required field indicator */
+.vespa-form-group label span[style*="color: red"] {
+  margin-left: 3px;
+}
+
+/* Emulation Settings Modal Styles */
+.vespa-emulation-settings {
+  padding: 20px;
+}
+
+.vespa-current-emulation {
+  margin: 20px 0;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.vespa-current-emulation h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #495057;
+}
+
+.vespa-current-emulation ul {
+  margin: 10px 0;
+  padding-left: 20px;
+}
+
+.vespa-emulation-actions {
+  margin-top: 20px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Emulation settings button in header */
+#emulation-settings-button {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
+#emulation-settings-button:hover {
+  background: #ffe8a1;
+  border-color: #ffd700;
+}
+
+/* Responsive design for customer form */
+@media (max-width: 768px) {
+  .vespa-form-header {
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .vespa-form-row {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .vespa-form-actions {
+    text-align: center;
+  }
+  
+  #order-total {
+    font-size: 20px;
+  }
+  
+  .vespa-emulation-actions {
+    flex-direction: column;
+  }
+  
+  .vespa-emulation-actions .vespa-button {
+    width: 100%;
+  }
+}
+
+/* Loading state for form submission */
+.vespa-form-loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.vespa-form-loading::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #007bff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Success/Error messages for customer form */
+.vespa-customer-message {
+  padding: 15px;
+  margin-bottom: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vespa-customer-message.success {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.vespa-customer-message.error {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.vespa-customer-message-icon {
+  font-size: 24px;
+}
+
+/* Renewal System Multi-Select Styles */
+select[multiple] {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  transition: border-color 0.2s;
+  cursor: pointer;
+}
+
+select[multiple]:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
+}
+
+select[multiple] option {
+  padding: 6px 10px;
+  line-height: 1.4;
+}
+
+/* Selected options style - works in most browsers */
+select[multiple] option:checked {
+  background: linear-gradient(0deg, #007bff 0%, #007bff 100%);
+  color: white;
+  font-weight: 500;
+}
+
+/* Style for the multi-select in renewal modal specifically */
+.renewal-form-row select[multiple] {
+  min-height: 100px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+/* Help text for multi-select */
+.renewal-form-row small {
+  display: block;
+  margin-top: 4px;
+  color: #666;
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Improve scrollbar appearance for the multi-select */
+.renewal-form-row select[multiple]::-webkit-scrollbar {
+  width: 8px;
+}
+
+.renewal-form-row select[multiple]::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.renewal-form-row select[multiple]::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.renewal-form-row select[multiple]::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+
