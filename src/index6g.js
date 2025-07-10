@@ -1,3 +1,6 @@
+
+
+
 /**
  * VESPA Upload Bridge - Configuration
  * 
@@ -387,7 +390,7 @@ function addStyles() {
   linkElement.id = 'vespa-upload-styles';
   linkElement.rel = 'stylesheet';
   linkElement.type = 'text/css';
-  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index6f.css';
+  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index6c.css';
   
   document.head.appendChild(linkElement);
   debugLog("Dynamically linked external CSS: " + linkElement.href, null, 'info');
@@ -4633,9 +4636,18 @@ function bindStepEvents() {
         <p>Create a QR code for students to self-register during webinars or events.</p>
         
         <div class="vespa-school-selection" style="margin: 20px 0;">
-          <label for="qr-school-select" style="display: block; font-weight: bold; margin-bottom: 10px;">
+          <label for="qr-school-search" style="display: block; font-weight: bold; margin-bottom: 10px;">
             Select School/Customer <span style="color: red;">*</span>
           </label>
+          
+          <div style="margin-bottom: 10px;">
+            <input type="text" id="qr-school-search" placeholder="Search for school..." 
+              style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            <div class="help-text" style="font-size: 12px; color: #666; margin-top: 5px;">
+              Type to search or select from dropdown below
+            </div>
+          </div>
+          
           <select id="qr-school-select" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
             <option value="">-- Loading schools... --</option>
           </select>
@@ -4704,6 +4716,9 @@ function bindStepEvents() {
     document.getElementById('qr-school-select').addEventListener('change', handleQRSchoolSelection);
     document.getElementById('qr-logo-url').addEventListener('input', handleLogoPreview);
     
+    // Add search functionality
+    document.getElementById('qr-school-search').addEventListener('input', handleQRSchoolSearch);
+    
     document.getElementById('generate-registration-link-btn').addEventListener('click', async () => {
       const schoolSelect = document.getElementById('qr-school-select');
       const customerId = schoolSelect.value;
@@ -4738,6 +4753,9 @@ function bindStepEvents() {
     }
   }
 
+  // Store schools data for search functionality
+  let qrSchoolsData = [];
+
   /**
    * Load schools for QR generation dropdown
    */
@@ -4753,20 +4771,71 @@ function bindStepEvents() {
       if (!schoolSelect) return;
       
       if (response.success && response.customers && response.customers.length > 0) {
-        schoolSelect.innerHTML = '<option value="">-- Select a school --</option>';
-        response.customers.forEach(customer => {
-          const option = document.createElement('option');
-          option.value = customer.id;
-          option.textContent = customer.name;
-          option.dataset.logo = customer.logoUrl || '';
-          schoolSelect.appendChild(option);
-        });
+        // Store schools data for search
+        qrSchoolsData = response.customers;
+        
+        // Populate dropdown
+        populateQRSchoolDropdown(qrSchoolsData);
       } else {
         schoolSelect.innerHTML = '<option value="">-- No schools found --</option>';
+        qrSchoolsData = [];
       }
     } catch (error) {
       debugLog('Error loading schools for QR generation:', error, 'error');
       showError('Failed to load schools. Please refresh and try again.');
+    }
+  }
+
+  /**
+   * Populate the school dropdown with filtered data
+   */
+  function populateQRSchoolDropdown(schools) {
+    const schoolSelect = document.getElementById('qr-school-select');
+    if (!schoolSelect) return;
+    
+    schoolSelect.innerHTML = '<option value="">-- Select a school --</option>';
+    schools.forEach(customer => {
+      const option = document.createElement('option');
+      option.value = customer.id;
+      option.textContent = customer.name;
+      option.dataset.logo = customer.logoUrl || '';
+      schoolSelect.appendChild(option);
+    });
+  }
+
+  /**
+   * Handle school search input
+   */
+  function handleQRSchoolSearch(event) {
+    const searchTerm = event.target.value.toLowerCase().trim();
+    
+    if (!searchTerm) {
+      // If search is empty, show all schools
+      populateQRSchoolDropdown(qrSchoolsData);
+      return;
+    }
+    
+    // Filter schools based on search term
+    const filteredSchools = qrSchoolsData.filter(school => 
+      school.name.toLowerCase().includes(searchTerm)
+    );
+    
+    if (filteredSchools.length > 0) {
+      populateQRSchoolDropdown(filteredSchools);
+    } else {
+      const schoolSelect = document.getElementById('qr-school-select');
+      schoolSelect.innerHTML = '<option value="">-- No schools found matching search --</option>';
+    }
+    
+    // Clear current selection if it doesn't match search
+    const currentSelection = document.getElementById('qr-school-select').value;
+    if (currentSelection) {
+      const selectedSchool = qrSchoolsData.find(s => s.id === currentSelection);
+      if (selectedSchool && !selectedSchool.name.toLowerCase().includes(searchTerm)) {
+        document.getElementById('qr-school-select').value = '';
+        document.getElementById('qr-school-details').style.display = 'none';
+        document.getElementById('generate-registration-link-btn').disabled = true;
+      }
     }
   }
 
@@ -6697,15 +6766,6 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       renderStep(1);
     }
   }
-
-
-
-
-
-
-
-
-
 
 
 
