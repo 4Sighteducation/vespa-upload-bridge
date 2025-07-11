@@ -724,9 +724,10 @@
                 console.log('Response data:', data);
                 
                 if (data.success) {
-                    staffData.tutors = data.tutors || [];
-                    staffData.headsOfYear = data.headsOfYear || [];
-                    staffData.subjectTeachers = data.subjectTeachers || [];
+                    // Process staff data to clean emails
+                    staffData.tutors = (data.tutors || []).map(processStaffMember);
+                    staffData.headsOfYear = (data.headsOfYear || []).map(processStaffMember);
+                    staffData.subjectTeachers = (data.subjectTeachers || []).map(processStaffMember);
                     allTutors = [...staffData.tutors];
                     
                     console.log('Staff data loaded:', {
@@ -735,10 +736,10 @@
                         teachers: staffData.subjectTeachers.length
                     });
                     
-                    // Update button texts
-                    updateButtonText('tutors', staffData.tutors.length > 0 ? 'Select your tutor(s)' : 'No tutors available');
-                    updateButtonText('hoy', staffData.headsOfYear.length > 0 ? 'Select head(s) of year' : 'No heads of year available');
-                    updateButtonText('teachers', staffData.subjectTeachers.length > 0 ? 'Select subject teachers' : 'No teachers available');
+                                            // Update button texts
+                        updateButtonText('tutors', staffData.tutors.length > 0 ? 'Select your tutor(s)' : 'No tutors available');
+                        updateButtonText('headsOfYear', staffData.headsOfYear.length > 0 ? 'Select head(s) of year' : 'No heads of year available');
+                        updateButtonText('subjectTeachers', staffData.subjectTeachers.length > 0 ? 'Select subject teachers' : 'No teachers available');
                     
                     // Hide sections if no data
                     if (staffData.headsOfYear.length === 0) {
@@ -783,15 +784,15 @@
                         allTutors = [...staffData.tutors];
                         
                         // Update UI
-                        updateButtonText('tutors', 'Select your tutor(s)');
-                        updateButtonText('hoy', 'Select head(s) of year');
-                        updateButtonText('teachers', 'Select subject teachers');
+                        updateButtonText('tutors', staffData.tutors.length > 0 ? 'Select your tutor(s)' : 'No tutors available');
+                        updateButtonText('headsOfYear', staffData.headsOfYear.length > 0 ? 'Select head(s) of year' : 'No heads of year available');
+                        updateButtonText('subjectTeachers', staffData.subjectTeachers.length > 0 ? 'Select subject teachers' : 'No teachers available');
                         
                         // Hide sections if no data
-                        if (!data.showHeadsOfYear || staffData.headsOfYear.length === 0) {
+                        if (staffData.headsOfYear.length === 0) {
                             document.getElementById('hoy-group').style.display = 'none';
                         }
-                        if (!data.showSubjectTeachers || staffData.subjectTeachers.length === 0) {
+                        if (staffData.subjectTeachers.length === 0) {
                             document.getElementById('teachers-group').style.display = 'none';
                         }
                         
@@ -830,7 +831,17 @@
         
         // Update button text
         function updateButtonText(type, text) {
-            const placeholder = document.getElementById(`${type}-placeholder`);
+            // Map type names to placeholder IDs
+            const placeholderIdMap = {
+                tutors: 'tutors-placeholder',
+                hoy: 'hoy-placeholder',
+                headsOfYear: 'hoy-placeholder',
+                teachers: 'teachers-placeholder',
+                subjectTeachers: 'teachers-placeholder'
+            };
+            
+            const placeholderId = placeholderIdMap[type] || `${type}-placeholder`;
+            const placeholder = document.getElementById(placeholderId);
             if (placeholder) {
                 placeholder.textContent = text;
             }
@@ -1033,8 +1044,26 @@
         
         // Update selection display
         function updateSelectionDisplay(type) {
-            const button = document.getElementById(`${type}-button`);
-            const placeholder = document.getElementById(`${type}-placeholder`);
+            // Map type names to button IDs
+            const buttonIdMap = {
+                tutors: 'tutors-button',
+                headsOfYear: 'hoy-button',
+                subjectTeachers: 'teachers-button'
+            };
+            
+            const placeholderIdMap = {
+                tutors: 'tutors-placeholder',
+                headsOfYear: 'hoy-placeholder',
+                subjectTeachers: 'teachers-placeholder'
+            };
+            
+            const button = document.getElementById(buttonIdMap[type]);
+            const placeholder = document.getElementById(placeholderIdMap[type]);
+            
+            if (!button || !placeholder) {
+                console.error('Button or placeholder not found for type:', type);
+                return;
+            }
             
             // Clear current content
             const existingBadges = button.querySelectorAll('.selected-badge');
@@ -1055,16 +1084,24 @@
                     if (staff) {
                         const badge = document.createElement('span');
                         badge.className = 'selected-badge';
-                        badge.innerHTML = `
-                            ${staff.displayName}
-                            <span class="remove" data-email="${email}" data-type="${type}">×</span>
-                        `;
                         
-                        badge.querySelector('.remove').addEventListener('click', (e) => {
+                        // Create text node for the display name
+                        const nameText = document.createTextNode(staff.displayName);
+                        badge.appendChild(nameText);
+                        
+                        // Create the remove button
+                        const removeBtn = document.createElement('span');
+                        removeBtn.className = 'remove';
+                        removeBtn.textContent = '×';
+                        removeBtn.setAttribute('data-email', email);
+                        removeBtn.setAttribute('data-type', type);
+                        
+                        removeBtn.addEventListener('click', (e) => {
                             e.stopPropagation();
                             removeSelection(type, email);
                         });
                         
+                        badge.appendChild(removeBtn);
                         button.insertBefore(badge, button.querySelector('.arrow'));
                     }
                 });
