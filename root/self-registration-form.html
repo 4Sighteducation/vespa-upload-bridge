@@ -2,57 +2,49 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VESPA Student Self-Registration</title>
     <style>
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            -webkit-tap-highlight-color: transparent;
         }
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background-color: #f0f2f5;
-            color: #1a1a1a;
+            background-color: #f5f5f5;
+            color: #333;
             line-height: 1.6;
-            min-height: 100vh;
-            position: relative;
-            -webkit-font-smoothing: antialiased;
         }
         
         .container {
-            max-width: 100%;
-            margin: 0;
-            padding: 0;
-            min-height: 100vh;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+        
+        .registration-card {
             background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 30px;
         }
         
         .header {
-            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-            color: white;
-            padding: 20px;
             text-align: center;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
         }
         
         .header h1 {
-            font-size: 24px;
-            font-weight: 600;
-            margin-bottom: 5px;
+            color: #007bff;
+            margin-bottom: 10px;
         }
         
         .school-name {
-            font-size: 16px;
-            opacity: 0.9;
-        }
-        
-        .form-container {
-            padding: 20px;
-            max-width: 500px;
-            margin: 0 auto;
+            font-size: 18px;
+            color: #666;
+            margin-bottom: 20px;
         }
         
         .custom-message {
@@ -60,376 +52,160 @@
             border-left: 4px solid #2196f3;
             padding: 15px;
             margin-bottom: 20px;
-            border-radius: 8px;
-            font-size: 14px;
-            color: #1565c0;
+            border-radius: 4px;
         }
         
         .form-group {
-            margin-bottom: 24px;
+            margin-bottom: 20px;
         }
         
         .form-group label {
             display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            color: #333;
-            font-size: 16px;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
         }
         
         .form-group input,
-        .form-group select {
+        .form-group select,
+        .form-group textarea {
             width: 100%;
-            padding: 14px 16px;
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
             font-size: 16px;
-            transition: all 0.3s ease;
-            background: #fafafa;
-            -webkit-appearance: none;
-            -moz-appearance: none;
-            appearance: none;
-        }
-        
-        .form-group select {
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23333' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 16px center;
-            padding-right: 40px;
+            transition: border-color 0.3s;
         }
         
         .form-group input:focus,
         .form-group select:focus {
             outline: none;
             border-color: #007bff;
-            background: white;
-            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
         }
         
         .form-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 12px;
+            gap: 15px;
         }
         
         .help-text {
-            font-size: 13px;
+            font-size: 12px;
             color: #666;
-            margin-top: 6px;
+            margin-top: 5px;
         }
         
         .error-text {
-            font-size: 13px;
+            font-size: 12px;
             color: #dc3545;
-            margin-top: 6px;
+            margin-top: 5px;
             display: none;
         }
         
-        /* Staff Selection Button */
-        .staff-select-button {
-            width: 100%;
-            padding: 14px 16px;
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            font-size: 16px;
-            background: #fafafa;
-            cursor: pointer;
-            text-align: left;
-            transition: all 0.3s ease;
+        .multi-select {
             position: relative;
-            min-height: 52px;
+        }
+        
+        .multi-select-display {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            background: white;
+            min-height: 44px;
             display: flex;
             align-items: center;
             flex-wrap: wrap;
-            gap: 6px;
+            gap: 5px;
         }
         
-        .staff-select-button:hover {
-            border-color: #007bff;
-            background: white;
-        }
-        
-        .staff-select-button:focus {
-            outline: none;
-            border-color: #007bff;
-            background: white;
-            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
-        }
-        
-        .staff-select-button .placeholder {
-            color: #999;
-            flex: 1;
-        }
-        
-        .staff-select-button .arrow {
+        .multi-select-dropdown {
             position: absolute;
-            right: 16px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #666;
-            transition: transform 0.3s ease;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         
-        /* Selected Staff Tags */
-        .selected-badge {
+        .multi-select-dropdown.open {
+            display: block;
+        }
+        
+        .multi-select-option {
+            padding: 8px 12px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .multi-select-option:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .multi-select-option.selected {
+            background-color: #e3f2fd;
+            font-weight: 600;
+        }
+        
+        .selected-tag {
             background: #007bff;
             color: white;
-            padding: 4px 10px;
-            border-radius: 16px;
-            font-size: 13px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            margin: 2px;
+            gap: 5px;
         }
         
-        .selected-badge .remove {
+        .selected-tag .remove {
             cursor: pointer;
             font-weight: bold;
-            font-size: 16px;
-            line-height: 1;
-            opacity: 0.8;
-            transition: opacity 0.2s;
         }
         
-        .selected-badge .remove:hover {
-            opacity: 1;
-        }
-        
-        /* Modal Styles */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 1000;
-            animation: fadeIn 0.3s ease;
-        }
-        
-        .modal.active {
-            display: flex;
-            align-items: flex-end;
-            justify-content: center;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        
-        .modal-content {
-            background: white;
-            width: 100%;
-            max-width: 500px;
-            max-height: 80vh;
-            border-radius: 20px 20px 0 0;
-            animation: slideUp 0.3s ease;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        @keyframes slideUp {
-            from { transform: translateY(100%); }
-            to { transform: translateY(0); }
-        }
-        
-        .modal-header {
-            padding: 20px;
-            border-bottom: 1px solid #e0e0e0;
-            position: relative;
-            flex-shrink: 0;
-        }
-        
-        .modal-title {
-            font-size: 20px;
-            font-weight: 600;
-            color: #333;
-            margin: 0;
-        }
-        
-        .modal-close {
-            position: absolute;
-            right: 20px;
-            top: 20px;
-            font-size: 28px;
-            color: #666;
-            cursor: pointer;
-            line-height: 1;
-            transition: color 0.2s;
-        }
-        
-        .modal-close:hover {
-            color: #333;
-        }
-        
-        .modal-search {
-            padding: 0 20px 20px;
-            flex-shrink: 0;
-        }
-        
-        .search-input {
-            width: 100%;
-            padding: 12px 16px;
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            font-size: 16px;
-            background: #fafafa;
-        }
-        
-        .search-input:focus {
-            outline: none;
-            border-color: #007bff;
-            background: white;
-        }
-        
-        .modal-body {
-            padding: 0 20px 20px;
-            overflow-y: auto;
-            flex: 1;
-            -webkit-overflow-scrolling: touch;
-        }
-        
-        .staff-item {
-            padding: 16px;
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            background: #fafafa;
-        }
-        
-        .staff-item:hover {
-            border-color: #007bff;
-            background: white;
-        }
-        
-        .staff-item.selected {
-            border-color: #007bff;
-            background: #e3f2fd;
-        }
-        
-        .staff-checkbox {
-            width: 24px;
-            height: 24px;
-            border: 2px solid #666;
-            border-radius: 6px;
-            position: relative;
-            transition: all 0.2s ease;
-            flex-shrink: 0;
-        }
-        
-        .staff-item.selected .staff-checkbox {
-            background: #007bff;
-            border-color: #007bff;
-        }
-        
-        .staff-checkbox::after {
-            content: '';
-            position: absolute;
-            left: 7px;
-            top: 3px;
-            width: 6px;
-            height: 12px;
-            border: solid white;
-            border-width: 0 2px 2px 0;
-            transform: rotate(45deg);
-            opacity: 0;
-            transition: opacity 0.2s ease;
-        }
-        
-        .staff-item.selected .staff-checkbox::after {
-            opacity: 1;
-        }
-        
-        .staff-info {
-            flex: 1;
-        }
-        
-        .staff-name {
-            font-size: 16px;
-            font-weight: 500;
-            color: #333;
-            margin-bottom: 2px;
-        }
-        
-        .staff-details {
-            font-size: 13px;
-            color: #666;
-        }
-        
-        .modal-footer {
-            padding: 20px;
-            border-top: 1px solid #e0e0e0;
-            flex-shrink: 0;
-            background: #fafafa;
-        }
-        
-        .modal-button {
-            width: 100%;
-            padding: 14px;
-            background: #007bff;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.3s ease;
-        }
-        
-        .modal-button:hover {
-            background: #0056b3;
-        }
-        
-        /* Submit Button */
         .submit-button {
             width: 100%;
-            padding: 16px;
+            padding: 12px;
             background: #007bff;
             color: white;
             border: none;
-            border-radius: 10px;
-            font-size: 18px;
+            border-radius: 4px;
+            font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
-            margin-top: 10px;
-            box-shadow: 0 4px 15px rgba(0, 123, 255, 0.2);
+            transition: background-color 0.3s;
         }
         
         .submit-button:hover {
             background: #0056b3;
-            box-shadow: 0 6px 20px rgba(0, 123, 255, 0.3);
         }
         
         .submit-button:disabled {
             background: #ccc;
             cursor: not-allowed;
-            box-shadow: none;
         }
         
-        /* Loading and Messages */
         .loading {
             display: none;
             text-align: center;
-            padding: 40px 20px;
+            margin: 20px 0;
         }
         
         .spinner {
             border: 3px solid #f3f3f3;
             border-top: 3px solid #007bff;
             border-radius: 50%;
-            width: 50px;
-            height: 50px;
+            width: 40px;
+            height: 40px;
             animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
+            margin: 0 auto;
         }
         
         @keyframes spin {
@@ -437,71 +213,56 @@
             100% { transform: rotate(360deg); }
         }
         
-        .message {
-            padding: 16px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            display: none;
-            font-size: 15px;
-        }
-        
         .success-message {
             background: #d4edda;
-            color: #155724;
             border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: none;
         }
         
         .error-message {
             background: #f8d7da;
-            color: #721c24;
             border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: none;
         }
         
         .expired-message {
             text-align: center;
-            padding: 40px 20px;
+            padding: 40px;
             color: #666;
         }
         
-        /* Mobile Optimizations */
-        @media (max-width: 400px) {
+        @media (max-width: 600px) {
+            .container {
+                margin: 20px;
+                padding: 10px;
+            }
+            
+            .registration-card {
+                padding: 20px;
+            }
+            
             .form-row {
                 grid-template-columns: 1fr;
             }
-            
-            .header h1 {
-                font-size: 20px;
-            }
-            
-            .form-container {
-                padding: 16px;
-            }
-        }
-        
-        /* iOS Specific Fixes */
-        @supports (-webkit-touch-callout: none) {
-            input, select, textarea {
-                font-size: 16px !important;
-            }
-        }
-        
-        /* No results message */
-        .no-results {
-            text-align: center;
-            padding: 40px 20px;
-            color: #666;
-            font-size: 16px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>VESPA Student Registration</h1>
-            <div class="school-name" id="school-name">Loading...</div>
-        </div>
-        
-        <div class="form-container">
+        <div class="registration-card">
+            <div class="header">
+                <h1>VESPA Student Registration</h1>
+                <div class="school-name" id="school-name">Loading...</div>
+            </div>
+            
             <div id="custom-message" class="custom-message" style="display: none;"></div>
             
             <div id="expired-message" class="expired-message" style="display: none;">
@@ -509,27 +270,27 @@
                 <p>This registration link has expired. Please contact your school administrator for a new link.</p>
             </div>
             
-            <div id="success-message" class="message success-message"></div>
-            <div id="error-message" class="message error-message"></div>
+            <div id="success-message" class="success-message"></div>
+            <div id="error-message" class="error-message"></div>
             
             <form id="registration-form" style="display: none;">
                 <div class="form-row">
                     <div class="form-group">
                         <label for="firstname">First Name *</label>
-                        <input type="text" id="firstname" name="firstname" required autocomplete="given-name">
+                        <input type="text" id="firstname" name="firstname" required>
                         <div class="error-text" id="firstname-error"></div>
                     </div>
                     
                     <div class="form-group">
                         <label for="lastname">Last Name *</label>
-                        <input type="text" id="lastname" name="lastname" required autocomplete="family-name">
+                        <input type="text" id="lastname" name="lastname" required>
                         <div class="error-text" id="lastname-error"></div>
                     </div>
                 </div>
                 
                 <div class="form-group">
                     <label for="email">Email Address *</label>
-                    <input type="email" id="email" name="email" required placeholder="Use your school email address" autocomplete="email">
+                    <input type="email" id="email" name="email" required placeholder="Use your school email address">
                     <div class="help-text">Please use your official school/college email address only</div>
                     <div class="error-text" id="email-error"></div>
                 </div>
@@ -552,36 +313,42 @@
                     <div class="form-group">
                         <label for="tutor-group">Tutor Group</label>
                         <input type="text" id="tutor-group" name="tutorGroup" placeholder="e.g., 12A, 13B">
-                        <div class="help-text">Enter to filter tutors</div>
+                        <div class="help-text">Enter your tutor group to filter available tutors</div>
                         <div class="error-text" id="tutor-group-error"></div>
                     </div>
                 </div>
                 
                 <div class="form-group">
                     <label for="tutors">Tutor(s) *</label>
-                    <button type="button" class="staff-select-button" id="tutors-button">
-                        <span class="placeholder" id="tutors-placeholder">Select your tutor(s)</span>
-                        <span class="arrow">▼</span>
-                    </button>
-                    <div class="help-text" id="tutors-help">Select one or more tutors</div>
+                    <div class="multi-select" id="tutors-select">
+                        <div class="multi-select-display" id="tutors-display">
+                            <span style="color: #999;">Select your tutor(s)</span>
+                        </div>
+                        <div class="multi-select-dropdown" id="tutors-dropdown"></div>
+                    </div>
+                    <div class="help-text">Select your tutor(s)</div>
                     <div class="error-text" id="tutors-error"></div>
                 </div>
                 
-                <div class="form-group" id="hoy-group">
+                <div class="form-group">
                     <label for="head-of-year">Head(s) of Year</label>
-                    <button type="button" class="staff-select-button" id="hoy-button">
-                        <span class="placeholder" id="hoy-placeholder">Select head(s) of year</span>
-                        <span class="arrow">▼</span>
-                    </button>
+                    <div class="multi-select" id="hoy-select">
+                        <div class="multi-select-display" id="hoy-display">
+                            <span style="color: #999;">Select your head(s) of year</span>
+                        </div>
+                        <div class="multi-select-dropdown" id="hoy-dropdown"></div>
+                    </div>
                     <div class="error-text" id="hoy-error"></div>
                 </div>
                 
-                <div class="form-group" id="teachers-group">
+                <div class="form-group">
                     <label for="subject-teachers">Subject Teachers</label>
-                    <button type="button" class="staff-select-button" id="teachers-button">
-                        <span class="placeholder" id="teachers-placeholder">Select subject teachers</span>
-                        <span class="arrow">▼</span>
-                    </button>
+                    <div class="multi-select" id="teachers-select">
+                        <div class="multi-select-display" id="teachers-display">
+                            <span style="color: #999;">Select your subject teachers</span>
+                        </div>
+                        <div class="multi-select-dropdown" id="teachers-dropdown"></div>
+                    </div>
                     <div class="help-text">You can select multiple teachers</div>
                     <div class="error-text" id="teachers-error"></div>
                 </div>
@@ -607,25 +374,6 @@
         </div>
     </div>
     
-    <!-- Staff Selection Modal -->
-    <div class="modal" id="staff-modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title" id="modal-title">Select Staff</h2>
-                <span class="modal-close" id="modal-close">&times;</span>
-            </div>
-            <div class="modal-search">
-                <input type="text" class="search-input" id="modal-search" placeholder="Search by name...">
-            </div>
-            <div class="modal-body" id="modal-body">
-                <!-- Staff items will be inserted here -->
-            </div>
-            <div class="modal-footer">
-                <button class="modal-button" id="modal-done">Done</button>
-            </div>
-        </div>
-    </div>
-    
     <script>
         // Global variables
         let linkData = null;
@@ -641,8 +389,7 @@
             headsOfYear: [],
             subjectTeachers: []
         };
-        let allTutors = [];
-        let currentModalType = null;
+        let allTutors = []; // Store all tutors for filtering
         
         // Free email domains to block
         const freeEmailDomains = [
@@ -650,415 +397,343 @@
             'icloud.com', 'mail.com', 'protonmail.com', 'yandex.com', 'zoho.com'
         ];
         
-        // Helper function to strip HTML tags from text
-        function stripHtml(html) {
-            const tmp = document.createElement('DIV');
-            tmp.innerHTML = html;
-            return tmp.textContent || tmp.innerText || '';
-        }
-        
-        // Helper function to extract email from HTML anchor tag
-        function extractEmail(emailString) {
-            if (!emailString) return '';
-            
-            // If it's already a plain email, return it
-            if (emailString.includes('@') && !emailString.includes('<')) {
-                return emailString.trim();
-            }
-            
-            // Extract email from anchor tag
-            const match = emailString.match(/mailto:([^"'>]+)/);
-            if (match) {
-                return match[1].trim();
-            }
-            
-            // Try to extract email from the string
-            const emailMatch = emailString.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/);
-            if (emailMatch) {
-                return emailMatch[1].trim();
-            }
-            
-            return stripHtml(emailString).trim();
-        }
-        
-        // Helper function to format name for display
-        function formatStaffName(staff) {
-            if (staff.displayName) return staff.displayName;
-            if (staff.name) return staff.name;
-            
-            // Try to combine prefix and surname
-            let name = '';
-            if (staff.prefix) name += staff.prefix + ' ';
-            if (staff.surname) name += staff.surname;
-            
-            // If we have a name, return it
-            if (name.trim()) return name.trim();
-            
-            // Last resort: use email
-            const email = extractEmail(staff.email);
-            return email.split('@')[0]; // Return the part before @
-        }
-        
         // Load staff data from API
         async function loadStaffData() {
-            console.log('Loading staff data...');
-            console.log('Current linkData:', linkData);
-            console.log('Current linkData.customerId:', linkData?.customerId);
+            console.log('=== STARTING loadStaffData ===');
+            console.log('linkData:', linkData);
+            console.log('customerId:', linkData?.customerId);
             
             try {
-                if (!linkData) {
-                    console.error('ERROR: linkData is null or undefined');
-                    showError('Unable to load staff data. Link data is missing.');
+                // Check if we have the required data
+                if (!linkData || !linkData.customerId) {
+                    console.error('ERROR: linkData or customerId is missing!');
+                    showError('Unable to load staff data. Missing customer information.');
                     return;
                 }
                 
-                if (!linkData.customerId) {
-                    console.error('ERROR: linkData.customerId is missing', linkData);
-                    showError('Unable to load staff data. Customer information is missing.');
-                    return;
-                }
-                
-                // Update button texts to show loading
-                updateButtonText('tutors', 'Loading tutors...');
-                updateButtonText('hoy', 'Loading heads of year...');
-                updateButtonText('teachers', 'Loading teachers...');
-                
+                // Fetch staff data from API
                 const API_URL = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api';
-                const url = `${API_URL}/self-registration/staff-list?customerId=${linkData.customerId}&_t=${Date.now()}`;
+                const url = `${API_URL}/self-registration/staff-list?customerId=${linkData.customerId}`;
+                console.log('Fetching from URL:', url);
                 
-                console.log('About to fetch from URL:', url);
+                const response = await fetch(url);
+                console.log('Response status:', response.status);
+                console.log('Response ok:', response.ok);
                 
-                try {
-                    const response = await fetch(url, {
-                        method: 'GET',
-                        headers: {
-                            'Accept': 'application/json',
-                            'Cache-Control': 'no-cache'
-                        }
-                    });
-                    
-                    console.log('Fetch response received:', response);
-                    console.log('Response status:', response.status);
-                    console.log('Response ok:', response.ok);
-                    
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        console.error('API Error Response:', errorText);
-                        throw new Error(`Failed to load staff data: ${response.status} ${response.statusText}`);
-                    }
-                    
-                    const data = await response.json();
-                    console.log('Staff data received:', data);
-                    
-                    if (data.success === false) {
-                        throw new Error(data.message || 'Failed to load staff data');
-                    }
-                    
-                    // Process and clean the staff data
-                    staffData.tutors = (data.tutors || []).map(processStaffMember);
-                    staffData.headsOfYear = (data.headsOfYear || []).map(processStaffMember);
-                    staffData.subjectTeachers = (data.subjectTeachers || []).map(processStaffMember);
-                    
-                    allTutors = [...staffData.tutors];
-                    
-                    console.log('Staff data loaded:', {
-                        tutors: staffData.tutors.length,
-                        hoy: staffData.headsOfYear.length,
-                        teachers: staffData.subjectTeachers.length
-                    });
-                    
-                    // Update button texts
-                    updateButtonText('tutors', 'Select your tutor(s)');
-                    updateButtonText('hoy', 'Select head(s) of year');
-                    updateButtonText('teachers', 'Select subject teachers');
-                    
-                    // Hide sections if no data
-                    if (!data.showHeadsOfYear || staffData.headsOfYear.length === 0) {
-                        document.getElementById('hoy-group').style.display = 'none';
-                    }
-                    if (!data.showSubjectTeachers || staffData.subjectTeachers.length === 0) {
-                        document.getElementById('teachers-group').style.display = 'none';
-                    }
-                    
-                } catch (fetchError) {
-                    console.error('Fetch error:', fetchError);
-                    console.error('Fetch error stack:', fetchError.stack);
-                    throw fetchError;
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('API Error Response:', errorText);
+                    throw new Error(`Failed to load staff data: ${response.status} ${response.statusText}`);
                 }
+                
+                const data = await response.json();
+                console.log('API Response data:', data);
+                
+                if (!data.success) {
+                    console.error('API returned success=false:', data);
+                    throw new Error(data.message || 'Failed to load staff data');
+                }
+                
+                // Store the data
+                staffData = data;
+                allTutors = staffData.tutors || []; // Store all tutors for filtering
+                console.log('Staff data loaded successfully:', {
+                    tutorsCount: staffData.tutors?.length || 0,
+                    hoyCount: staffData.headsOfYear?.length || 0,
+                    teachersCount: staffData.subjectTeachers?.length || 0
+                });
+                
+                // Initialize the dropdowns with data
+                console.log('Updating tutor options...');
+                updateMultiSelectOptions('tutors', allTutors);
+                
+                console.log('Updating HOY options...');
+                updateMultiSelectOptions('hoy', staffData.headsOfYear || []);
+                
+                console.log('Updating teacher options...');
+                updateMultiSelectOptions('teachers', staffData.subjectTeachers || []);
+                
+                // Hide dropdowns if no data available
+                if (!data.showHeadsOfYear || (staffData.headsOfYear && staffData.headsOfYear.length === 0)) {
+                    console.log('Hiding HOY dropdown - no data');
+                    document.getElementById('hoy-select').closest('.form-group').style.display = 'none';
+                }
+                if (!data.showSubjectTeachers || (staffData.subjectTeachers && staffData.subjectTeachers.length === 0)) {
+                    console.log('Hiding Subject Teachers dropdown - no data');
+                    document.getElementById('teachers-select').closest('.form-group').style.display = 'none';
+                }
+                
+                console.log('=== loadStaffData COMPLETE ===');
                 
             } catch (error) {
-                console.error('Error loading staff data:', error);
-                console.error('Error stack:', error.stack);
-                updateButtonText('tutors', 'Failed to load tutors');
-                updateButtonText('hoy', 'Failed to load heads of year');
-                updateButtonText('teachers', 'Failed to load teachers');
+                console.error('ERROR in loadStaffData:', error);
+                console.error('Full error object:', error);
                 showError('Unable to load staff information. Please refresh the page and try again.');
+                
+                // Set empty arrays to prevent further errors
+                staffData = {
+                    tutors: [],
+                    headsOfYear: [],
+                    subjectTeachers: []
+                };
             }
         }
         
-        // Process staff member data
-        function processStaffMember(staff) {
-            // Backend now returns clean emails and proper displayName
-            const cleanEmail = extractEmail(staff.email);
-            return {
-                ...staff,
-                email: cleanEmail,
-                displayName: staff.displayName || formatStaffName(staff),
-                prefix: staff.prefix || '',
-                firstname: staff.firstname || '',
-                lastname: staff.lastname || ''
-            };
-        }
-        
-        // Update button text
-        function updateButtonText(type, text) {
-            const placeholder = document.getElementById(`${type}-placeholder`);
-            if (placeholder) {
-                placeholder.textContent = text;
-            }
-        }
-        
-        // Setup event listeners
+        // Set up event listeners
         function setupEventListeners() {
+            console.log('=== Setting up event listeners ===');
+            
             // Form submission
             document.getElementById('registration-form').addEventListener('submit', handleSubmit);
             
             // Year group change
             document.getElementById('year-group').addEventListener('change', handleYearGroupChange);
             
-            // Tutor group input
+            // Tutor group change - listen to both input (for real-time filtering) and blur
             document.getElementById('tutor-group').addEventListener('input', handleTutorGroupChange);
+            document.getElementById('tutor-group').addEventListener('blur', handleTutorGroupChange);
             
-            // Staff selection buttons
-            document.getElementById('tutors-button').addEventListener('click', () => openModal('tutors'));
-            document.getElementById('hoy-button').addEventListener('click', () => openModal('headsOfYear'));
-            document.getElementById('teachers-button').addEventListener('click', () => openModal('subjectTeachers'));
-            
-            // Modal controls
-            document.getElementById('modal-close').addEventListener('click', closeModal);
-            document.getElementById('modal-done').addEventListener('click', closeModal);
-            document.getElementById('modal-search').addEventListener('input', handleModalSearch);
-            
-            // Close modal on background click
-            document.getElementById('staff-modal').addEventListener('click', (e) => {
-                if (e.target.id === 'staff-modal') {
-                    closeModal();
-                }
-            });
+            // Multi-select handlers - set these up AFTER data is loaded
+            console.log('Setting up multi-selects...');
+            setupMultiSelect('tutors');
+            setupMultiSelect('hoy');
+            setupMultiSelect('teachers');
             
             // Email validation
             document.getElementById('email').addEventListener('blur', validateEmail);
             
-            // Prevent zoom on input focus (iOS)
-            const inputs = document.querySelectorAll('input, select, textarea');
-            inputs.forEach(input => {
-                input.addEventListener('focus', () => {
-                    document.querySelector('meta[name="viewport"]').setAttribute('content', 
-                        'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
-                });
+            // Close dropdowns when clicking outside
+            document.addEventListener('click', (e) => {
+                // Close all dropdowns if clicking outside any multi-select
+                if (!e.target.closest('.multi-select')) {
+                    document.querySelectorAll('.multi-select-dropdown').forEach(dropdown => {
+                        dropdown.classList.remove('open');
+                    });
+                }
             });
+            
+            console.log('=== Event listeners setup complete ===');
         }
         
         // Handle year group change
-        function handleYearGroupChange() {
-            document.getElementById('tutor-group').value = '';
-            filterTutors('');
+        function handleYearGroupChange(e) {
+            const yearGroup = e.target.value;
+            const tutorGroupInput = document.getElementById('tutor-group');
+            
+            // Clear tutor group input
+            tutorGroupInput.value = '';
+            
+            // Reset tutor filter to show all tutors
+            updateMultiSelectOptions('tutors', allTutors);
+            
+            // Reset help text
+            const helpText = document.querySelector('#tutors-select').closest('.form-group').querySelector('.help-text');
+            helpText.textContent = 'Select your tutor(s)';
         }
         
         // Handle tutor group change
         function handleTutorGroupChange(e) {
-            const tutorGroup = e.target.value.trim();
-            filterTutors(tutorGroup);
-        }
-        
-        // Filter tutors based on group
-        function filterTutors(tutorGroup) {
-            const tutorGroupLower = tutorGroup.toLowerCase();
+            const tutorGroup = e.target.value.trim().toLowerCase();
+            const yearGroup = document.getElementById('year-group').value;
+            
+            // Filter tutors based on matching group (case-insensitive)
             let filteredTutors = allTutors;
             
             if (tutorGroup) {
-                // Filter tutors by group
+                // Filter tutors where their group contains the entered tutor group
                 filteredTutors = allTutors.filter(tutor => {
                     if (!tutor.group) return false;
-                    return tutor.group.toLowerCase().includes(tutorGroupLower);
+                    return tutor.group.toLowerCase().includes(tutorGroup);
                 });
                 
-                // If no matches, try partial matches
+                // If no exact matches, try partial matches
                 if (filteredTutors.length === 0) {
                     filteredTutors = allTutors.filter(tutor => {
                         if (!tutor.group) return false;
+                        // Check if any part of the tutor's group matches any part of the entered group
                         const tutorGroupLower = tutor.group.toLowerCase();
                         return tutorGroupLower.split(/[\s,.-]+/).some(part => 
-                            tutorGroup.toLowerCase().split(/[\s,.-]+/).some(inputPart => 
+                            tutorGroup.split(/[\s,.-]+/).some(inputPart => 
                                 part.includes(inputPart) || inputPart.includes(part)
                             )
                         );
                     });
                 }
+                
+                // If still no matches, show all tutors with a console message
+                if (filteredTutors.length === 0) {
+                    console.log(`No tutors found for group "${tutorGroup}", showing all tutors`);
+                    filteredTutors = allTutors;
+                }
             }
             
-            // Update the stored tutor data
-            staffData.tutors = filteredTutors.length > 0 ? filteredTutors : allTutors;
+            // Update the tutor dropdown with filtered results
+            updateMultiSelectOptions('tutors', filteredTutors);
             
-            // Update help text
-            const helpText = document.getElementById('tutors-help');
-            if (tutorGroup && filteredTutors.length > 0 && filteredTutors.length < allTutors.length) {
-                helpText.textContent = `Showing ${filteredTutors.length} tutor(s) for group "${tutorGroup}"`;
+            // Update help text to show filtering status
+            const helpText = document.querySelector('#tutors-select').closest('.form-group').querySelector('.help-text');
+            if (tutorGroup && filteredTutors.length < allTutors.length) {
+                helpText.textContent = `Showing ${filteredTutors.length} tutor(s) matching group "${e.target.value.trim()}"`;
             } else {
-                helpText.textContent = 'Select one or more tutors';
+                helpText.textContent = 'Select your tutor(s)';
             }
         }
         
-        // Open modal
-        function openModal(type) {
-            currentModalType = type;
-            const modal = document.getElementById('staff-modal');
-            const modalTitle = document.getElementById('modal-title');
-            const modalBody = document.getElementById('modal-body');
-            const searchInput = document.getElementById('modal-search');
+        // Setup multi-select dropdown
+        function setupMultiSelect(id) {
+            console.log(`Setting up multi-select for: ${id}`);
             
-            // Set title
-            const titles = {
-                tutors: 'Select Tutors',
-                headsOfYear: 'Select Heads of Year',
-                subjectTeachers: 'Select Subject Teachers'
-            };
-            modalTitle.textContent = titles[type];
+            const display = document.getElementById(`${id}-display`);
+            const dropdown = document.getElementById(`${id}-dropdown`);
             
-            // Clear search
-            searchInput.value = '';
-            
-            // Render staff list
-            renderStaffList(staffData[type]);
-            
-            // Show modal
-            modal.classList.add('active');
-            
-            // Focus search input
-            setTimeout(() => searchInput.focus(), 300);
-        }
-        
-        // Close modal
-        function closeModal() {
-            const modal = document.getElementById('staff-modal');
-            modal.classList.remove('active');
-            updateSelectionDisplay(currentModalType);
-        }
-        
-        // Handle modal search
-        function handleModalSearch(e) {
-            const searchTerm = e.target.value.toLowerCase();
-            const staffList = staffData[currentModalType];
-            
-            const filtered = staffList.filter(staff => {
-                const name = staff.displayName.toLowerCase();
-                const email = staff.email.toLowerCase();
-                const group = (staff.group || '').toLowerCase();
-                return name.includes(searchTerm) || email.includes(searchTerm) || group.includes(searchTerm);
-            });
-            
-            renderStaffList(filtered);
-        }
-        
-        // Render staff list in modal
-        function renderStaffList(staffList) {
-            const modalBody = document.getElementById('modal-body');
-            modalBody.innerHTML = '';
-            
-            if (staffList.length === 0) {
-                modalBody.innerHTML = '<div class="no-results">No staff members found</div>';
+            if (!display || !dropdown) {
+                console.error(`ERROR: Could not find elements for ${id}:`, { display, dropdown });
                 return;
             }
             
-            staffList.forEach(staff => {
+            // Remove any existing listeners to prevent duplicates
+            const newDisplay = display.cloneNode(true);
+            display.parentNode.replaceChild(newDisplay, display);
+            
+            // Add click handler to the display element
+            newDisplay.addEventListener('click', (e) => {
+                console.log(`Click event on ${id}-display`);
+                e.stopPropagation(); // Prevent event from bubbling
+                
+                const dropdown = document.getElementById(`${id}-dropdown`);
+                if (!dropdown) {
+                    console.error(`Dropdown not found for ${id}`);
+                    return;
+                }
+                
+                // Check if dropdown has options
+                if (dropdown.children.length === 0) {
+                    console.warn(`Dropdown ${id} has no options!`);
+                    showError(`No ${id} available. Please contact your administrator.`);
+                    return;
+                }
+                
+                // Toggle the dropdown
+                const wasOpen = dropdown.classList.contains('open');
+                console.log(`Dropdown ${id} was ${wasOpen ? 'open' : 'closed'}, toggling...`);
+                
+                // Close all other dropdowns first
+                document.querySelectorAll('.multi-select-dropdown').forEach(d => {
+                    if (d !== dropdown) d.classList.remove('open');
+                });
+                
+                dropdown.classList.toggle('open');
+                console.log(`Dropdown ${id} is now ${dropdown.classList.contains('open') ? 'open' : 'closed'}`);
+            });
+            
+            console.log(`Multi-select setup complete for ${id}`);
+        }
+        
+        // Update multi-select options
+        function updateMultiSelectOptions(id, options) {
+            console.log(`Updating options for ${id}, count: ${options.length}`);
+            
+            const dropdown = document.getElementById(`${id}-dropdown`);
+            if (!dropdown) {
+                console.error(`Dropdown element not found for ${id}`);
+                return;
+            }
+            
+            dropdown.innerHTML = '';
+            
+            if (!options || options.length === 0) {
+                console.warn(`No options provided for ${id}`);
+                const emptyDiv = document.createElement('div');
+                emptyDiv.className = 'multi-select-option';
+                emptyDiv.textContent = `No ${id} available`;
+                emptyDiv.style.fontStyle = 'italic';
+                emptyDiv.style.color = '#999';
+                dropdown.appendChild(emptyDiv);
+                return;
+            }
+            
+            options.forEach((option, index) => {
+                console.log(`Adding option ${index} for ${id}:`, option);
+                
                 const div = document.createElement('div');
-                div.className = 'staff-item';
-                if (selectedData[currentModalType].includes(staff.email)) {
+                div.className = 'multi-select-option';
+                
+                // For tutors, show group information if available
+                let displayText = option.displayName || option.name || option.email || 'Unknown';
+                if (id === 'tutors' && option.group) {
+                    displayText += ` (${option.group})`;
+                }
+                
+                div.textContent = displayText;
+                div.dataset.value = option.email || '';
+                
+                if (selectedData[id] && selectedData[id].includes(option.email)) {
                     div.classList.add('selected');
                 }
                 
-                let details = '';
-                if (currentModalType === 'tutors' && staff.group) {
-                    details = `Group: ${staff.group}`;
-                }
-                // Only show email if we don't have a proper name
-                else if (staff.email && staff.displayName === staff.email.split('@')[0]) {
-                    details = staff.email;
-                }
+                div.addEventListener('click', (e) => {
+                    console.log(`Option clicked in ${id}:`, option);
+                    e.stopPropagation(); // Prevent closing the dropdown
+                    toggleMultiSelectOption(id, option);
+                });
                 
-                div.innerHTML = `
-                    <div class="staff-checkbox"></div>
-                    <div class="staff-info">
-                        <div class="staff-name">${staff.displayName}</div>
-                        ${details ? `<div class="staff-details">${details}</div>` : ''}
-                    </div>
-                `;
-                
-                div.addEventListener('click', () => toggleStaffSelection(staff));
-                modalBody.appendChild(div);
+                dropdown.appendChild(div);
             });
+            
+            console.log(`Added ${options.length} options to ${id} dropdown`);
         }
         
-        // Toggle staff selection
-        function toggleStaffSelection(staff) {
-            const index = selectedData[currentModalType].indexOf(staff.email);
+        // Toggle multi-select option
+        function toggleMultiSelectOption(id, option) {
+            const index = selectedData[id].indexOf(option.email); // Use email instead of id
             
             if (index > -1) {
-                selectedData[currentModalType].splice(index, 1);
+                selectedData[id].splice(index, 1);
             } else {
-                selectedData[currentModalType].push(staff.email);
+                selectedData[id].push(option.email); // Store email instead of id
             }
             
-            // Re-render the list to update checkboxes
-            handleModalSearch({ target: document.getElementById('modal-search') });
+            updateMultiSelectDisplay(id);
+            
+            // For tutors, we need to use the current filtered list
+            if (id === 'tutors') {
+                const tutorGroup = document.getElementById('tutor-group').value.trim();
+                if (tutorGroup) {
+                    // Re-apply the filter but maintain selections
+                    handleTutorGroupChange({ target: { value: tutorGroup } });
+                } else {
+                    updateMultiSelectOptions(id, allTutors);
+                }
+            } else {
+                updateMultiSelectOptions(id, staffData[id]);
+            }
         }
         
-        // Update selection display
-        function updateSelectionDisplay(type) {
-            const button = document.getElementById(`${type}-button`);
-            const placeholder = document.getElementById(`${type}-placeholder`);
+        // Update multi-select display
+        function updateMultiSelectDisplay(id) {
+            const display = document.getElementById(`${id}-display`);
+            display.innerHTML = '';
             
-            // Clear current content
-            const existingBadges = button.querySelectorAll('.selected-badge');
-            existingBadges.forEach(badge => badge.remove());
-            
-            if (selectedData[type].length === 0) {
-                placeholder.style.display = 'block';
-                placeholder.textContent = {
-                    tutors: 'Select your tutor(s)',
-                    headsOfYear: 'Select head(s) of year',
-                    subjectTeachers: 'Select subject teachers'
-                }[type];
+            if (selectedData[id].length === 0) {
+                display.innerHTML = '<span style="color: #999;">Select...</span>';
             } else {
-                placeholder.style.display = 'none';
-                
-                selectedData[type].forEach(email => {
-                    const staff = staffData[type].find(s => s.email === email);
-                    if (staff) {
-                        const badge = document.createElement('span');
-                        badge.className = 'selected-badge';
-                        badge.innerHTML = `
-                            ${staff.displayName}
-                            <span class="remove" data-email="${email}" data-type="${type}">×</span>
-                        `;
+                selectedData[id].forEach(selectedEmail => {
+                    // For tutors, search in allTutors; for others, search in staffData
+                    const searchArray = id === 'tutors' ? allTutors : staffData[id];
+                    const item = searchArray.find(s => s.email === selectedEmail);
+                    if (item) {
+                        const tag = document.createElement('span');
+                        tag.className = 'selected-tag';
+                        tag.innerHTML = `${item.displayName || item.name} <span class="remove" data-id="${item.email}">&times;</span>`;
                         
-                        badge.querySelector('.remove').addEventListener('click', (e) => {
+                        tag.querySelector('.remove').addEventListener('click', (e) => {
                             e.stopPropagation();
-                            removeSelection(type, email);
+                            toggleMultiSelectOption(id, item);
                         });
                         
-                        button.insertBefore(badge, button.querySelector('.arrow'));
+                        display.appendChild(tag);
                     }
                 });
-            }
-        }
-        
-        // Remove selection
-        function removeSelection(type, email) {
-            const index = selectedData[type].indexOf(email);
-            if (index > -1) {
-                selectedData[type].splice(index, 1);
-                updateSelectionDisplay(type);
             }
         }
         
@@ -1072,6 +747,7 @@
                 return true;
             }
             
+            // Check if it's a valid email format
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(email)) {
                 emailError.textContent = 'Please enter a valid email address';
@@ -1079,8 +755,9 @@
                 return false;
             }
             
+            // Check if it's a free email domain
             const domain = email.split('@')[1].toLowerCase();
-            if (linkData?.configSettings?.requireSchoolEmail && freeEmailDomains.includes(domain)) {
+            if (linkData.configSettings.requireSchoolEmail && freeEmailDomains.includes(domain)) {
                 emailError.textContent = 'Please use your school email address, not a personal email';
                 emailError.style.display = 'block';
                 return false;
@@ -1094,7 +771,7 @@
         async function handleSubmit(e) {
             e.preventDefault();
             
-            // Clear messages
+            // Clear previous messages
             document.getElementById('success-message').style.display = 'none';
             document.getElementById('error-message').style.display = 'none';
             
@@ -1106,8 +783,8 @@
             // Show loading
             document.getElementById('loading').style.display = 'block';
             document.getElementById('submit-button').disabled = true;
-            document.getElementById('registration-form').style.display = 'none';
             
+            // Prepare form data
             const formData = {
                 firstname: document.getElementById('firstname').value.trim(),
                 lastname: document.getElementById('lastname').value.trim(),
@@ -1123,6 +800,7 @@
             };
             
             try {
+                // Submit to API
                 const API_URL = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api';
                 const response = await fetch(`${API_URL}/self-registration/register`, {
                     method: 'POST',
@@ -1143,14 +821,13 @@
                 // Reset form
                 document.getElementById('registration-form').reset();
                 selectedData = { tutors: [], headsOfYear: [], subjectTeachers: [] };
-                updateSelectionDisplay('tutors');
-                updateSelectionDisplay('headsOfYear');
-                updateSelectionDisplay('subjectTeachers');
+                updateMultiSelectDisplay('tutors');
+                updateMultiSelectDisplay('hoy');
+                updateMultiSelectDisplay('teachers');
                 
             } catch (error) {
                 console.error('Registration error:', error);
                 showError('Registration failed. Please try again or contact your school administrator.');
-                document.getElementById('registration-form').style.display = 'block';
             } finally {
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('submit-button').disabled = false;
@@ -1177,12 +854,12 @@
                 }
             });
             
-            // Validate email
+            // Validate email separately
             if (!validateEmail()) {
                 isValid = false;
             }
             
-            // Validate tutors
+            // Validate at least one tutor is selected
             if (selectedData.tutors.length === 0) {
                 const tutorsError = document.getElementById('tutors-error');
                 tutorsError.textContent = 'Please select at least one tutor';
@@ -1200,6 +877,8 @@
             const successDiv = document.getElementById('success-message');
             successDiv.textContent = message;
             successDiv.style.display = 'block';
+            
+            // Scroll to top
             window.scrollTo(0, 0);
         }
         
@@ -1208,16 +887,20 @@
             const errorDiv = document.getElementById('error-message');
             errorDiv.textContent = message;
             errorDiv.style.display = 'block';
+            
+            // Scroll to top
             window.scrollTo(0, 0);
         }
-        
+
         // Initialize the form
         document.addEventListener('DOMContentLoaded', async function() {
-            console.log('Initializing form...');
+            console.log('=== DOM Content Loaded ===');
             
             // Parse URL parameters
             const urlParams = new URLSearchParams(window.location.search);
             linkId = urlParams.get('id');
+            
+            console.log('Link ID from URL:', linkId);
             
             if (!linkId) {
                 showError('Invalid registration link. Please contact your school administrator.');
@@ -1225,30 +908,29 @@
             }
             
             try {
-                // Validate link
+                // Validate the link with the API
                 const API_URL = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api';
+                console.log('Validating link...');
+                
                 const response = await fetch(`${API_URL}/self-registration/validate-link/${linkId}`);
                 const result = await response.json();
                 
+                console.log('Link validation response:', result);
+                
                 if (!response.ok || !result.success) {
-                    if (response.status === 400 && result.message?.includes('expired')) {
+                    if (response.status === 400 && result.message.includes('expired')) {
                         document.getElementById('expired-message').style.display = 'block';
                     } else {
-                        showError(result.message || 'Invalid registration link.');
+                        showError(result.message || 'Invalid registration link. Please contact your school administrator.');
                     }
                     return;
                 }
                 
-                // Store link data
+                // Store the link data
                 linkData = result;
                 qrLinkId = result.qrLinkId;
                 
-                console.log('Link data stored successfully:', {
-                    linkData: linkData,
-                    customerId: linkData?.customerId,
-                    customerName: linkData?.customerName,
-                    hasConfigSettings: !!linkData?.configSettings
-                });
+                console.log('Link data stored:', { customerId: linkData.customerId, qrLinkId });
                 
                 // Set school name
                 document.getElementById('school-name').textContent = result.customerName || 'Your School';
@@ -1259,32 +941,32 @@
                     document.querySelector('.header').insertAdjacentHTML('afterbegin', logoHtml);
                 }
                 
-                // Show custom message
-                if (result.configSettings?.customMessage) {
+                // Show custom message if provided
+                if (result.configSettings.customMessage) {
                     document.getElementById('custom-message').textContent = result.configSettings.customMessage;
                     document.getElementById('custom-message').style.display = 'block';
                 }
                 
-                // Show form
+                // Show the form
                 document.getElementById('registration-form').style.display = 'block';
                 
-                // Load staff data and setup listeners
-                console.log('About to load staff data in 100ms...');
-                setTimeout(async () => {
-                    console.log('Timer triggered, loading staff data...');
-                    try {
-                        await loadStaffData();
-                        console.log('Staff data loaded, setting up event listeners...');
-                        setupEventListeners();
-                        console.log('Event listeners setup complete');
-                    } catch (error) {
-                        console.error('Error in initialization sequence:', error);
-                    }
-                }, 100);
+                // Load staff data FIRST, then set up event listeners
+                console.log('Loading staff data...');
+                await loadStaffData(); // Wait for staff data to load
+                
+                console.log('Setting up event listeners...');
+                setupEventListeners();
+                
+                // Add a global click handler for debugging
+                document.addEventListener('click', (e) => {
+                    console.log('Global click detected on:', e.target);
+                });
+                
+                console.log('=== Initialization Complete ===');
                 
             } catch (error) {
-                console.error('Initialization error:', error);
-                showError('Unable to initialize registration form. Please try again.');
+                console.error('Error during initialization:', error);
+                showError('Unable to initialize registration form. Please try again or contact your school administrator.');
             }
         });
     </script>
