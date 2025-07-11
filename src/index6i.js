@@ -5201,7 +5201,9 @@ function bindStepEvents() {
    */
   window.viewQRCode = async function(linkId) {
     const baseUrl = window.REGISTRATION_FORM_URL || 'https://4sighteducation.github.io/vespa-upload-bridge/root/self-registration-form.html';
-    const registrationUrl = `${baseUrl}?id=${linkId}`;
+    // Add cache buster to force fresh content load
+    const cacheBuster = Date.now();
+    const registrationUrl = `${baseUrl}?id=${linkId}&v=${cacheBuster}`;
     
     // Load QR code library if needed
     if (typeof QRCode === 'undefined') {
