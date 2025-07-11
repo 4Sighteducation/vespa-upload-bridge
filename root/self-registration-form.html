@@ -313,7 +313,7 @@
                     <div class="form-group">
                         <label for="tutor-group">Tutor Group</label>
                         <input type="text" id="tutor-group" name="tutorGroup" placeholder="e.g., 12A, 13B">
-                        <div class="help-text">Enter your tutor group if you know it</div>
+                        <div class="help-text">Enter your tutor group to filter available tutors</div>
                         <div class="error-text" id="tutor-group-error"></div>
                     </div>
                 </div>
@@ -326,7 +326,7 @@
                         </div>
                         <div class="multi-select-dropdown" id="tutors-dropdown"></div>
                     </div>
-                    <div class="help-text">Select your year and tutor group first</div>
+                    <div class="help-text">Select your tutor(s)</div>
                     <div class="error-text" id="tutors-error"></div>
                 </div>
                 
@@ -389,6 +389,7 @@
             headsOfYear: [],
             subjectTeachers: []
         };
+        let allTutors = []; // Store all tutors for filtering
         
         // Free email domains to block
         const freeEmailDomains = [
@@ -435,6 +436,7 @@
                 
                 // Store the data
                 staffData = data;
+                allTutors = staffData.tutors || []; // Store all tutors for filtering
                 console.log('Staff data loaded successfully:', {
                     tutorsCount: staffData.tutors?.length || 0,
                     hoyCount: staffData.headsOfYear?.length || 0,
@@ -443,7 +445,7 @@
                 
                 // Initialize the dropdowns with data
                 console.log('Updating tutor options...');
-                updateMultiSelectOptions('tutors', staffData.tutors || []);
+                updateMultiSelectOptions('tutors', allTutors);
                 
                 console.log('Updating HOY options...');
                 updateMultiSelectOptions('hoy', staffData.headsOfYear || []);
@@ -487,7 +489,8 @@
             // Year group change
             document.getElementById('year-group').addEventListener('change', handleYearGroupChange);
             
-            // Tutor group change
+            // Tutor group change - listen to both input (for real-time filtering) and blur
+            document.getElementById('tutor-group').addEventListener('input', handleTutorGroupChange);
             document.getElementById('tutor-group').addEventListener('blur', handleTutorGroupChange);
             
             // Multi-select handlers - set these up AFTER data is loaded
@@ -520,18 +523,60 @@
             // Clear tutor group input
             tutorGroupInput.value = '';
             
-            // Reset dependent fields
-            handleTutorGroupChange({ target: { value: '' } });
+            // Reset tutor filter to show all tutors
+            updateMultiSelectOptions('tutors', allTutors);
+            
+            // Reset help text
+            const helpText = document.querySelector('#tutors-select').closest('.form-group').querySelector('.help-text');
+            helpText.textContent = 'Select your tutor(s)';
         }
         
         // Handle tutor group change
         function handleTutorGroupChange(e) {
-            const tutorGroup = e.target.value.trim();
+            const tutorGroup = e.target.value.trim().toLowerCase();
             const yearGroup = document.getElementById('year-group').value;
             
-            // No filtering needed since we don't have yearGroups/tutorGroups data on staff
-            // Just update the multi-select with all available tutors
-            updateMultiSelectOptions('tutors', staffData.tutors);
+            // Filter tutors based on matching group (case-insensitive)
+            let filteredTutors = allTutors;
+            
+            if (tutorGroup) {
+                // Filter tutors where their group contains the entered tutor group
+                filteredTutors = allTutors.filter(tutor => {
+                    if (!tutor.group) return false;
+                    return tutor.group.toLowerCase().includes(tutorGroup);
+                });
+                
+                // If no exact matches, try partial matches
+                if (filteredTutors.length === 0) {
+                    filteredTutors = allTutors.filter(tutor => {
+                        if (!tutor.group) return false;
+                        // Check if any part of the tutor's group matches any part of the entered group
+                        const tutorGroupLower = tutor.group.toLowerCase();
+                        return tutorGroupLower.split(/[\s,.-]+/).some(part => 
+                            tutorGroup.split(/[\s,.-]+/).some(inputPart => 
+                                part.includes(inputPart) || inputPart.includes(part)
+                            )
+                        );
+                    });
+                }
+                
+                // If still no matches, show all tutors with a console message
+                if (filteredTutors.length === 0) {
+                    console.log(`No tutors found for group "${tutorGroup}", showing all tutors`);
+                    filteredTutors = allTutors;
+                }
+            }
+            
+            // Update the tutor dropdown with filtered results
+            updateMultiSelectOptions('tutors', filteredTutors);
+            
+            // Update help text to show filtering status
+            const helpText = document.querySelector('#tutors-select').closest('.form-group').querySelector('.help-text');
+            if (tutorGroup && filteredTutors.length < allTutors.length) {
+                helpText.textContent = `Showing ${filteredTutors.length} tutor(s) matching group "${e.target.value.trim()}"`;
+            } else {
+                helpText.textContent = 'Select your tutor(s)';
+            }
         }
         
         // Setup multi-select dropdown
@@ -612,7 +657,14 @@
                 
                 const div = document.createElement('div');
                 div.className = 'multi-select-option';
-                div.textContent = option.displayName || option.name || option.email || 'Unknown';
+                
+                // For tutors, show group information if available
+                let displayText = option.displayName || option.name || option.email || 'Unknown';
+                if (id === 'tutors' && option.group) {
+                    displayText += ` (${option.group})`;
+                }
+                
+                div.textContent = displayText;
                 div.dataset.value = option.email || '';
                 
                 if (selectedData[id] && selectedData[id].includes(option.email)) {
@@ -642,7 +694,19 @@
             }
             
             updateMultiSelectDisplay(id);
-            updateMultiSelectOptions(id, staffData[id]);
+            
+            // For tutors, we need to use the current filtered list
+            if (id === 'tutors') {
+                const tutorGroup = document.getElementById('tutor-group').value.trim();
+                if (tutorGroup) {
+                    // Re-apply the filter but maintain selections
+                    handleTutorGroupChange({ target: { value: tutorGroup } });
+                } else {
+                    updateMultiSelectOptions(id, allTutors);
+                }
+            } else {
+                updateMultiSelectOptions(id, staffData[id]);
+            }
         }
         
         // Update multi-select display
@@ -654,7 +718,9 @@
                 display.innerHTML = '<span style="color: #999;">Select...</span>';
             } else {
                 selectedData[id].forEach(selectedEmail => {
-                    const item = staffData[id].find(s => s.email === selectedEmail);
+                    // For tutors, search in allTutors; for others, search in staffData
+                    const searchArray = id === 'tutors' ? allTutors : staffData[id];
+                    const item = searchArray.find(s => s.email === selectedEmail);
                     if (item) {
                         const tag = document.createElement('span');
                         tag.className = 'selected-tag';
