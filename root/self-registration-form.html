@@ -536,26 +536,37 @@
             background: white;
             border-radius: 8px;
             gap: 10px;
+            flex-wrap: wrap;
         }
         
         .credential-row label {
             font-weight: 600;
             min-width: 80px;
             color: #495057;
+            flex-shrink: 0;
         }
         
         .credential-row span {
             flex: 1;
             font-family: monospace;
-            font-size: 16px;
+            font-size: 14px;
             color: #333;
+            word-break: break-all;
+            min-width: 0;
+        }
+        
+        #display-email {
+            font-size: 13px;
         }
         
         .password-display {
             background: #fff3cd;
-            padding: 5px 10px;
-            border-radius: 4px;
-            border: 1px solid #ffeaa7;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 2px solid #ffc107;
+            font-weight: 600;
+            font-size: 16px;
+            letter-spacing: 0.5px;
         }
         
         .copy-button {
@@ -598,6 +609,47 @@
             font-size: 14px;
             color: #6c757d;
             font-style: italic;
+        }
+        
+        /* Mobile-specific adjustments for success screen */
+        @media (max-width: 500px) {
+            .credentials-box {
+                padding: 20px 15px;
+            }
+            
+            .credential-row {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 5px;
+            }
+            
+            .credential-row label {
+                min-width: auto;
+                margin-bottom: 3px;
+            }
+            
+            .credential-row span {
+                width: 100%;
+            }
+            
+            .password-display {
+                display: inline-block;
+                width: auto;
+                max-width: 100%;
+            }
+            
+            .copy-button {
+                margin-top: 8px;
+                width: 100%;
+            }
+            
+            #success-screen h2 {
+                font-size: 24px;
+            }
+            
+            .success-icon {
+                font-size: 48px;
+            }
         }
     </style>
 </head>
@@ -724,8 +776,10 @@
                     </div>
                     <div class="credential-row">
                         <label>Password:</label>
-                        <span id="display-password" class="password-display"></span>
-                        <button onclick="copyPassword()" class="copy-button">📋 Copy</button>
+                        <div style="flex: 1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <span id="display-password" class="password-display"></span>
+                            <button onclick="copyPassword()" class="copy-button">📋 Copy</button>
+                        </div>
                     </div>
                 </div>
                 <button id="login-button" class="login-button">
