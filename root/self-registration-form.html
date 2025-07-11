@@ -701,41 +701,20 @@
         
         // Load staff data from API
         async function loadStaffData() {
-            // Use try-catch at the highest level to catch any errors
+            console.log('Loading staff data...');
+            console.log('Current linkData:', linkData);
+            console.log('Current linkData.customerId:', linkData?.customerId);
+            
             try {
-                console.log('=== LOAD STAFF DATA START ===');
-                
-                // Check if fetch is available
-                if (typeof fetch === 'undefined') {
-                    console.error('Fetch API not available, using fallback');
-                    const customerId = linkData?.customerId || linkData?.data?.customerId;
-                    if (customerId) {
-                        loadStaffDataFallback(customerId);
-                        return;
-                    }
-                }
-                
-                // Safely check linkData
-                if (!linkData || typeof linkData !== 'object') {
-                    console.error('ERROR: linkData is not valid:', linkData);
-                    showError('Unable to load staff data. Please refresh the page.');
-                    updateButtonText('tutors', 'Failed to load');
-                    updateButtonText('hoy', 'Failed to load');
-                    updateButtonText('teachers', 'Failed to load');
+                if (!linkData) {
+                    console.error('ERROR: linkData is null or undefined');
+                    showError('Unable to load staff data. Link data is missing.');
                     return;
                 }
                 
-                // Safely get customerId
-                const customerId = linkData.customerId || linkData.data?.customerId || null;
-                console.log('Customer ID found:', customerId);
-                
-                if (!customerId) {
-                    console.error('ERROR: No customerId found in linkData');
-                    console.error('linkData structure:', JSON.stringify(linkData, null, 2));
+                if (!linkData.customerId) {
+                    console.error('ERROR: linkData.customerId is missing', linkData);
                     showError('Unable to load staff data. Customer information is missing.');
-                    updateButtonText('tutors', 'Failed to load');
-                    updateButtonText('hoy', 'Failed to load');
-                    updateButtonText('teachers', 'Failed to load');
                     return;
                 }
                 
@@ -745,179 +724,76 @@
                 updateButtonText('teachers', 'Loading teachers...');
                 
                 const API_URL = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api';
-                const url = `${API_URL}/self-registration/staff-list?customerId=${customerId}&_t=${Date.now()}`;
+                const url = `${API_URL}/self-registration/staff-list?customerId=${linkData.customerId}&_t=${Date.now()}`;
                 
-                console.log('Fetch URL constructed:', url);
+                console.log('About to fetch from URL:', url);
                 
-                let response;
                 try {
-                    console.log('Starting fetch request...');
-                    response = await fetch(url, {
+                    const response = await fetch(url, {
                         method: 'GET',
                         headers: {
                             'Accept': 'application/json',
                             'Cache-Control': 'no-cache'
-                        },
-                        credentials: 'include'
+                        }
                     });
-                    console.log('Fetch completed with status:', response.status);
-                } catch (fetchError) {
-                    console.error('FETCH ERROR:', fetchError);
-                    console.error('Error name:', fetchError.name);
-                    console.error('Error message:', fetchError.message);
-                    console.error('Error stack:', fetchError.stack);
-                    throw new Error(`Network error: ${fetchError.message}`);
-                }
-                
-                console.log('Response received:', {
-                    status: response.status,
-                    ok: response.ok,
-                    statusText: response.statusText,
-                    headers: response.headers
-                });
-                
-                if (!response.ok) {
-                    let errorText = '';
-                    try {
-                        errorText = await response.text();
-                        console.error('API Error Response Text:', errorText);
-                    } catch (e) {
-                        console.error('Could not read error response:', e);
+                    
+                    console.log('Fetch response received:', response);
+                    console.log('Response status:', response.status);
+                    console.log('Response ok:', response.ok);
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error('API Error Response:', errorText);
+                        throw new Error(`Failed to load staff data: ${response.status} ${response.statusText}`);
                     }
-                    throw new Error(`API Error ${response.status}: ${response.statusText} - ${errorText}`);
+                    
+                    const data = await response.json();
+                    console.log('Staff data received:', data);
+                    
+                    if (data.success === false) {
+                        throw new Error(data.message || 'Failed to load staff data');
+                    }
+                    
+                    // Process and clean the staff data
+                    staffData.tutors = (data.tutors || []).map(processStaffMember);
+                    staffData.headsOfYear = (data.headsOfYear || []).map(processStaffMember);
+                    staffData.subjectTeachers = (data.subjectTeachers || []).map(processStaffMember);
+                    
+                    allTutors = [...staffData.tutors];
+                    
+                    console.log('Staff data loaded:', {
+                        tutors: staffData.tutors.length,
+                        hoy: staffData.headsOfYear.length,
+                        teachers: staffData.subjectTeachers.length
+                    });
+                    
+                    // Update button texts
+                    updateButtonText('tutors', 'Select your tutor(s)');
+                    updateButtonText('hoy', 'Select head(s) of year');
+                    updateButtonText('teachers', 'Select subject teachers');
+                    
+                    // Hide sections if no data
+                    if (!data.showHeadsOfYear || staffData.headsOfYear.length === 0) {
+                        document.getElementById('hoy-group').style.display = 'none';
+                    }
+                    if (!data.showSubjectTeachers || staffData.subjectTeachers.length === 0) {
+                        document.getElementById('teachers-group').style.display = 'none';
+                    }
+                    
+                } catch (fetchError) {
+                    console.error('Fetch error:', fetchError);
+                    console.error('Fetch error stack:', fetchError.stack);
+                    throw fetchError;
                 }
-                
-                let data;
-                try {
-                    const responseText = await response.text();
-                    console.log('Response text length:', responseText.length);
-                    console.log('First 100 chars:', responseText.substring(0, 100));
-                    data = JSON.parse(responseText);
-                } catch (parseError) {
-                    console.error('JSON PARSE ERROR:', parseError);
-                    throw new Error(`Invalid JSON response: ${parseError.message}`);
-                }
-                
-                console.log('Staff data parsed:', {
-                    success: data.success,
-                    tutorsCount: data.tutors?.length || 0,
-                    hoyCount: data.headsOfYear?.length || 0,
-                    teachersCount: data.subjectTeachers?.length || 0
-                });
-                
-                if (data.success === false) {
-                    throw new Error(data.message || 'Failed to load staff data');
-                }
-                
-                // Process and clean the staff data
-                staffData.tutors = (data.tutors || []).map(processStaffMember);
-                staffData.headsOfYear = (data.headsOfYear || []).map(processStaffMember);
-                staffData.subjectTeachers = (data.subjectTeachers || []).map(processStaffMember);
-                
-                allTutors = [...staffData.tutors];
-                
-                console.log('Staff data processed successfully:', {
-                    tutors: staffData.tutors.length,
-                    hoy: staffData.headsOfYear.length,
-                    teachers: staffData.subjectTeachers.length
-                });
-                
-                // Update button texts
-                updateButtonText('tutors', 'Select your tutor(s)');
-                updateButtonText('hoy', 'Select head(s) of year');
-                updateButtonText('teachers', 'Select subject teachers');
-                
-                // Hide sections if no data
-                if (!data.showHeadsOfYear || staffData.headsOfYear.length === 0) {
-                    document.getElementById('hoy-group').style.display = 'none';
-                }
-                if (!data.showSubjectTeachers || staffData.subjectTeachers.length === 0) {
-                    document.getElementById('teachers-group').style.display = 'none';
-                }
-                
-                console.log('=== LOAD STAFF DATA COMPLETE ===');
                 
             } catch (error) {
-                console.error('=== LOAD STAFF DATA ERROR ===');
-                console.error('Error:', error);
-                
-                // Update button texts with error
+                console.error('Error loading staff data:', error);
+                console.error('Error stack:', error.stack);
                 updateButtonText('tutors', 'Failed to load tutors');
                 updateButtonText('hoy', 'Failed to load heads of year');
                 updateButtonText('teachers', 'Failed to load teachers');
-                
-                // Show user-friendly error
-                const errorMessage = error?.message || 'Unknown error occurred';
-                showError(`Unable to load staff information. ${errorMessage}. Please refresh the page and try again.`);
-                
-                // Log detailed error info safely
-                try {
-                    console.error('Error details:', {
-                        name: error?.name,
-                        message: error?.message,
-                        stack: error?.stack
-                    });
-                } catch (logError) {
-                    console.error('Could not log error details');
-                }
+                showError('Unable to load staff information. Please refresh the page and try again.');
             }
-        }
-        
-        // Fallback method using XMLHttpRequest if fetch fails
-        function loadStaffDataFallback(customerId) {
-            console.log('Using XMLHttpRequest fallback for staff data...');
-            
-            const xhr = new XMLHttpRequest();
-            const API_URL = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api';
-            const url = `${API_URL}/self-registration/staff-list?customerId=${customerId}&_t=${Date.now()}`;
-            
-            xhr.open('GET', url, true);
-            xhr.setRequestHeader('Accept', 'application/json');
-            xhr.setRequestHeader('Cache-Control', 'no-cache');
-            xhr.withCredentials = true; // Include credentials for CORS
-            
-            xhr.onload = function() {
-                if (xhr.status === 200) {
-                    try {
-                        const data = JSON.parse(xhr.responseText);
-                        console.log('Staff data received via XHR:', data);
-                        
-                        // Process the data
-                        staffData.tutors = (data.tutors || []).map(processStaffMember);
-                        staffData.headsOfYear = (data.headsOfYear || []).map(processStaffMember);
-                        staffData.subjectTeachers = (data.subjectTeachers || []).map(processStaffMember);
-                        allTutors = [...staffData.tutors];
-                        
-                        // Update UI
-                        updateButtonText('tutors', 'Select your tutor(s)');
-                        updateButtonText('hoy', 'Select head(s) of year');
-                        updateButtonText('teachers', 'Select subject teachers');
-                        
-                        // Hide sections if no data
-                        if (!data.showHeadsOfYear || staffData.headsOfYear.length === 0) {
-                            document.getElementById('hoy-group').style.display = 'none';
-                        }
-                        if (!data.showSubjectTeachers || staffData.subjectTeachers.length === 0) {
-                            document.getElementById('teachers-group').style.display = 'none';
-                        }
-                        
-                        console.log('Staff data loaded successfully via XHR');
-                    } catch (e) {
-                        console.error('Error parsing XHR response:', e);
-                        showError('Failed to load staff information.');
-                    }
-                } else {
-                    console.error('XHR failed with status:', xhr.status);
-                    showError('Failed to load staff information.');
-                }
-            };
-            
-            xhr.onerror = function() {
-                console.error('XHR network error');
-                showError('Network error loading staff information.');
-            };
-            
-            xhr.send();
         }
         
         // Process staff member data
@@ -1251,8 +1127,7 @@
                 const response = await fetch(`${API_URL}/self-registration/register`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(formData),
-                    credentials: 'include'
+                    body: JSON.stringify(formData)
                 });
                 
                 if (!response.ok) {
@@ -1352,9 +1227,7 @@
             try {
                 // Validate link
                 const API_URL = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api';
-                const response = await fetch(`${API_URL}/self-registration/validate-link/${linkId}`, {
-                    credentials: 'include'
-                });
+                const response = await fetch(`${API_URL}/self-registration/validate-link/${linkId}`);
                 const result = await response.json();
                 
                 if (!response.ok || !result.success) {
@@ -1369,19 +1242,6 @@
                 // Store link data
                 linkData = result;
                 qrLinkId = result.qrLinkId;
-                
-                // Debug: Check what fields are in the result
-                console.log('=== LINK VALIDATION RESULT ===');
-                console.log('Result object keys:', Object.keys(result));
-                console.log('Full result object:', JSON.stringify(result, null, 2));
-                console.log('result.customerId:', result.customerId);
-                console.log('result.data?.customerId:', result.data?.customerId);
-                
-                // If customerId is nested in data property, extract it
-                if (!linkData.customerId && linkData.data?.customerId) {
-                    linkData.customerId = linkData.data.customerId;
-                    console.log('Extracted customerId from data property:', linkData.customerId);
-                }
                 
                 console.log('Link data stored successfully:', {
                     linkData: linkData,
@@ -1413,27 +1273,13 @@
                 setTimeout(async () => {
                     console.log('Timer triggered, loading staff data...');
                     try {
-                        // First try with fetch
                         await loadStaffData();
-                        console.log('Staff data loaded successfully');
-                    } catch (fetchError) {
-                        console.error('Fetch method failed:', fetchError);
-                        
-                        // Try fallback method with XMLHttpRequest
-                        const customerId = linkData?.customerId || linkData?.data?.customerId;
-                        if (customerId) {
-                            console.log('Attempting XMLHttpRequest fallback...');
-                            loadStaffDataFallback(customerId);
-                        } else {
-                            console.error('Cannot use fallback - no customerId available');
-                            showError('Unable to load staff information. Please refresh and try again.');
-                        }
+                        console.log('Staff data loaded, setting up event listeners...');
+                        setupEventListeners();
+                        console.log('Event listeners setup complete');
+                    } catch (error) {
+                        console.error('Error in initialization sequence:', error);
                     }
-                    
-                    // Always setup event listeners
-                    console.log('Setting up event listeners...');
-                    setupEventListeners();
-                    console.log('Event listeners setup complete');
                 }, 100);
                 
             } catch (error) {
@@ -1444,5 +1290,3 @@
     </script>
 </body>
 </html>
-
-
