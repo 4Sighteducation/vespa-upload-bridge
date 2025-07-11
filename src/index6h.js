@@ -1,6 +1,3 @@
-
-
-
 /**
  * VESPA Upload Bridge - Configuration
  * 
@@ -32,6 +29,7 @@ let selectedPercentile = 75; // Default percentile
 let selectedPercentileName = '75th (Default & Recommended)'; // For display
 let universalPassword = null; // For student universal password feature
 let useUniversalPassword = false; // Flag to track if universal password is being used
+let qrSchoolsData = []; // Store schools data for QR search functionality
 
 /**
  * Helper function to get/set emulation state persistently
@@ -390,7 +388,7 @@ function addStyles() {
   linkElement.id = 'vespa-upload-styles';
   linkElement.rel = 'stylesheet';
   linkElement.type = 'text/css';
-  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index6c.css';
+  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index6h.css';
   
   document.head.appendChild(linkElement);
   debugLog("Dynamically linked external CSS: " + linkElement.href, null, 'info');
@@ -4753,9 +4751,6 @@ function bindStepEvents() {
     }
   }
 
-  // Store schools data for search functionality
-  let qrSchoolsData = [];
-
   /**
    * Load schools for QR generation dropdown
    */
@@ -6766,6 +6761,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       renderStep(1);
     }
   }
+
 
 
 
