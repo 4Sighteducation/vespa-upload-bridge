@@ -702,11 +702,19 @@
         // Load staff data from API
         async function loadStaffData() {
             console.log('Loading staff data...');
+            console.log('Current linkData:', linkData);
+            console.log('Current linkData.customerId:', linkData?.customerId);
             
             try {
-                if (!linkData || !linkData.customerId) {
-                    console.error('Missing customer information');
-                    showError('Unable to load staff data. Missing customer information.');
+                if (!linkData) {
+                    console.error('ERROR: linkData is null or undefined');
+                    showError('Unable to load staff data. Link data is missing.');
+                    return;
+                }
+                
+                if (!linkData.customerId) {
+                    console.error('ERROR: linkData.customerId is missing', linkData);
+                    showError('Unable to load staff data. Customer information is missing.');
                     return;
                 }
                 
@@ -718,52 +726,69 @@
                 const API_URL = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api';
                 const url = `${API_URL}/self-registration/staff-list?customerId=${linkData.customerId}&_t=${Date.now()}`;
                 
-                const response = await fetch(url, {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Cache-Control': 'no-cache'
+                console.log('About to fetch from URL:', url);
+                
+                try {
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Cache-Control': 'no-cache'
+                        }
+                    });
+                    
+                    console.log('Fetch response received:', response);
+                    console.log('Response status:', response.status);
+                    console.log('Response ok:', response.ok);
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error('API Error Response:', errorText);
+                        throw new Error(`Failed to load staff data: ${response.status} ${response.statusText}`);
                     }
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`Failed to load staff data: ${response.status}`);
-                }
-                
-                const data = await response.json();
-                
-                if (data.success === false) {
-                    throw new Error(data.message || 'Failed to load staff data');
-                }
-                
-                // Process and clean the staff data
-                staffData.tutors = (data.tutors || []).map(processStaffMember);
-                staffData.headsOfYear = (data.headsOfYear || []).map(processStaffMember);
-                staffData.subjectTeachers = (data.subjectTeachers || []).map(processStaffMember);
-                
-                allTutors = [...staffData.tutors];
-                
-                console.log('Staff data loaded:', {
-                    tutors: staffData.tutors.length,
-                    hoy: staffData.headsOfYear.length,
-                    teachers: staffData.subjectTeachers.length
-                });
-                
-                // Update button texts
-                updateButtonText('tutors', 'Select your tutor(s)');
-                updateButtonText('hoy', 'Select head(s) of year');
-                updateButtonText('teachers', 'Select subject teachers');
-                
-                // Hide sections if no data
-                if (!data.showHeadsOfYear || staffData.headsOfYear.length === 0) {
-                    document.getElementById('hoy-group').style.display = 'none';
-                }
-                if (!data.showSubjectTeachers || staffData.subjectTeachers.length === 0) {
-                    document.getElementById('teachers-group').style.display = 'none';
+                    
+                    const data = await response.json();
+                    console.log('Staff data received:', data);
+                    
+                    if (data.success === false) {
+                        throw new Error(data.message || 'Failed to load staff data');
+                    }
+                    
+                    // Process and clean the staff data
+                    staffData.tutors = (data.tutors || []).map(processStaffMember);
+                    staffData.headsOfYear = (data.headsOfYear || []).map(processStaffMember);
+                    staffData.subjectTeachers = (data.subjectTeachers || []).map(processStaffMember);
+                    
+                    allTutors = [...staffData.tutors];
+                    
+                    console.log('Staff data loaded:', {
+                        tutors: staffData.tutors.length,
+                        hoy: staffData.headsOfYear.length,
+                        teachers: staffData.subjectTeachers.length
+                    });
+                    
+                    // Update button texts
+                    updateButtonText('tutors', 'Select your tutor(s)');
+                    updateButtonText('hoy', 'Select head(s) of year');
+                    updateButtonText('teachers', 'Select subject teachers');
+                    
+                    // Hide sections if no data
+                    if (!data.showHeadsOfYear || staffData.headsOfYear.length === 0) {
+                        document.getElementById('hoy-group').style.display = 'none';
+                    }
+                    if (!data.showSubjectTeachers || staffData.subjectTeachers.length === 0) {
+                        document.getElementById('teachers-group').style.display = 'none';
+                    }
+                    
+                } catch (fetchError) {
+                    console.error('Fetch error:', fetchError);
+                    console.error('Fetch error stack:', fetchError.stack);
+                    throw fetchError;
                 }
                 
             } catch (error) {
                 console.error('Error loading staff data:', error);
+                console.error('Error stack:', error.stack);
                 updateButtonText('tutors', 'Failed to load tutors');
                 updateButtonText('hoy', 'Failed to load heads of year');
                 updateButtonText('teachers', 'Failed to load teachers');
@@ -773,10 +798,15 @@
         
         // Process staff member data
         function processStaffMember(staff) {
+            // Backend now returns clean emails and proper displayName
+            const cleanEmail = extractEmail(staff.email);
             return {
                 ...staff,
-                email: extractEmail(staff.email),
-                displayName: formatStaffName(staff)
+                email: cleanEmail,
+                displayName: staff.displayName || formatStaffName(staff),
+                prefix: staff.prefix || '',
+                firstname: staff.firstname || '',
+                lastname: staff.lastname || ''
             };
         }
         
@@ -950,7 +980,9 @@
                 let details = '';
                 if (currentModalType === 'tutors' && staff.group) {
                     details = `Group: ${staff.group}`;
-                } else if (staff.email) {
+                }
+                // Only show email if we don't have a proper name
+                else if (staff.email && staff.displayName === staff.email.split('@')[0]) {
                     details = staff.email;
                 }
                 
@@ -1211,6 +1243,13 @@
                 linkData = result;
                 qrLinkId = result.qrLinkId;
                 
+                console.log('Link data stored successfully:', {
+                    linkData: linkData,
+                    customerId: linkData?.customerId,
+                    customerName: linkData?.customerName,
+                    hasConfigSettings: !!linkData?.configSettings
+                });
+                
                 // Set school name
                 document.getElementById('school-name').textContent = result.customerName || 'Your School';
                 
@@ -1230,9 +1269,17 @@
                 document.getElementById('registration-form').style.display = 'block';
                 
                 // Load staff data and setup listeners
+                console.log('About to load staff data in 100ms...');
                 setTimeout(async () => {
-                    await loadStaffData();
-                    setupEventListeners();
+                    console.log('Timer triggered, loading staff data...');
+                    try {
+                        await loadStaffData();
+                        console.log('Staff data loaded, setting up event listeners...');
+                        setupEventListeners();
+                        console.log('Event listeners setup complete');
+                    } catch (error) {
+                        console.error('Error in initialization sequence:', error);
+                    }
                 }, 100);
                 
             } catch (error) {
@@ -1243,4 +1290,5 @@
     </script>
 </body>
 </html>
+
 
