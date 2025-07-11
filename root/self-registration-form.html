@@ -396,103 +396,91 @@
             'icloud.com', 'mail.com', 'protonmail.com', 'yandex.com', 'zoho.com'
         ];
         
-        // Initialize the form
-        document.addEventListener('DOMContentLoaded', async function() {
-            // Parse URL parameters
-            const urlParams = new URLSearchParams(window.location.search);
-            linkId = urlParams.get('id');
-            
-            if (!linkId) {
-                showError('Invalid registration link. Please contact your school administrator.');
-                return;
-            }
+        // Load staff data from API
+        async function loadStaffData() {
+            console.log('=== STARTING loadStaffData ===');
+            console.log('linkData:', linkData);
+            console.log('customerId:', linkData?.customerId);
             
             try {
-                // Validate the link with the API
-                const API_URL = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api';
-                const response = await fetch(`${API_URL}/self-registration/validate-link/${linkId}`);
-                const result = await response.json();
-                
-                if (!response.ok || !result.success) {
-                    if (response.status === 400 && result.message.includes('expired')) {
-                        document.getElementById('expired-message').style.display = 'block';
-                    } else {
-                        showError(result.message || 'Invalid registration link. Please contact your school administrator.');
-                    }
+                // Check if we have the required data
+                if (!linkData || !linkData.customerId) {
+                    console.error('ERROR: linkData or customerId is missing!');
+                    showError('Unable to load staff data. Missing customer information.');
                     return;
                 }
                 
-                // Store the link data
-                linkData = result;
-                qrLinkId = result.qrLinkId;
-                
-                // Set school name
-                document.getElementById('school-name').textContent = result.customerName || 'Your School';
-                
-                // Add logo if available
-                if (result.logoUrl) {
-                    const logoHtml = `<img src="${result.logoUrl}" alt="School Logo" style="max-height: 60px; margin-bottom: 10px;">`;
-                    document.querySelector('.header').insertAdjacentHTML('afterbegin', logoHtml);
-                }
-                
-                // Show custom message if provided
-                if (result.configSettings.customMessage) {
-                    document.getElementById('custom-message').textContent = result.configSettings.customMessage;
-                    document.getElementById('custom-message').style.display = 'block';
-                }
-                
-                // Show the form
-                document.getElementById('registration-form').style.display = 'block';
-                
-                // Load staff data
-                loadStaffData();
-                
-                // Set up event listeners
-                setupEventListeners();
-                
-            } catch (error) {
-                console.error('Error validating link:', error);
-                showError('Unable to validate registration link. Please try again or contact your school administrator.');
-            }
-        });
-        
-        // Load staff data from API
-        async function loadStaffData() {
-            try {
                 // Fetch staff data from API
                 const API_URL = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api';
-                const response = await fetch(`${API_URL}/self-registration/staff-list?customerId=${linkData.customerId}`);
+                const url = `${API_URL}/self-registration/staff-list?customerId=${linkData.customerId}`;
+                console.log('Fetching from URL:', url);
                 
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.success) {
-                        staffData = data;
-                        console.log('Staff data loaded:', staffData);
-                        
-                        // Initialize the dropdowns with data
-                        updateMultiSelectOptions('tutors', staffData.tutors);
-                        updateMultiSelectOptions('hoy', staffData.headsOfYear);
-                        updateMultiSelectOptions('teachers', staffData.subjectTeachers);
-                        
-                        // Hide dropdowns if no data available
-                        if (!data.showHeadsOfYear) {
-                            document.getElementById('hoy-select').closest('.form-group').style.display = 'none';
-                        }
-                        if (!data.showSubjectTeachers) {
-                            document.getElementById('teachers-select').closest('.form-group').style.display = 'none';
-                        }
-                    }
-                } else {
-                    console.error('Failed to load staff data');
+                const response = await fetch(url);
+                console.log('Response status:', response.status);
+                console.log('Response ok:', response.ok);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('API Error Response:', errorText);
+                    throw new Error(`Failed to load staff data: ${response.status} ${response.statusText}`);
                 }
                 
+                const data = await response.json();
+                console.log('API Response data:', data);
+                
+                if (!data.success) {
+                    console.error('API returned success=false:', data);
+                    throw new Error(data.message || 'Failed to load staff data');
+                }
+                
+                // Store the data
+                staffData = data;
+                console.log('Staff data loaded successfully:', {
+                    tutorsCount: staffData.tutors?.length || 0,
+                    hoyCount: staffData.headsOfYear?.length || 0,
+                    teachersCount: staffData.subjectTeachers?.length || 0
+                });
+                
+                // Initialize the dropdowns with data
+                console.log('Updating tutor options...');
+                updateMultiSelectOptions('tutors', staffData.tutors || []);
+                
+                console.log('Updating HOY options...');
+                updateMultiSelectOptions('hoy', staffData.headsOfYear || []);
+                
+                console.log('Updating teacher options...');
+                updateMultiSelectOptions('teachers', staffData.subjectTeachers || []);
+                
+                // Hide dropdowns if no data available
+                if (!data.showHeadsOfYear || (staffData.headsOfYear && staffData.headsOfYear.length === 0)) {
+                    console.log('Hiding HOY dropdown - no data');
+                    document.getElementById('hoy-select').closest('.form-group').style.display = 'none';
+                }
+                if (!data.showSubjectTeachers || (staffData.subjectTeachers && staffData.subjectTeachers.length === 0)) {
+                    console.log('Hiding Subject Teachers dropdown - no data');
+                    document.getElementById('teachers-select').closest('.form-group').style.display = 'none';
+                }
+                
+                console.log('=== loadStaffData COMPLETE ===');
+                
             } catch (error) {
-                console.error('Error loading staff data:', error);
+                console.error('ERROR in loadStaffData:', error);
+                console.error('Full error object:', error);
+                showError('Unable to load staff information. Please refresh the page and try again.');
+                
+                // Set empty arrays to prevent further errors
+                staffData = {
+                    tutors: [],
+                    headsOfYear: [],
+                    subjectTeachers: []
+                };
             }
         }
         
         // Set up event listeners
         function setupEventListeners() {
+            console.log('=== Setting up event listeners ===');
+            
             // Form submission
             document.getElementById('registration-form').addEventListener('submit', handleSubmit);
             
@@ -500,15 +488,28 @@
             document.getElementById('year-group').addEventListener('change', handleYearGroupChange);
             
             // Tutor group change
-            document.getElementById('tutor-group').addEventListener('blur', handleTutorGroupChange); // Changed to blur
+            document.getElementById('tutor-group').addEventListener('blur', handleTutorGroupChange);
             
-            // Multi-select handlers
+            // Multi-select handlers - set these up AFTER data is loaded
+            console.log('Setting up multi-selects...');
             setupMultiSelect('tutors');
             setupMultiSelect('hoy');
             setupMultiSelect('teachers');
             
             // Email validation
             document.getElementById('email').addEventListener('blur', validateEmail);
+            
+            // Close dropdowns when clicking outside
+            document.addEventListener('click', (e) => {
+                // Close all dropdowns if clicking outside any multi-select
+                if (!e.target.closest('.multi-select')) {
+                    document.querySelectorAll('.multi-select-dropdown').forEach(dropdown => {
+                        dropdown.classList.remove('open');
+                    });
+                }
+            });
+            
+            console.log('=== Event listeners setup complete ===');
         }
         
         // Handle year group change
@@ -535,42 +536,99 @@
         
         // Setup multi-select dropdown
         function setupMultiSelect(id) {
+            console.log(`Setting up multi-select for: ${id}`);
+            
             const display = document.getElementById(`${id}-display`);
             const dropdown = document.getElementById(`${id}-dropdown`);
             
-            display.addEventListener('click', () => {
+            if (!display || !dropdown) {
+                console.error(`ERROR: Could not find elements for ${id}:`, { display, dropdown });
+                return;
+            }
+            
+            // Remove any existing listeners to prevent duplicates
+            const newDisplay = display.cloneNode(true);
+            display.parentNode.replaceChild(newDisplay, display);
+            
+            // Add click handler to the display element
+            newDisplay.addEventListener('click', (e) => {
+                console.log(`Click event on ${id}-display`);
+                e.stopPropagation(); // Prevent event from bubbling
+                
+                const dropdown = document.getElementById(`${id}-dropdown`);
+                if (!dropdown) {
+                    console.error(`Dropdown not found for ${id}`);
+                    return;
+                }
+                
+                // Check if dropdown has options
+                if (dropdown.children.length === 0) {
+                    console.warn(`Dropdown ${id} has no options!`);
+                    showError(`No ${id} available. Please contact your administrator.`);
+                    return;
+                }
+                
+                // Toggle the dropdown
+                const wasOpen = dropdown.classList.contains('open');
+                console.log(`Dropdown ${id} was ${wasOpen ? 'open' : 'closed'}, toggling...`);
+                
+                // Close all other dropdowns first
+                document.querySelectorAll('.multi-select-dropdown').forEach(d => {
+                    if (d !== dropdown) d.classList.remove('open');
+                });
+                
                 dropdown.classList.toggle('open');
+                console.log(`Dropdown ${id} is now ${dropdown.classList.contains('open') ? 'open' : 'closed'}`);
             });
             
-            // Close dropdown when clicking outside
-            document.addEventListener('click', (e) => {
-                if (!e.target.closest(`#${id}-select`)) {
-                    dropdown.classList.remove('open');
-                }
-            });
+            console.log(`Multi-select setup complete for ${id}`);
         }
         
         // Update multi-select options
         function updateMultiSelectOptions(id, options) {
+            console.log(`Updating options for ${id}, count: ${options.length}`);
+            
             const dropdown = document.getElementById(`${id}-dropdown`);
+            if (!dropdown) {
+                console.error(`Dropdown element not found for ${id}`);
+                return;
+            }
+            
             dropdown.innerHTML = '';
             
-            options.forEach(option => {
+            if (!options || options.length === 0) {
+                console.warn(`No options provided for ${id}`);
+                const emptyDiv = document.createElement('div');
+                emptyDiv.className = 'multi-select-option';
+                emptyDiv.textContent = `No ${id} available`;
+                emptyDiv.style.fontStyle = 'italic';
+                emptyDiv.style.color = '#999';
+                dropdown.appendChild(emptyDiv);
+                return;
+            }
+            
+            options.forEach((option, index) => {
+                console.log(`Adding option ${index} for ${id}:`, option);
+                
                 const div = document.createElement('div');
                 div.className = 'multi-select-option';
-                div.textContent = option.displayName || option.name; // Use displayName if available
-                div.dataset.value = option.email; // Store email as value
+                div.textContent = option.displayName || option.name || option.email || 'Unknown';
+                div.dataset.value = option.email || '';
                 
-                if (selectedData[id].includes(option.email)) { // Check against email
+                if (selectedData[id] && selectedData[id].includes(option.email)) {
                     div.classList.add('selected');
                 }
                 
-                div.addEventListener('click', () => {
+                div.addEventListener('click', (e) => {
+                    console.log(`Option clicked in ${id}:`, option);
+                    e.stopPropagation(); // Prevent closing the dropdown
                     toggleMultiSelectOption(id, option);
                 });
                 
                 dropdown.appendChild(div);
             });
+            
+            console.log(`Added ${options.length} options to ${id} dropdown`);
         }
         
         // Toggle multi-select option
@@ -767,6 +825,84 @@
             // Scroll to top
             window.scrollTo(0, 0);
         }
+
+        // Initialize the form
+        document.addEventListener('DOMContentLoaded', async function() {
+            console.log('=== DOM Content Loaded ===');
+            
+            // Parse URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            linkId = urlParams.get('id');
+            
+            console.log('Link ID from URL:', linkId);
+            
+            if (!linkId) {
+                showError('Invalid registration link. Please contact your school administrator.');
+                return;
+            }
+            
+            try {
+                // Validate the link with the API
+                const API_URL = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api';
+                console.log('Validating link...');
+                
+                const response = await fetch(`${API_URL}/self-registration/validate-link/${linkId}`);
+                const result = await response.json();
+                
+                console.log('Link validation response:', result);
+                
+                if (!response.ok || !result.success) {
+                    if (response.status === 400 && result.message.includes('expired')) {
+                        document.getElementById('expired-message').style.display = 'block';
+                    } else {
+                        showError(result.message || 'Invalid registration link. Please contact your school administrator.');
+                    }
+                    return;
+                }
+                
+                // Store the link data
+                linkData = result;
+                qrLinkId = result.qrLinkId;
+                
+                console.log('Link data stored:', { customerId: linkData.customerId, qrLinkId });
+                
+                // Set school name
+                document.getElementById('school-name').textContent = result.customerName || 'Your School';
+                
+                // Add logo if available
+                if (result.logoUrl) {
+                    const logoHtml = `<img src="${result.logoUrl}" alt="School Logo" style="max-height: 60px; margin-bottom: 10px;">`;
+                    document.querySelector('.header').insertAdjacentHTML('afterbegin', logoHtml);
+                }
+                
+                // Show custom message if provided
+                if (result.configSettings.customMessage) {
+                    document.getElementById('custom-message').textContent = result.configSettings.customMessage;
+                    document.getElementById('custom-message').style.display = 'block';
+                }
+                
+                // Show the form
+                document.getElementById('registration-form').style.display = 'block';
+                
+                // Load staff data FIRST, then set up event listeners
+                console.log('Loading staff data...');
+                await loadStaffData(); // Wait for staff data to load
+                
+                console.log('Setting up event listeners...');
+                setupEventListeners();
+                
+                // Add a global click handler for debugging
+                document.addEventListener('click', (e) => {
+                    console.log('Global click detected on:', e.target);
+                });
+                
+                console.log('=== Initialization Complete ===');
+                
+            } catch (error) {
+                console.error('Error during initialization:', error);
+                showError('Unable to initialize registration form. Please try again or contact your school administrator.');
+            }
+        });
     </script>
 </body>
 </html>
