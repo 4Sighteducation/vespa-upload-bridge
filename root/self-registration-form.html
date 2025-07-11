@@ -492,6 +492,113 @@
             color: #666;
             font-size: 16px;
         }
+        
+        /* Success Screen Styles */
+        #success-screen {
+            text-align: center;
+            padding: 40px 20px;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        
+        .success-icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+        }
+        
+        #success-screen h2 {
+            color: #28a745;
+            font-size: 28px;
+            margin-bottom: 30px;
+        }
+        
+        .credentials-box {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 25px;
+            text-align: left;
+        }
+        
+        .credentials-box p {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .credential-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+            gap: 10px;
+        }
+        
+        .credential-row label {
+            font-weight: 600;
+            min-width: 80px;
+            color: #495057;
+        }
+        
+        .credential-row span {
+            flex: 1;
+            font-family: monospace;
+            font-size: 16px;
+            color: #333;
+        }
+        
+        .password-display {
+            background: #fff3cd;
+            padding: 5px 10px;
+            border-radius: 4px;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .copy-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        
+        .copy-button:hover {
+            background: #0056b3;
+        }
+        
+        .login-button {
+            width: 100%;
+            max-width: 300px;
+            padding: 16px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+        
+        .login-button:hover {
+            background: #218838;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+        }
+        
+        .security-note {
+            font-size: 14px;
+            color: #6c757d;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -603,6 +710,30 @@
             <div class="loading" id="loading">
                 <div class="spinner"></div>
                 <p>Processing your registration...</p>
+            </div>
+            
+            <!-- Success Screen with Password Display -->
+            <div id="success-screen" style="display: none;">
+                <div class="success-icon">✅</div>
+                <h2>Registration Complete!</h2>
+                <div class="credentials-box">
+                    <p><strong>Your Login Details:</strong></p>
+                    <div class="credential-row">
+                        <label>Email:</label>
+                        <span id="display-email"></span>
+                    </div>
+                    <div class="credential-row">
+                        <label>Password:</label>
+                        <span id="display-password" class="password-display"></span>
+                        <button onclick="copyPassword()" class="copy-button">📋 Copy</button>
+                    </div>
+                </div>
+                <button id="login-button" class="login-button">
+                    Go to VESPA Login →
+                </button>
+                <p class="security-note">
+                    ⚠️ Save these details - they've also been emailed to you
+                </p>
             </div>
         </div>
     </div>
@@ -1193,15 +1324,34 @@
                 
                 const result = await response.json();
                 
-                // Show success
-                showSuccess('Registration successful! You will receive an email with your login details shortly.');
-                
-                // Reset form
-                document.getElementById('registration-form').reset();
-                selectedData = { tutors: [], headsOfYear: [], subjectTeachers: [] };
-                updateSelectionDisplay('tutors');
-                updateSelectionDisplay('headsOfYear');
-                updateSelectionDisplay('subjectTeachers');
+                // Check if we have credentials to display
+                if (result.credentials) {
+                    // Hide loading
+                    document.getElementById('loading').style.display = 'none';
+                    
+                    // Show success screen with password
+                    document.getElementById('display-email').textContent = result.credentials.email;
+                    document.getElementById('display-password').textContent = result.credentials.password;
+                    
+                    // Set up login button
+                    document.getElementById('login-button').onclick = function() {
+                        // Open login page with email pre-filled
+                        window.location.href = result.credentials.loginUrl;
+                    };
+                    
+                    // Show success screen
+                    document.getElementById('success-screen').style.display = 'block';
+                } else {
+                    // Traditional success message
+                    showSuccess('Registration successful! You will receive an email with your login details shortly.');
+                    
+                    // Reset form
+                    document.getElementById('registration-form').reset();
+                    selectedData = { tutors: [], headsOfYear: [], subjectTeachers: [] };
+                    updateSelectionDisplay('tutors');
+                    updateSelectionDisplay('headsOfYear');
+                    updateSelectionDisplay('subjectTeachers');
+                }
                 
             } catch (error) {
                 console.error('Registration error:', error);
@@ -1265,6 +1415,56 @@
             errorDiv.textContent = message;
             errorDiv.style.display = 'block';
             window.scrollTo(0, 0);
+        }
+        
+        // Copy password to clipboard
+        function copyPassword() {
+            const password = document.getElementById('display-password').textContent;
+            
+            if (navigator.clipboard && window.isSecureContext) {
+                // Modern way
+                navigator.clipboard.writeText(password).then(() => {
+                    const button = event.target;
+                    const originalText = button.textContent;
+                    button.textContent = '✓ Copied!';
+                    button.style.background = '#28a745';
+                    
+                    setTimeout(() => {
+                        button.textContent = originalText;
+                        button.style.background = '#007bff';
+                    }, 2000);
+                }).catch(err => {
+                    fallbackCopy(password);
+                });
+            } else {
+                // Fallback for older browsers or non-HTTPS
+                fallbackCopy(password);
+            }
+        }
+        
+        // Fallback copy method
+        function fallbackCopy(text) {
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            textArea.style.top = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                document.execCommand('copy');
+                const button = event.target;
+                button.textContent = '✓ Copied!';
+                setTimeout(() => {
+                    button.textContent = '📋 Copy';
+                }, 2000);
+            } catch (err) {
+                alert('Please copy manually: ' + text);
+            }
+            
+            document.body.removeChild(textArea);
         }
         
         // Initialize the form
