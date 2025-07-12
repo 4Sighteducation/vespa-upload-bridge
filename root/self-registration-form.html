@@ -1400,29 +1400,8 @@
                 
                 const result = await response.json();
                 
-                // Check if we have auto-login enabled (new token system)
-                if (result.autoLogin && result.autoLogin.enabled) {
-                    // Store school logo if available for the redirect page
-                    if (linkData?.logoUrl) {
-                        sessionStorage.setItem('vespaSchoolLogo', linkData.logoUrl);
-                    }
-                    
-                    // Store registration data for the redirect page
-                    sessionStorage.setItem('vespaRegistrationData', JSON.stringify(result));
-                    
-                    // Hide loading
-                    document.getElementById('loading').style.display = 'none';
-                    
-                    // Show brief success message
-                    showSuccess(result.autoLogin.message || 'Registration successful! Redirecting to VESPA...');
-                    
-                    // Redirect to the auto-login URL
-                    setTimeout(() => {
-                        window.location.href = result.autoLogin.url;
-                    }, 1500); // Brief delay to show success message
-                    
-                } else if (result.credentials) {
-                    // Fallback: Old system with credentials display
+                // Check if we have credentials to display
+                if (result.credentials) {
                     // Hide loading
                     document.getElementById('loading').style.display = 'none';
                     
@@ -1439,7 +1418,7 @@
                     // Show success screen
                     document.getElementById('success-screen').style.display = 'block';
                 } else {
-                    // Traditional success message (email only)
+                    // Traditional success message
                     showSuccess('Registration successful! You will receive an email with your login details shortly.');
                     
                     // Reset form
