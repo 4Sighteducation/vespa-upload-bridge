@@ -330,7 +330,7 @@
         // Configuration
         const API_BASE = window.location.hostname === 'localhost' 
             ? 'http://localhost:3000/api' 
-            : 'https://vespa-upload-api-44b25d1f0cf5.herokuapp.com/api';
+            : 'https://vespa-upload-api-07e11c285370.herokuapp.com/api';
         
         const VESPA_BASE = 'https://vespaacademy.knack.com/vespa-academy';
         const MAX_RETRIES = 3;
@@ -368,9 +368,10 @@
             
             // Set logo if available
             const logoUrl = sessionStorage.getItem('vespaSchoolLogo');
-            if (logoUrl) {
+            if (logoUrl && typeof logoUrl === 'string' && logoUrl !== '[object Object]') {
                 document.getElementById('schoolLogo').src = logoUrl;
                 document.getElementById('schoolLogo').style.display = 'block';
+                sessionStorage.removeItem('vespaSchoolLogo'); // Clean up
             }
         });
         
