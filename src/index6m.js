@@ -388,7 +388,7 @@ function addStyles() {
   linkElement.id = 'vespa-upload-styles';
   linkElement.rel = 'stylesheet';
   linkElement.type = 'text/css';
-  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index6h.css';
+  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index6c.css';
   
   document.head.appendChild(linkElement);
   debugLog("Dynamically linked external CSS: " + linkElement.href, null, 'info');
@@ -4685,6 +4685,14 @@ function bindStepEvents() {
             <label for="auto-approve-registration">Auto-approve registrations</label>
           </div>
           
+          <div class="vespa-checkbox-group" style="margin: 10px 0;">
+            <input type="checkbox" id="webinar-mode" unchecked>
+            <label for="webinar-mode">Webinar Mode (2-hour tokens for delayed login)</label>
+            <div class="help-text" style="font-size: 12px; color: #666; margin-top: 5px; margin-left: 28px;">
+              Enable this for online webinars where students register now but log in later
+            </div>
+          </div>
+          
           <div class="vespa-input-group" style="margin: 15px 0;">
             <label for="qr-expiry-days">Link expires in (days):</label>
             <input type="number" id="qr-expiry-days" value="365" min="1" max="730" 
@@ -4731,6 +4739,7 @@ function bindStepEvents() {
       const autoApprove = document.getElementById('auto-approve-registration').checked;
       const expiresIn = parseInt(document.getElementById('qr-expiry-days').value) || 365;
       const customMessage = document.getElementById('registration-message').value.trim();
+      const webinarMode = document.getElementById('webinar-mode').checked;
       
       // Generate the registration link
       await generateRegistrationLink({
@@ -4739,7 +4748,8 @@ function bindStepEvents() {
         requireSchoolEmail,
         autoApprove,
         expiresIn,
-        customMessage
+        customMessage,
+        webinarMode
       });
     });
 
@@ -4969,6 +4979,7 @@ function bindStepEvents() {
               <li><strong>Valid until:</strong> ${new Date(response.expiresAt).toLocaleDateString()}</li>
               <li><strong>School email required:</strong> ${response.configSettings.requireSchoolEmail ? 'Yes' : 'No'}</li>
               <li><strong>Auto-approve:</strong> ${response.configSettings.autoApprove ? 'Yes' : 'No'}</li>
+              <li><strong>Webinar mode:</strong> ${response.configSettings.webinarMode ? 'Yes (2-hour tokens)' : 'No (5-minute tokens)'}</li>
               ${response.configSettings.customMessage ? `<li><strong>Custom message:</strong> ${response.configSettings.customMessage}</li>` : ''}
               <li><strong>Link ID:</strong> <code>${response.linkId}</code></li>
             </ul>
@@ -6763,7 +6774,6 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       renderStep(1);
     }
   }
-
 
 
 
