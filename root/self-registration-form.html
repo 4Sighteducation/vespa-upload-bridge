@@ -1326,6 +1326,28 @@
                 return false;
             }
             
+            // Add warning for free email domains (even if not strictly required)
+            if (!linkData?.configSettings?.requireSchoolEmail && freeEmailDomains.includes(domain)) {
+                // Check if we've already warned about this email
+                const warningKey = `email_warning_${email}`;
+                if (!sessionStorage.getItem(warningKey)) {
+                    const userConfirmed = confirm(
+                        'We strongly recommend using your school or college email address instead of a personal email.\n\n' +
+                        'School email addresses help ensure you receive important communications and maintain proper access.\n\n' +
+                        'Do you want to continue with this personal email address?'
+                    );
+                    
+                    if (!userConfirmed) {
+                        emailError.textContent = 'Please use your school or college email address';
+                        emailError.style.display = 'block';
+                        return false;
+                    } else {
+                        // Remember that we've warned about this email during this session
+                        sessionStorage.setItem(warningKey, 'true');
+                    }
+                }
+            }
+            
             emailError.style.display = 'none';
             return true;
         }
@@ -1409,7 +1431,16 @@
                 
             } catch (error) {
                 console.error('Registration error:', error);
-                showError('Registration failed. Please try again or contact your school administrator.');
+                
+                // Check if it's a duplicate email error and show the specific message
+                if (error.message && error.message.includes('already exists')) {
+                    showError(error.message); // Use the specific error message from backend
+                } else if (error.message) {
+                    showError(error.message); // Show any other specific error message
+                } else {
+                    showError('Registration failed. Please try again or contact your school administrator.');
+                }
+                
                 document.getElementById('registration-form').style.display = 'block';
             } finally {
                 document.getElementById('loading').style.display = 'none';
