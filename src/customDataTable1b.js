@@ -809,19 +809,27 @@
         }
     }
 
-    // Global variable for configuration
-    let CUSTOM_DATATABLE_CONFIG = null;
+    // Global variable for configuration - don't overwrite if it already exists
+    if (typeof window.CUSTOM_DATATABLE_CONFIG === 'undefined') {
+        window.CUSTOM_DATATABLE_CONFIG = null;
+    }
     
     // Initialize function
     function initializeCustomDataTable() {
         debugLog("Initializing VESPA Custom Data Table", null, 'info');
         
-        if (!CUSTOM_DATATABLE_CONFIG) {
+        // Check both window and local variable
+        const config = window.CUSTOM_DATATABLE_CONFIG;
+        
+        if (!config) {
             debugLog("No configuration found", null, 'error');
+            debugLog("Checked window.CUSTOM_DATATABLE_CONFIG:", window.CUSTOM_DATATABLE_CONFIG);
             return;
         }
         
-        const { elementSelector, customerId, apiUrl } = CUSTOM_DATATABLE_CONFIG;
+        const { elementSelector, customerId, apiUrl } = config;
+        
+        debugLog("Configuration loaded:", config, 'info');
         
         // Find the container
         const container = document.querySelector(elementSelector);
@@ -849,7 +857,8 @@
     
     // Expose to global scope
     window.initializeCustomDataTable = initializeCustomDataTable;
-    window.CUSTOM_DATATABLE_CONFIG = CUSTOM_DATATABLE_CONFIG;
+    // Don't overwrite the configuration here
     
     debugLog("VESPA Custom Data Table module loaded", null, 'success');
+    debugLog("Current configuration:", window.CUSTOM_DATATABLE_CONFIG, 'info');
 })(); 
