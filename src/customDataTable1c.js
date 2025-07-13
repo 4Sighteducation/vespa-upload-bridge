@@ -69,6 +69,9 @@
                             <select id="vespa-subject-filter" class="vespa-filter-select">
                                 <option value="">All Subjects</option>
                             </select>
+                            <select id="vespa-group-filter" class="vespa-filter-select">
+                                <option value="">All Groups</option>
+                            </select>
                         </div>
                         <div class="vespa-table-actions">
                             <button class="vespa-btn vespa-btn-primary" onclick="vespaTable.exportToCSV()">
@@ -271,6 +274,22 @@
                     box-shadow: 0 0 0 2px rgba(0,123,255,0.1);
                 }
                 
+                .vespa-attendance-input {
+                    width: 60px;
+                    padding: 4px 8px;
+                    border: 1px solid #ddd;
+                    border-radius: 4px;
+                    font-size: 13px;
+                }
+                
+                .vespa-data-table select {
+                    padding: 4px 8px;
+                    border: 1px solid #ddd;
+                    border-radius: 4px;
+                    font-size: 13px;
+                    min-width: 80px;
+                }
+                
                 .vespa-table-pagination {
                     display: flex;
                     justify-content: center;
@@ -335,18 +354,27 @@
         }
         
         attachEventListeners() {
+            // Global search
             document.getElementById('vespa-global-search').addEventListener('input', (e) => {
-                this.filters.search = e.target.value.toLowerCase();
+                this.filters.search = e.target.value;
                 this.applyFilters();
             });
             
+            // Year filter
             document.getElementById('vespa-year-filter').addEventListener('change', (e) => {
                 this.filters.yearGroup = e.target.value;
                 this.applyFilters();
             });
             
+            // Subject filter
             document.getElementById('vespa-subject-filter').addEventListener('change', (e) => {
                 this.filters.subject = e.target.value;
+                this.applyFilters();
+            });
+            
+            // Group filter - ADDED
+            document.getElementById('vespa-group-filter').addEventListener('change', (e) => {
+                this.filters.group = e.target.value;
                 this.applyFilters();
             });
         }
@@ -372,6 +400,7 @@
                     this.filteredData = [...this.data];
                     
                     this.populateSubjectFilter();
+                    this.populateGroupFilter(); // ADDED
                     this.render();
                     this.updateRecordCount();
                     
@@ -387,12 +416,26 @@
         }
         
         populateSubjectFilter() {
-            const subjects = [...new Set(this.data.map(d => d.subject))].sort();
+            const subjects = [...new Set(this.data.map(row => row.subject))].sort();
             const select = document.getElementById('vespa-subject-filter');
-            
             select.innerHTML = '<option value="">All Subjects</option>';
             subjects.forEach(subject => {
-                select.innerHTML += `<option value="${subject}">${subject}</option>`;
+                const option = document.createElement('option');
+                option.value = subject;
+                option.textContent = subject;
+                select.appendChild(option);
+            });
+        }
+        
+        populateGroupFilter() {
+            const groups = [...new Set(this.data.map(row => row.group).filter(g => g))].sort();
+            const select = document.getElementById('vespa-group-filter');
+            select.innerHTML = '<option value="">All Groups</option>';
+            groups.forEach(group => {
+                const option = document.createElement('option');
+                option.value = group;
+                option.textContent = group;
+                select.appendChild(option);
             });
         }
         
@@ -407,16 +450,33 @@
                     <th onclick="vespaTable.sort('studentName')" class="sortable">
                         Student Name <span class="vespa-sort-icon">↕</span>
                     </th>
+                    <th onclick="vespaTable.sort('uln')" class="sortable">
+                        ULN <span class="vespa-sort-icon">↕</span>
+                    </th>
                     <th onclick="vespaTable.sort('subject')" class="sortable">
                         Subject <span class="vespa-sort-icon">↕</span>
                     </th>
                     <th>Qualification</th>
+                    <th>Qual Level</th>
                     <th>Exam Board</th>
+                    <th onclick="vespaTable.sort('academicYear')" class="sortable">
+                        Academic Year <span class="vespa-sort-icon">↕</span>
+                    </th>
+                    <th onclick="vespaTable.sort('priorAttainment')" class="sortable">
+                        Prior Att. <span class="vespa-sort-icon">↕</span>
+                    </th>
+                    <th>ALPS Band</th>
                     <th onclick="vespaTable.sort('meg')" class="sortable">
                         MEG <span class="vespa-sort-icon">↕</span>
                     </th>
+                    <th onclick="vespaTable.sort('stg')" class="sortable">
+                        STG <span class="vespa-sort-icon">↕</span>
+                    </th>
                     <th>Current Grade</th>
                     <th>Target Grade</th>
+                    <th>Effort</th>
+                    <th>Behaviour</th>
+                    <th>Attendance %</th>
                     <th>Notes</th>
                     <th>Actions</th>
                 </tr>
@@ -435,8 +495,10 @@
                 return `
                     <tr data-id="${row.id}" class="${rowClass}">
                         <td>${row.studentName}</td>
+                        <td>${row.uln || '-'}</td>
                         <td>${row.subject}</td>
-                        <td>${row.qualification}</td>
+                        <td>${row.qualification || '-'}</td>
+                        <td>${row.qualificationLevel || '-'}</td>
                         <td>
                             ${this.options.editable ? 
                                 `<select data-field="examBoard" onchange="vespaTable.updateField('${row.id}', 'examBoard', this.value)">
@@ -446,17 +508,31 @@
                                     <option value="OCR" ${row.examBoard === 'OCR' ? 'selected' : ''}>OCR</option>
                                     <option value="WJEC" ${row.examBoard === 'WJEC' ? 'selected' : ''}>WJEC</option>
                                 </select>` : 
-                                row.examBoard
+                                row.examBoard || '-'
                             }
                         </td>
+                        <td>${row.academicYear || '-'}</td>
+                        <td>${row.priorAttainment || '-'}</td>
+                        <td>${row.alpsBand || '-'}</td>
                         <td class="vespa-meg-cell">${row.meg || '-'}</td>
+                        <td>
+                            ${this.options.editable ? 
+                                `<input type="text" 
+                                    value="${row.stg || ''}" 
+                                    data-field="stg" 
+                                    onchange="vespaTable.updateField('${row.id}', 'stg', this.value)"
+                                    placeholder="STG"
+                                    class="vespa-grade-input">` : 
+                                row.stg || '-'
+                            }
+                        </td>
                         <td>
                             ${this.options.editable ? 
                                 `<input type="text" 
                                     value="${row.currentGrade || ''}" 
                                     data-field="currentGrade" 
                                     onchange="vespaTable.updateField('${row.id}', 'currentGrade', this.value)"
-                                    placeholder="Enter grade"
+                                    placeholder="CG"
                                     class="vespa-grade-input">` : 
                                 row.currentGrade || '-'
                             }
@@ -467,9 +543,45 @@
                                     value="${row.targetGrade || ''}" 
                                     data-field="targetGrade" 
                                     onchange="vespaTable.updateField('${row.id}', 'targetGrade', this.value)"
-                                    placeholder="Enter grade"
+                                    placeholder="TG"
                                     class="vespa-grade-input">` : 
                                 row.targetGrade || '-'
+                            }
+                        </td>
+                        <td>
+                            ${this.options.editable ? 
+                                `<select data-field="effortGrade" onchange="vespaTable.updateField('${row.id}', 'effortGrade', this.value)">
+                                    <option value="">-</option>
+                                    <option value="1" ${row.effortGrade === '1' ? 'selected' : ''}>1</option>
+                                    <option value="2" ${row.effortGrade === '2' ? 'selected' : ''}>2</option>
+                                    <option value="3" ${row.effortGrade === '3' ? 'selected' : ''}>3</option>
+                                    <option value="4" ${row.effortGrade === '4' ? 'selected' : ''}>4</option>
+                                </select>` : 
+                                row.effortGrade || '-'
+                            }
+                        </td>
+                        <td>
+                            ${this.options.editable ? 
+                                `<select data-field="behaviourGrade" onchange="vespaTable.updateField('${row.id}', 'behaviourGrade', this.value)">
+                                    <option value="">-</option>
+                                    <option value="1" ${row.behaviourGrade === '1' ? 'selected' : ''}>1</option>
+                                    <option value="2" ${row.behaviourGrade === '2' ? 'selected' : ''}>2</option>
+                                    <option value="3" ${row.behaviourGrade === '3' ? 'selected' : ''}>3</option>
+                                    <option value="4" ${row.behaviourGrade === '4' ? 'selected' : ''}>4</option>
+                                </select>` : 
+                                row.behaviourGrade || '-'
+                            }
+                        </td>
+                        <td>
+                            ${this.options.editable ? 
+                                `<input type="number" 
+                                    value="${row.attendance || ''}" 
+                                    data-field="attendance" 
+                                    onchange="vespaTable.updateField('${row.id}', 'attendance', this.value)"
+                                    placeholder="%"
+                                    min="0" max="100"
+                                    class="vespa-attendance-input">` : 
+                                row.attendance ? row.attendance + '%' : '-'
                             }
                         </td>
                         <td>
@@ -593,16 +705,39 @@
         applyFilters() {
             this.filteredData = this.data.filter(row => {
                 if (this.filters.search) {
-                    const searchTerm = this.filters.search;
+                    const searchTerm = this.filters.search.toLowerCase();
                     const searchFields = [
                         row.studentName,
+                        row.uln,
+                        row.studentEmail,
+                        row.uci,
+                        row.upn,
                         row.subject,
+                        row.qualification,
+                        row.qualificationLevel,
+                        row.examBoard,
+                        row.academicYear,
+                        row.yearGroup,
+                        row.group,
+                        row.meg,
+                        row.stg,
                         row.currentGrade,
                         row.targetGrade,
-                        row.notes
-                    ].join(' ').toLowerCase();
+                        row.notes,
+                        row.alpsBand,
+                        row.priorAttainment,
+                        row.effortGrade,
+                        row.behaviourGrade,
+                        row.attendance
+                    ];
                     
-                    if (!searchFields.includes(searchTerm)) return false;
+                    const matchesSearch = searchFields.some(field => 
+                        field && field.toString().toLowerCase().includes(searchTerm)
+                    );
+                    
+                    if (!matchesSearch) {
+                        return false;
+                    }
                 }
                 
                 if (this.filters.yearGroup && row.yearGroup !== this.filters.yearGroup) {
@@ -610,6 +745,11 @@
                 }
                 
                 if (this.filters.subject && row.subject !== this.filters.subject) {
+                    return false;
+                }
+                
+                // Add group filter
+                if (this.filters.group && row.group !== this.filters.group) {
                     return false;
                 }
                 
@@ -648,40 +788,60 @@
         
         exportToCSV() {
             const headers = [
-                'Student Name', 'Email', 'UCI', 'UPN', 'Subject', 
-                'Qualification', 'Exam Board', 'Year Group', 'MEG', 
-                'Current Grade', 'Target Grade', 'Notes'
+                'Student Name',
+                'ULN',
+                'Subject',
+                'Qualification',
+                'Qualification Level',
+                'Exam Board',
+                'Academic Year',
+                'Year Group',
+                'Group',
+                'Prior Attainment',
+                'ALPS Band',
+                'MEG',
+                'STG',
+                'Current Grade',
+                'Target Grade',
+                'Effort Grade',
+                'Behaviour Grade',
+                'Attendance %',
+                'Notes'
             ];
             
             const rows = this.filteredData.map(row => [
                 row.studentName,
-                row.studentEmail,
-                row.uci,
-                row.upn,
+                row.uln || '',
                 row.subject,
-                row.qualification,
-                row.examBoard,
-                row.yearGroup,
-                row.meg,
-                row.currentGrade,
-                row.targetGrade,
-                row.notes
+                row.qualification || '',
+                row.qualificationLevel || '',
+                row.examBoard || '',
+                row.academicYear || '',
+                row.yearGroup || '',
+                row.group || '',
+                row.priorAttainment || '',
+                row.alpsBand || '',
+                row.meg || '',
+                row.stg || '',
+                row.currentGrade || '',
+                row.targetGrade || '',
+                row.effortGrade || '',
+                row.behaviourGrade || '',
+                row.attendance || '',
+                row.notes || ''
             ]);
             
-            let csv = headers.join(',') + '\n';
-            rows.forEach(row => {
-                csv += row.map(cell => {
-                    const value = (cell || '').toString().replace(/"/g, '""');
-                    return value.includes(',') ? `"${value}"` : value;
-                }).join(',') + '\n';
-            });
+            const csv = [headers, ...rows]
+                .map(row => row.map(cell => `"${cell}"`).join(','))
+                .join('\n');
             
             const blob = new Blob([csv], { type: 'text/csv' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `ks5_subjects_${new Date().toISOString().slice(0,10)}.csv`;
+            a.download = `ks5_subject_data_${new Date().toISOString().slice(0,10)}.csv`;
             a.click();
+            URL.revokeObjectURL(url);
         }
         
         async importCSV(input) {
@@ -697,9 +857,23 @@
                     
                     const fieldMap = {
                         'Student Name': 'studentName',
+                        'ULN': 'uln',
+                        'Subject': 'subject',
+                        'Qualification': 'qualification',
+                        'Qualification Level': 'qualificationLevel',
+                        'Exam Board': 'examBoard',
+                        'Academic Year': 'academicYear',
+                        'Year Group': 'yearGroup',
+                        'Group': 'group',
+                        'Prior Attainment': 'priorAttainment',
+                        'ALPS Band': 'alpsBand',
+                        'MEG': 'meg',
+                        'STG': 'stg',
                         'Current Grade': 'currentGrade',
                         'Target Grade': 'targetGrade',
-                        'Exam Board': 'examBoard',
+                        'Effort Grade': 'effortGrade',
+                        'Behaviour Grade': 'behaviourGrade',
+                        'Attendance %': 'attendance',
                         'Notes': 'notes'
                     };
                     
