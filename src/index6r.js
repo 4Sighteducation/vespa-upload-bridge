@@ -5624,15 +5624,34 @@ function bindStepEvents() {
       
       debugLog("Using customer ID:", customerId, 'info');
       
-      // Set configuration on window BEFORE checking for initialization function
-      window.CUSTOM_DATATABLE_CONFIG = {
+      // Store configuration in a different variable that won't be overwritten
+      const dataTableConfig = {
         elementSelector: '#custom-datatable-container',
         customerId: customerId,
         apiUrl: API_BASE_URL
       };
       
+      // Set configuration on window BEFORE loading the script
+      window.CUSTOM_DATATABLE_CONFIG = dataTableConfig;
+      
+      // Also set it in a backup location in case the script clears it
+      window._VESPA_DATATABLE_CONFIG_BACKUP = dataTableConfig;
+      
       // Log configuration for debugging
       debugLog("Custom data table configuration set:", window.CUSTOM_DATATABLE_CONFIG, 'info');
+      
+      // Check if the module is already loaded
+      if (window.initializeCustomDataTable && typeof window.initializeCustomDataTable === 'function') {
+        debugLog("Custom data table module already loaded, reinitializing with new config", null, 'info');
+        
+        // Ensure configuration is set
+        window.CUSTOM_DATATABLE_CONFIG = dataTableConfig;
+        
+        // Initialize with existing module
+        window.initializeCustomDataTable();
+        debugLog("Custom data table reinitialized successfully", null, 'success');
+        return;
+      }
       
       // NOW load the custom data table script AFTER configuration is set
       debugLog("Loading script from CDN...", null, 'info');
@@ -5641,18 +5660,27 @@ function bindStepEvents() {
       debugLog("Script loaded successfully", null, 'success');
       
       // Small delay to ensure script is fully executed
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 200));
       
-      // The custom data table module overwrites CUSTOM_DATATABLE_CONFIG, so we need to set it again
-      window.CUSTOM_DATATABLE_CONFIG = {
-        elementSelector: '#custom-datatable-container',
-        customerId: customerId,
-        apiUrl: API_BASE_URL
-      };
+      // Restore configuration from backup if it was cleared by the script
+      if (!window.CUSTOM_DATATABLE_CONFIG || Object.keys(window.CUSTOM_DATATABLE_CONFIG).length === 0) {
+        debugLog("Configuration was cleared by script, restoring from backup", null, 'warn');
+        window.CUSTOM_DATATABLE_CONFIG = window._VESPA_DATATABLE_CONFIG_BACKUP || dataTableConfig;
+      }
+      
+      // Log the current state
+      debugLog("Configuration after script load:", window.CUSTOM_DATATABLE_CONFIG, 'info');
       
       // Initialize the custom data table
       if (window.initializeCustomDataTable && typeof window.initializeCustomDataTable === 'function') {
         debugLog("Calling initializeCustomDataTable...", null, 'info');
+        
+        // One more check to ensure configuration exists
+        if (!window.CUSTOM_DATATABLE_CONFIG || !window.CUSTOM_DATATABLE_CONFIG.customerId) {
+          debugLog("Configuration missing before init, setting it again", null, 'warn');
+          window.CUSTOM_DATATABLE_CONFIG = dataTableConfig;
+        }
+        
         window.initializeCustomDataTable();
         debugLog("Custom data table initialized successfully", null, 'success');
       } else {
@@ -6970,6 +6998,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       renderStep(1);
     }
   }
+
 
 
 
