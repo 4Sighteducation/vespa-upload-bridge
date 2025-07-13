@@ -1330,7 +1330,7 @@ function renderSelectTypeStep() {
             <label for="renew-customer">
               <div class="vespa-option-icon">🔄</div>
               <div class="vespa-option-title">Generate Renewal Invoice</div>
-              <div class="vespa-option-description">Generate and manage renewal invoices for existing customers</div>
+              <div class="vespa-option-description">Generate and manage renewals</div>
             </label>
           </div>
         </div>
@@ -1404,7 +1404,7 @@ function renderSelectTypeStep() {
             <input type="radio" id="upload-ks4-simple" name="upload-type" value="student-ks4">
             <label for="upload-ks4-simple">
               <div class="vespa-option-icon">📚</div>
-              <div class="vespa-option-title">A) Key Stage 4 Data (Years 10-11)</div>
+              <div class="vespa-option-title">A) Key Stage 4 (Yrs 9-11)</div>
               <div class="vespa-option-description">Simple upload of GCSE subjects - no calculations needed</div>
             </label>
           </div>
@@ -1413,8 +1413,8 @@ function renderSelectTypeStep() {
             <input type="radio" id="upload-ks5-workflow" name="upload-type" value="ks5-workflow">
             <label for="upload-ks5-workflow">
               <div class="vespa-option-icon">🎯</div>
-              <div class="vespa-option-title">B) Key Stage 5 Workflow (Years 12-13)</div>
-              <div class="vespa-option-description">Prior Attainment Calculator & Academic Profile Upload</div>
+              <div class="vespa-option-title">B) Key Stage 5 (Yr 12-13)</div>
+              <div class="vespa-option-description">Prior Attainment Calc. & Academic Profile</div>
             </label>
           </div>
           
@@ -1471,6 +1471,12 @@ function renderSelectTypeStep() {
       }
     } catch (error) {
       debugLog('Error checking staff existence:', error, 'warn');
+      // Don't let this error prevent the interface from working
+      // Just hide the status indicators if there's an error
+      const staffStatus = document.getElementById('staff-status');
+      const disabledMessage = document.getElementById('student-disabled-message');
+      if (staffStatus) staffStatus.style.display = 'none';
+      if (disabledMessage) disabledMessage.style.display = 'none';
     }
   }
   
@@ -4685,6 +4691,14 @@ function bindStepEvents() {
             <label for="auto-approve-registration">Auto-approve registrations</label>
           </div>
           
+          <div class="vespa-checkbox-group" style="margin: 10px 0;">
+            <input type="checkbox" id="webinar-mode" unchecked>
+            <label for="webinar-mode">Webinar Mode (2-hour tokens for delayed login)</label>
+            <div class="help-text" style="font-size: 12px; color: #666; margin-top: 5px; margin-left: 28px;">
+              Enable this for online webinars where students register now but log in later
+            </div>
+          </div>
+          
           <div class="vespa-input-group" style="margin: 15px 0;">
             <label for="qr-expiry-days">Link expires in (days):</label>
             <input type="number" id="qr-expiry-days" value="365" min="1" max="730" 
@@ -4731,6 +4745,7 @@ function bindStepEvents() {
       const autoApprove = document.getElementById('auto-approve-registration').checked;
       const expiresIn = parseInt(document.getElementById('qr-expiry-days').value) || 365;
       const customMessage = document.getElementById('registration-message').value.trim();
+      const webinarMode = document.getElementById('webinar-mode').checked;
       
       // Generate the registration link
       await generateRegistrationLink({
@@ -4739,7 +4754,8 @@ function bindStepEvents() {
         requireSchoolEmail,
         autoApprove,
         expiresIn,
-        customMessage
+        customMessage,
+        webinarMode
       });
     });
 
@@ -4969,6 +4985,7 @@ function bindStepEvents() {
               <li><strong>Valid until:</strong> ${new Date(response.expiresAt).toLocaleDateString()}</li>
               <li><strong>School email required:</strong> ${response.configSettings.requireSchoolEmail ? 'Yes' : 'No'}</li>
               <li><strong>Auto-approve:</strong> ${response.configSettings.autoApprove ? 'Yes' : 'No'}</li>
+              <li><strong>Webinar mode:</strong> ${response.configSettings.webinarMode ? 'Yes (2-hour tokens)' : 'No (5-minute tokens)'}</li>
               ${response.configSettings.customMessage ? `<li><strong>Custom message:</strong> ${response.configSettings.customMessage}</li>` : ''}
               <li><strong>Link ID:</strong> <code>${response.linkId}</code></li>
             </ul>
@@ -5047,10 +5064,24 @@ function bindStepEvents() {
    */
   function loadScript(src) {
     return new Promise((resolve, reject) => {
+      // Check if script already exists
+      const existingScript = document.querySelector(`script[src="${src}"]`);
+      if (existingScript) {
+        debugLog("Script already loaded:", src, 'info');
+        resolve();
+        return;
+      }
+      
       const script = document.createElement('script');
       script.src = src;
-      script.onload = resolve;
-      script.onerror = reject;
+      script.onload = () => {
+        debugLog("Script loaded successfully:", src, 'success');
+        resolve();
+      };
+      script.onerror = (error) => {
+        debugLog("Failed to load script:", { src, error }, 'error');
+        reject(new Error(`Failed to load script: ${src}`));
+      };
       document.head.appendChild(script);
     });
   }
@@ -5298,13 +5329,28 @@ function bindStepEvents() {
       }
       
       // Check if students exist
-      const response = await $.ajax({
-        url: `${API_BASE_URL}academic-data/check-students?customerId=${customerId}`,
-        type: 'GET',
-        xhrFields: { withCredentials: true }
-      });
+      // Try to check if students exist, but continue even if the endpoint doesn't exist
+      let hasStudents = true; // Assume students exist by default
       
-      if (!response.success || !response.hasStudents) {
+      try {
+        const response = await $.ajax({
+          url: `${API_BASE_URL}academic-data/check-students?customerId=${customerId}`,
+          type: 'GET',
+          xhrFields: { withCredentials: true }
+        });
+        
+        hasStudents = response.success && response.hasStudents;
+      } catch (error) {
+        // If it's a 404, the endpoint doesn't exist - continue anyway
+        if (error.status === 404) {
+          debugLog('Student check endpoint not found, continuing anyway', error, 'warn');
+        } else {
+          debugLog('Error checking for students, continuing anyway', error, 'warn');
+        }
+        // Continue with the interface regardless
+      }
+      
+      if (!hasStudents) {
         showModal('No Students Found', `
           <div class="vespa-info-box" style="background: #fff3cd; border-left: 4px solid #ffc107;">
             <div class="vespa-info-icon" style="display: inline-block; margin-right: 8px;">⚠️</div>
@@ -5342,13 +5388,13 @@ function bindStepEvents() {
           </div>
           
           <div class="vespa-academic-tabs">
-            <button class="vespa-tab-button active" onclick="showAcademicTab('gcse-calculator')">
+            <button class="vespa-tab-button active" onclick="showAcademicTab('gcse-calculator', this)">
               GCSE Prior Attainment Calculator
             </button>
-            <button class="vespa-tab-button" onclick="showAcademicTab('ks5-upload')">
+            <button class="vespa-tab-button" onclick="showAcademicTab('ks5-upload', this)">
               KS5 Subject Upload
             </button>
-            <button class="vespa-tab-button" onclick="showAcademicTab('mid-year-update')">
+            <button class="vespa-tab-button" onclick="showAcademicTab('mid-year-update', this)">
               Mid-Year Update
             </button>
           </div>
@@ -5392,11 +5438,8 @@ function bindStepEvents() {
       // Add styles for the academic data interface
       addAcademicDataStyles();
       
-      // Auto-load the custom data table for the mid-year update tab
-      if (window.vespaTable) {
-        // If already loaded, just show it
-        showAcademicTab('mid-year-update');
-      }
+      // Don't auto-load any tab - let user choose
+      // The data table will be loaded when they click the Mid-Year Update tab
       
       // Append the academic container to the main container
       mainContainer.appendChild(academicContainer);
@@ -5471,12 +5514,26 @@ function bindStepEvents() {
   /**
    * Show a specific academic data tab
    */
-  window.showAcademicTab = async function(tabName) {
+  window.showAcademicTab = async function(tabName, buttonElement) {
     // Update tab buttons
     document.querySelectorAll('.vespa-tab-button').forEach(btn => {
       btn.classList.remove('active');
     });
-    event.target.classList.add('active');
+    
+    // If buttonElement is provided, use it; otherwise find the button by tab name
+    if (buttonElement) {
+      buttonElement.classList.add('active');
+    } else {
+      // Find the button that corresponds to this tab
+      const buttons = document.querySelectorAll('.vespa-tab-button');
+      buttons.forEach(btn => {
+        if ((tabName === 'gcse-calculator' && btn.textContent.includes('GCSE')) ||
+            (tabName === 'ks5-upload' && btn.textContent.includes('KS5')) ||
+            (tabName === 'mid-year-update' && btn.textContent.includes('Mid-Year'))) {
+          btn.classList.add('active');
+        }
+      });
+    }
     
     // Hide all tab contents
     document.querySelectorAll('.vespa-tab-content').forEach(content => {
@@ -5499,28 +5556,86 @@ function bindStepEvents() {
     try {
       debugLog("Loading custom data table module", null, 'info');
       
+      // First check if container exists
+      const container = document.getElementById('custom-datatable-container');
+      if (!container) {
+        debugLog("Container 'custom-datatable-container' not found in DOM", null, 'error');
+        throw new Error('Container element not found');
+      }
+      
+      debugLog("Container found, loading script from CDN...", null, 'info');
+      
       // Load the custom data table script
       await loadScript('https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/customDataTable1a.js');
       
+      debugLog("Script loaded successfully", null, 'success');
+      
+      // Small delay to ensure script is fully executed
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       // Configure the custom data table
       const customerId = selectedSchool?.id || userContext?.customerId;
+      
+      if (!customerId) {
+        debugLog("No customer ID available", { selectedSchool, userContext }, 'error');
+        throw new Error('No customer ID available. Please ensure you are logged in or have selected a school.');
+      }
+      
+      debugLog("Using customer ID:", customerId, 'info');
+      
+      // Set configuration on window BEFORE checking for initialization function
       window.CUSTOM_DATATABLE_CONFIG = {
         elementSelector: '#custom-datatable-container',
         customerId: customerId,
         apiUrl: API_BASE_URL
       };
       
+      // Log configuration for debugging
+      debugLog("Custom data table configuration set:", window.CUSTOM_DATATABLE_CONFIG, 'info');
+      
       // Initialize the custom data table
-      if (window.initializeCustomDataTable) {
+      if (window.initializeCustomDataTable && typeof window.initializeCustomDataTable === 'function') {
+        debugLog("Calling initializeCustomDataTable...", null, 'info');
         window.initializeCustomDataTable();
         debugLog("Custom data table initialized successfully", null, 'success');
       } else {
+        debugLog("initializeCustomDataTable function not found on window", {
+          hasFunction: !!window.initializeCustomDataTable,
+          typeOfFunction: typeof window.initializeCustomDataTable
+        }, 'error');
         throw new Error('Custom data table initialization function not found');
       }
       
     } catch (error) {
       debugLog('Error loading custom data table:', error, 'error');
-      showError('Failed to load the data table. Please refresh and try again.');
+      
+      // Show more specific error message
+      let errorMessage = 'Failed to load the data table. ';
+      if (error.message.includes('Container element not found')) {
+        errorMessage += 'The page structure is incorrect. Please refresh and try again.';
+      } else if (error.message.includes('No customer ID')) {
+        errorMessage += error.message;
+      } else if (error.message.includes('initialization function not found')) {
+        errorMessage += 'The data table module failed to load properly. Please check your internet connection and try again.';
+      } else if (error.message.includes('Failed to load script')) {
+        errorMessage += 'Unable to load the data table module from CDN. Please check your internet connection.';
+      } else {
+        errorMessage += 'Error: ' + error.message;
+      }
+      
+      showError(errorMessage);
+      
+      // Show a message in the container if it exists
+      const container = document.getElementById('custom-datatable-container');
+      if (container) {
+        container.innerHTML = `
+          <div style="padding: 40px; text-align: center; color: #dc3545;">
+            <h4>Unable to Load Data Table</h4>
+            <p>${errorMessage}</p>
+            <button class="vespa-button primary" onclick="location.reload()">Refresh Page</button>
+          </div>
+        `;
+      }
     }
   }
   
@@ -6763,5 +6878,8 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       renderStep(1);
     }
   }
+
+
+
 
 
