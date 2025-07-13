@@ -5656,7 +5656,7 @@ function bindStepEvents() {
       // NOW load the custom data table script AFTER configuration is set
       debugLog("Loading script from CDN...", null, 'info');
       // Load the fixed version with proper URL construction
-      await loadScript('https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/customDataTable1c.js');
+      await loadScript('https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/customDataTable1d.js');
       
       debugLog("Script loaded successfully", null, 'success');
       
