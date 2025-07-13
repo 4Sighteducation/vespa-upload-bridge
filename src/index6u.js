@@ -5654,9 +5654,9 @@ function bindStepEvents() {
       }
       
       // NOW load the custom data table script AFTER configuration is set
-      debugLog("Loading script from local file (with URL fix)...", null, 'info');
-      // Using local file with URL construction fix
-      await loadScript('/copycustomeDataTable1c.js');
+      debugLog("Loading script from CDN...", null, 'info');
+      // Load the fixed version with proper URL construction
+      await loadScript('https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/customDataTable1c.js');
       
       debugLog("Script loaded successfully", null, 'success');
       
@@ -6999,7 +6999,6 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       renderStep(1);
     }
   }
-
 
 
 
