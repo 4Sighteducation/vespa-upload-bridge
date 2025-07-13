@@ -355,8 +355,14 @@
             try {
                 this.showLoading();
                 
-                let url = `${this.options.apiUrl}/academic-data/ks5-subjects?customerId=${customerId}`;
+                // Ensure no double slashes in URL construction
+                const baseUrl = this.options.apiUrl.endsWith('/') 
+                    ? this.options.apiUrl.slice(0, -1) 
+                    : this.options.apiUrl;
+                let url = `${baseUrl}/academic-data/ks5-subjects?customerId=${customerId}`;
                 if (yearGroup) url += `&yearGroup=${yearGroup}`;
+                
+                debugLog('Fetching KS5 subjects from:', url);
                 
                 const response = await fetch(url);
                 const result = await response.json();
@@ -550,7 +556,16 @@
             try {
                 this.showLoading('Saving changes...');
                 
-                const response = await fetch(`${this.options.apiUrl}/academic-data/update-ks5-subjects`, {
+                // Ensure no double slashes in URL construction
+                const baseUrl = this.options.apiUrl.endsWith('/') 
+                    ? this.options.apiUrl.slice(0, -1) 
+                    : this.options.apiUrl;
+                const updateUrl = `${baseUrl}/academic-data/update-ks5-subjects`;
+                
+                debugLog('Updating KS5 subjects at:', updateUrl);
+                debugLog('Update payload:', { updates });
+                
+                const response = await fetch(updateUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ updates })
