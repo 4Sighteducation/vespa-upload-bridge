@@ -5656,7 +5656,7 @@ function bindStepEvents() {
       // NOW load the custom data table script AFTER configuration is set
       debugLog("Loading script from local file (with URL fix)...", null, 'info');
       // Using local file with URL construction fix
-      await loadScript('/copycustomeDataTable1b.js');
+      await loadScript('/copycustomeDataTable1c.js');
       
       debugLog("Script loaded successfully", null, 'success');
       
@@ -6999,6 +6999,8 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       renderStep(1);
     }
   }
+
+
 
 
 
