@@ -5612,17 +5612,9 @@ function bindStepEvents() {
         throw new Error('Container element not found');
       }
       
-      debugLog("Container found, loading script from CDN...", null, 'info');
+      debugLog("Container found, preparing configuration...", null, 'info');
       
-      // Load the custom data table script
-      await loadScript('https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/customDataTable1a.js');
-      
-      debugLog("Script loaded successfully", null, 'success');
-      
-      // Small delay to ensure script is fully executed
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Configure the custom data table
+      // Configure the custom data table BEFORE loading the script
       const customerId = selectedSchool?.id || userContext?.customerId;
       
       if (!customerId) {
@@ -5641,6 +5633,22 @@ function bindStepEvents() {
       
       // Log configuration for debugging
       debugLog("Custom data table configuration set:", window.CUSTOM_DATATABLE_CONFIG, 'info');
+      
+      // NOW load the custom data table script AFTER configuration is set
+      debugLog("Loading script from CDN...", null, 'info');
+      await loadScript('https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/customDataTable1a.js');
+      
+      debugLog("Script loaded successfully", null, 'success');
+      
+      // Small delay to ensure script is fully executed
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // The custom data table module overwrites CUSTOM_DATATABLE_CONFIG, so we need to set it again
+      window.CUSTOM_DATATABLE_CONFIG = {
+        elementSelector: '#custom-datatable-container',
+        customerId: customerId,
+        apiUrl: API_BASE_URL
+      };
       
       // Initialize the custom data table
       if (window.initializeCustomDataTable && typeof window.initializeCustomDataTable === 'function') {
