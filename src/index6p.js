@@ -4170,6 +4170,26 @@ function bindStepEvents() {
   window.downloadQRFromView = downloadQRFromView;
   window.regenerateQRLink = regenerateQRLink;
   
+  // Academic Data Management functions
+  window.showAcademicDataInterface = showAcademicDataInterface;
+  window.showAcademicTab = showAcademicTab;
+  window.backToUploadWizard = backToUploadWizard;
+  window.showGCSECalculator = showGCSECalculator;
+  window.showKS5Upload = showKS5Upload;
+  window.showGCSEPriorAttainmentCalculator = showGCSEPriorAttainmentCalculator;
+  window.handleGCSEFileUpload = handleGCSEFileUpload;
+  window.downloadPriorAttainmentResults = downloadPriorAttainmentResults;
+  
+  // Other global functions that might be called from HTML
+  window.handleFlowTypeChange = handleFlowTypeChange;
+  window.loadCustomDataTable = loadCustomDataTable;
+  
+  // KS5 Workflow functions
+  window.showKS5WorkflowInterface = showKS5WorkflowInterface;
+  window.downloadGCSETemplate = downloadGCSETemplate;
+  window.downloadKS5Template = downloadKS5Template;
+  window.proceedToKS5Upload = proceedToKS5Upload;
+  
   // Add an initialization complete flag
   window.VESPA_UPLOAD_BRIDGE_INITIALIZED = true;
   
@@ -5384,17 +5404,17 @@ function bindStepEvents() {
         <div class="vespa-academic-data-container">
           <div class="vespa-academic-header">
             <h2>Academic Data Management</h2>
-            <button class="vespa-button secondary" onclick="backToUploadWizard()">← Back to Upload Wizard</button>
+            <button class="vespa-button secondary" data-action="backToUploadWizard">← Back to Upload Wizard</button>
           </div>
           
           <div class="vespa-academic-tabs">
-            <button class="vespa-tab-button active" onclick="showAcademicTab('gcse-calculator', this)">
+            <button class="vespa-tab-button active">
               GCSE Prior Attainment Calculator
             </button>
-            <button class="vespa-tab-button" onclick="showAcademicTab('ks5-upload', this)">
+            <button class="vespa-tab-button">
               KS5 Subject Upload
             </button>
-            <button class="vespa-tab-button" onclick="showAcademicTab('mid-year-update', this)">
+            <button class="vespa-tab-button">
               Mid-Year Update
             </button>
           </div>
@@ -5409,7 +5429,7 @@ function bindStepEvents() {
                   This tool allows you to upload GCSE results and automatically calculate prior attainment scores for MEG calculations.
                 </div>
               </div>
-              <button class="vespa-button primary" onclick="showGCSECalculator()">Launch GCSE Calculator</button>
+              <button class="vespa-button primary" data-action="showGCSECalculator">Launch GCSE Calculator</button>
             </div>
             
             <div id="ks5-upload-tab" class="vespa-tab-content" style="display: none;">
@@ -5421,7 +5441,7 @@ function bindStepEvents() {
                   Upload subject choices and calculate Minimum Expected Grades (MEGs) based on prior attainment.
                 </div>
               </div>
-              <button class="vespa-button primary" onclick="showKS5Upload()">Upload KS5 Subjects</button>
+              <button class="vespa-button primary" data-action="showKS5Upload">Upload KS5 Subjects</button>
             </div>
             
             <div id="mid-year-update-tab" class="vespa-tab-content" style="display: none;">
@@ -5443,6 +5463,35 @@ function bindStepEvents() {
       
       // Append the academic container to the main container
       mainContainer.appendChild(academicContainer);
+      
+      // Add event listeners after HTML is created
+      setTimeout(() => {
+        // Tab buttons
+        const tabButtons = academicContainer.querySelectorAll('.vespa-tab-button');
+        tabButtons[0]?.addEventListener('click', function() { showAcademicTab('gcse-calculator', this); });
+        tabButtons[1]?.addEventListener('click', function() { showAcademicTab('ks5-upload', this); });
+        tabButtons[2]?.addEventListener('click', function() { showAcademicTab('mid-year-update', this); });
+        
+        // Back button
+        const backBtn = academicContainer.querySelector('button[data-action="backToUploadWizard"]');
+        if (backBtn) {
+          backBtn.addEventListener('click', backToUploadWizard);
+        }
+        
+        // GCSE Calculator button
+        const gcseBtn = academicContainer.querySelector('button[data-action="showGCSECalculator"]');
+        if (gcseBtn) {
+          gcseBtn.addEventListener('click', showGCSECalculator);
+        }
+        
+        // KS5 Upload button
+        const ks5Btn = academicContainer.querySelector('button[data-action="showKS5Upload"]');
+        if (ks5Btn) {
+          ks5Btn.addEventListener('click', showKS5Upload);
+        }
+        
+        debugLog("Academic interface event listeners attached", null, 'success');
+      }, 100);
       
     } catch (error) {
       debugLog('Error loading academic data interface:', error, 'error');
@@ -5514,7 +5563,7 @@ function bindStepEvents() {
   /**
    * Show a specific academic data tab
    */
-  window.showAcademicTab = async function(tabName, buttonElement) {
+  async function showAcademicTab(tabName, buttonElement) {
     // Update tab buttons
     document.querySelectorAll('.vespa-tab-button').forEach(btn => {
       btn.classList.remove('active');
@@ -5642,7 +5691,7 @@ function bindStepEvents() {
   /**
    * Go back to the upload wizard
    */
-  window.backToUploadWizard = function() {
+  function backToUploadWizard() {
     // Show the wizard interface again
     const wizard = document.getElementById('vespa-upload-wizard');
     if (wizard) wizard.style.display = 'block';
@@ -5671,7 +5720,7 @@ function bindStepEvents() {
   /**
    * Show GCSE Calculator (placeholder)
    */
-  window.showGCSECalculator = function() {
+  function showGCSECalculator() {
     showModal('GCSE Calculator', `
       <p>The GCSE Prior Attainment Calculator is coming soon.</p>
       <p>This feature will allow you to:</p>
@@ -5689,7 +5738,7 @@ function bindStepEvents() {
   /**
    * Show KS5 Upload (placeholder)
    */
-  window.showKS5Upload = function() {
+  function showKS5Upload() {
     showModal('KS5 Subject Upload', `
       <p>The KS5 Subject Upload feature is coming soon.</p>
       <p>This feature will allow you to:</p>
@@ -6050,7 +6099,7 @@ function bindStepEvents() {
   /**
    * Handle flow type change
    */
-  window.handleFlowTypeChange = function() {
+  function handleFlowTypeChange() {
     const flowType = document.getElementById('flow-type').value;
     // For update flows, we'd need to add customer search functionality
     // For now, all flows use the same form
@@ -6404,7 +6453,7 @@ function bindStepEvents() {
   /**
    * Show the KS5 Workflow interface
    */
-  window.showKS5WorkflowInterface = function() {
+  function showKS5WorkflowInterface() {
     debugLog("Loading KS5 Workflow interface", null, 'info');
     
     // Get the main container (where the wizard is)
@@ -6425,7 +6474,7 @@ function bindStepEvents() {
       <div class="vespa-ks5-workflow-container" style="padding: 20px;">
         <div class="vespa-workflow-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
           <h2>Key Stage 5 Workflow</h2>
-          <button class="vespa-button secondary" onclick="backToUploadWizard()">← Back to Upload System</button>
+          <button class="vespa-button secondary" data-action="backToUploadWizard">← Back to Upload System</button>
         </div>
         
         <div class="vespa-workflow-steps" style="display: grid; gap: 20px;">
@@ -6444,10 +6493,10 @@ function bindStepEvents() {
               </div>
               
               <div class="vespa-workflow-actions" style="display: flex; gap: 10px;">
-                <button class="vespa-button secondary" onclick="downloadGCSETemplate()">
+                <button class="vespa-button secondary" data-action="downloadGCSETemplate">
                   📥 Download GCSE Template
                 </button>
-                <button class="vespa-button primary" onclick="window.showGCSEPriorAttainmentCalculator()">
+                <button class="vespa-button primary" data-action="showGCSEPriorAttainmentCalculator">
                   🧮 Launch Prior Attainment Calculator
                 </button>
               </div>
@@ -6469,10 +6518,10 @@ function bindStepEvents() {
               </div>
               
               <div class="vespa-workflow-actions" style="display: flex; gap: 10px;">
-                <button class="vespa-button secondary" onclick="downloadKS5Template()">
+                <button class="vespa-button secondary" data-action="downloadKS5Template">
                   📥 Download KS5 Template
                 </button>
-                <button class="vespa-button primary" onclick="proceedToKS5Upload()">
+                <button class="vespa-button primary" data-action="proceedToKS5Upload">
                   📤 Upload KS5 Data
                 </button>
               </div>
@@ -6494,12 +6543,47 @@ function bindStepEvents() {
     
     // Append the KS5 container to the main container
     mainContainer.appendChild(ks5Container);
+    
+    // Add event listeners after HTML is created
+    setTimeout(() => {
+      // Back button
+      const backBtn = ks5Container.querySelector('button[data-action="backToUploadWizard"]');
+      if (backBtn) {
+        backBtn.addEventListener('click', backToUploadWizard);
+      }
+      
+      // GCSE Template button
+      const gcseTemplateBtn = ks5Container.querySelector('button[data-action="downloadGCSETemplate"]');
+      if (gcseTemplateBtn) {
+        gcseTemplateBtn.addEventListener('click', downloadGCSETemplate);
+      }
+      
+      // GCSE Calculator button
+      const gcseCalcBtn = ks5Container.querySelector('button[data-action="showGCSEPriorAttainmentCalculator"]');
+      if (gcseCalcBtn) {
+        gcseCalcBtn.addEventListener('click', showGCSEPriorAttainmentCalculator);
+      }
+      
+      // KS5 Template button
+      const ks5TemplateBtn = ks5Container.querySelector('button[data-action="downloadKS5Template"]');
+      if (ks5TemplateBtn) {
+        ks5TemplateBtn.addEventListener('click', downloadKS5Template);
+      }
+      
+      // Proceed to KS5 Upload button
+      const proceedBtn = ks5Container.querySelector('button[data-action="proceedToKS5Upload"]');
+      if (proceedBtn) {
+        proceedBtn.addEventListener('click', proceedToKS5Upload);
+      }
+      
+      debugLog("KS5 workflow event listeners attached", null, 'success');
+    }, 100);
   }
   
   /**
    * Download GCSE template
    */
-  window.downloadGCSETemplate = function() {
+  function downloadGCSETemplate() {
     const template = `Name,UPN,Email,English,Maths,Science,History,Geography,French,Spanish,Art,Music,PE
 John Smith,A123456,jsmith@school.edu,7,8,7-7,6,7,5,,,8,6
 Jane Doe,A123457,jdoe@school.edu,8,7,8-8,7,6,,4,7,,5`;
@@ -6517,7 +6601,7 @@ Jane Doe,A123457,jdoe@school.edu,8,7,8-8,7,6,,4,7,,5`;
   /**
    * Download KS5 template
    */
-  window.downloadKS5Template = function() {
+  function downloadKS5Template() {
     const template = `UPN,Student_Email,GCSE_Prior_Attainment,sub1,sub2,sub3,sub4,sub5
 A123456,jsmith@school.edu,7.2,Physics,Chemistry,Maths,Further Maths,
 A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
@@ -6535,7 +6619,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
   /**
    * Proceed to KS5 upload
    */
-  window.proceedToKS5Upload = function() {
+  function proceedToKS5Upload() {
     // Reset to main wizard
     const wizardContainer = document.getElementById('vespa-upload-wizard');
     if (wizardContainer) wizardContainer.style.display = 'block';
@@ -6655,7 +6739,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
   /**
    * Show the GCSE Prior Attainment Calculator interface
    */
-  window.showGCSEPriorAttainmentCalculator = function() {
+  function showGCSEPriorAttainmentCalculator() {
     const modalContent = `
       <div class="vespa-prior-attainment-calculator">
         <h3>GCSE Prior Attainment Calculator</h3>
@@ -6709,7 +6793,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
     showModal('GCSE Prior Attainment Calculator', modalContent);
     
     // Add file input handler
-    document.getElementById('gcse-calc-file').addEventListener('change', window.handleGCSEFileUpload);
+    document.getElementById('gcse-calc-file').addEventListener('change', handleGCSEFileUpload);
   }
 
   // Store calculated results globally for download
@@ -6718,7 +6802,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
   /**
    * Handle GCSE file upload for prior attainment calculation
    */
-  window.handleGCSEFileUpload = async function(event) {
+  async function handleGCSEFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
     
@@ -6786,7 +6870,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
   /**
    * Download the calculated prior attainment results as CSV
    */
-  window.downloadPriorAttainmentResults = function() {
+  function downloadPriorAttainmentResults() {
     if (!calculatedPriorAttainmentData || calculatedPriorAttainmentData.length === 0) {
       showError('No data to download');
       return;
@@ -6878,6 +6962,8 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       renderStep(1);
     }
   }
+
+
 
 
 
