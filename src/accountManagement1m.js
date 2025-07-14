@@ -133,31 +133,54 @@
       document.head.appendChild(dtButtonsCSS);
     }
     
-    // Load DataTables JS
-    if (typeof $.fn.DataTable === 'undefined') {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js';
-      script.onload = () => {
-        // Load DataTables Buttons
-        const buttonsScript = document.createElement('script');
-        buttonsScript.src = 'https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js';
-        document.head.appendChild(buttonsScript);
-        
-        // Load additional button scripts
-        const scripts = [
-          'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
-          'https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js',
-          'https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js'
-        ];
-        
-        scripts.forEach(src => {
-          const s = document.createElement('script');
-          s.src = src;
-          document.head.appendChild(s);
-        });
-      };
-      document.head.appendChild(script);
-    }
+    // Wait for jQuery to be available before loading DataTables
+    const loadDataTablesWhenReady = () => {
+      if (typeof $ === 'undefined' || typeof jQuery === 'undefined') {
+        // jQuery not ready, check again in 100ms
+        setTimeout(loadDataTablesWhenReady, 100);
+        return;
+      }
+      
+      // Load DataTables JS
+      if (typeof $.fn.DataTable === 'undefined') {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js';
+        script.onload = () => {
+          debugLog('DataTables loaded successfully');
+          
+          // Load DataTables Buttons after DataTables is loaded
+          const buttonsScript = document.createElement('script');
+          buttonsScript.src = 'https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js';
+          buttonsScript.onload = () => {
+            debugLog('DataTables Buttons loaded');
+            
+            // Load additional button scripts with proper sequencing
+            const loadScript = (src) => {
+              return new Promise((resolve) => {
+                const s = document.createElement('script');
+                s.src = src;
+                s.onload = resolve;
+                document.head.appendChild(s);
+              });
+            };
+            
+            // Load scripts in sequence
+            Promise.all([
+              loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'),
+              loadScript('https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js'),
+              loadScript('https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js')
+            ]).then(() => {
+              debugLog('All DataTables extensions loaded');
+            });
+          };
+          document.head.appendChild(buttonsScript);
+        };
+        document.head.appendChild(script);
+      }
+    };
+    
+    // Start checking for jQuery
+    loadDataTablesWhenReady();
   }
 
   /**
@@ -823,9 +846,15 @@
       </div>
     `;
 
-    // Initialize DataTable after a brief delay
-    setTimeout(() => {
-      if ($.fn.DataTable) {
+    // Initialize DataTable when ready
+    const initDataTable = () => {
+      if (typeof $ === 'undefined' || typeof $.fn === 'undefined' || typeof $.fn.DataTable === 'undefined') {
+        // DataTables not ready yet, try again
+        setTimeout(initDataTable, 100);
+        return;
+      }
+      
+      try {
         staffDataTable = $('#staff-datatable').DataTable({
           pageLength: 25,
           dom: 'Bfrtip',
@@ -837,8 +866,14 @@
           ],
           order: [[1, 'asc']] // Sort by name by default
         });
+        debugLog('Staff DataTable initialized successfully');
+      } catch (e) {
+        debugLog('Error initializing staff DataTable:', e);
       }
-    }, 100);
+    };
+    
+    // Start initialization
+    initDataTable();
   }
 
   /**
@@ -933,9 +968,15 @@
       </div>
     `;
 
-    // Initialize DataTable after a brief delay
-    setTimeout(() => {
-      if ($.fn.DataTable) {
+    // Initialize DataTable when ready
+    const initDataTable = () => {
+      if (typeof $ === 'undefined' || typeof $.fn === 'undefined' || typeof $.fn.DataTable === 'undefined') {
+        // DataTables not ready yet, try again
+        setTimeout(initDataTable, 100);
+        return;
+      }
+      
+      try {
         studentDataTable = $('#student-datatable').DataTable({
           pageLength: 25,
           dom: 'Bfrtip',
@@ -947,8 +988,14 @@
           ],
           order: [[1, 'asc']] // Sort by name by default
         });
+        debugLog('Student DataTable initialized successfully');
+      } catch (e) {
+        debugLog('Error initializing student DataTable:', e);
       }
-    }, 100);
+    };
+    
+    // Start initialization
+    initDataTable();
   }
 
   /**
@@ -1728,5 +1775,3 @@
   initialize();
 
 })();
-
-
