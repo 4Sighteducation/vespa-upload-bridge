@@ -62,39 +62,41 @@
     // Add module styles
     addModuleStyles();
 
-    // Make public API available
+    // Make public API available - only include functions that actually exist
     window[MODULE_NAME] = {
+      // Main functions
       show: showAccountManagement,
       hide: hideAccountManagement,
-      refresh: function() {
-        if (currentView === 'staff') {
-          loadAccountData('staff');
-        } else {
-          loadAccountData('student');
-        }
-      },
-      // Add all button handler functions to the public API
+      refresh: refreshData,
+      
+      // Selection functions
       toggleSelectAll: toggleSelectAll,
+      toggleTableSelectAll: toggleTableSelectAll,
+      toggleRowSelection: toggleRowSelection,
+      
+      // Action functions
       resetPasswords: resetPasswords,
       resendWelcomeEmails: resendWelcomeEmails,
       deleteAccounts: deleteAccounts,
       confirmDelete: confirmDelete,
-      editStaffRoles: editStaffRoles,
-      saveStaffRoles: saveStaffRoles,
-      cancelEditRoles: cancelEditRoles,
+      
+      // Staff/Student management functions
+      updateStaffRoles: updateStaffRoles,
       viewLinkedAccounts: viewLinkedAccounts,
-      editLinkedStaff: editLinkedStaff,
-      saveLinkedStaff: saveLinkedStaff,
-      manageActivities: manageActivities,
+      updateLinkedStaff: updateLinkedStaff,
+      editStudentActivities: editStudentActivities,
       saveActivities: saveActivities,
       reallocateStudent: reallocateStudent,
+      
+      // Modal functions
+      showModal: showModal,
       closeModal: closeModal,
       closeSuccessModal: closeSuccessModal,
+      
       // Utility functions
-      getCustomerId: getCustomerId,
       showError: showError,
       showSuccess: showSuccess,
-      showModal: showModal
+      getSelectedAccountIds: getSelectedAccountIds
     };
 
     debugLog('Account Management module initialized');
@@ -1507,6 +1509,24 @@
       window.VESPAAccountManagement._successCallback();
       delete window.VESPAAccountManagement._successCallback;
     }
+  }
+
+  /**
+   * Get the current customer ID from context
+   */
+  function getCustomerId() {
+    // For super users with school selection
+    if (window.selectedSchool && window.selectedSchool.id) {
+      return window.selectedSchool.id;
+    }
+    
+    // For regular users
+    if (window.userContext && window.userContext.customerId) {
+      return window.userContext.customerId;
+    }
+    
+    debugLog('No customer ID found in context');
+    return null;
   }
 
   // Initialize the module when the script loads
