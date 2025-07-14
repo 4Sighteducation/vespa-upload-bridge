@@ -13,6 +13,23 @@
   const MODULE_NAME = 'VESPAAccountManagement';
   const API_BASE_URL = window.API_BASE_URL || 'https://vespa-upload-api-07e11c285370.herokuapp.com/api/';
 
+  // Role mappings - profile IDs to role names
+  const ROLE_PROFILES = {
+    'profile_5': 'Staff Admin',
+    'profile_6': 'Student',
+    'profile_7': 'Tutor',
+    'profile_8': 'General Staff',
+    'profile_18': 'Head of Year',
+    'profile_25': 'Head of Dept',
+    'profile_78': 'Subject Teacher'
+  };
+
+  // Reverse mapping for easy lookup
+  const PROFILE_IDS = Object.entries(ROLE_PROFILES).reduce((acc, [id, name]) => {
+    acc[name] = id;
+    return acc;
+  }, {});
+
   // Module state
   let isInitialized = false;
   let currentView = 'staff'; // 'staff' or 'student'
@@ -676,9 +693,16 @@
    * Create a staff table row
    */
   function createStaffRow(staff) {
-    const hasLoggedIn = staff.field_539 === 'Yes' ? 'Yes' : 'No';
+    const hasLoggedIn = staff.field_539 === 'Yes' || staff.field_539 === true ? 'Yes' : 'No';
     const roles = staff.field_73 || [];
     const rolesArray = Array.isArray(roles) ? roles : [roles];
+    
+    // Convert profile IDs to role names for display
+    const roleNames = rolesArray.map(profileId => ROLE_PROFILES[profileId] || profileId).filter(Boolean);
+    
+    // For role select, we need to handle both known and unknown roles
+    const knownRoles = ['profile_5', 'profile_7', 'profile_18', 'profile_25', 'profile_78', 'profile_8'];
+    const unknownRoles = rolesArray.filter(role => role && !knownRoles.includes(role) && role !== 'profile_6');
     
     return `
       <tr data-account-id="${staff.id}">
@@ -686,23 +710,24 @@
           <input type="checkbox" class="vespa-am-checkbox row-checkbox" 
             value="${staff.id}" onchange="window.VESPAAccountManagement.toggleRowSelection(this)">
         </td>
-        <td>${staff.field_69 || 'N/A'}</td>
-        <td>${staff.field_70 || 'N/A'}</td>
+        <td>${staff.field_69?.full || staff.field_69 || 'N/A'}</td>
+        <td>${staff.field_70?.email || staff.field_70 || 'N/A'}</td>
         <td>${staff.field_708 || 'N/A'}</td>
         <td>${staff.field_123 || 'N/A'}</td>
         <td>${hasLoggedIn}</td>
         <td>
-          <select class="vespa-am-role-select" multiple size="3" data-account-id="${staff.id}">
-            <option value="Staff Admin" ${rolesArray.includes('Staff Admin') ? 'selected' : ''}>Staff Admin</option>
-            <option value="Tutor" ${rolesArray.includes('Tutor') ? 'selected' : ''}>Tutor</option>
-            <option value="Head of Year" ${rolesArray.includes('Head of Year') ? 'selected' : ''}>Head of Year</option>
-            <option value="Head of Dept" ${rolesArray.includes('Head of Dept') ? 'selected' : ''}>Head of Dept</option>
-            <option value="Subject Teacher" ${rolesArray.includes('Subject Teacher') ? 'selected' : ''}>Subject Teacher</option>
-            <option value="General Staff" ${rolesArray.includes('General Staff') ? 'selected' : ''}>General Staff</option>
+          <select class="vespa-am-role-select" multiple size="6" data-account-id="${staff.id}">
+            <option value="profile_5" ${rolesArray.includes('profile_5') ? 'selected' : ''}>Staff Admin</option>
+            <option value="profile_7" ${rolesArray.includes('profile_7') ? 'selected' : ''}>Tutor</option>
+            <option value="profile_18" ${rolesArray.includes('profile_18') ? 'selected' : ''}>Head of Year</option>
+            <option value="profile_25" ${rolesArray.includes('profile_25') ? 'selected' : ''}>Head of Dept</option>
+            <option value="profile_78" ${rolesArray.includes('profile_78') ? 'selected' : ''}>Subject Teacher</option>
+            <option value="profile_8" ${rolesArray.includes('profile_8') ? 'selected' : ''}>General Staff</option>
+            ${unknownRoles.map(role => `<option value="${role}" selected disabled style="color: #999;">${role} (Custom)</option>`).join('')}
           </select>
         </td>
-        <td>${staff.field_3198 ? new Date(staff.field_3198).toLocaleDateString() : 'Never'}</td>
-        <td>${staff.field_3202 || 'None'}</td>
+        <td>${staff.field_3198 ? formatDate(staff.field_3198) : 'Never'}</td>
+        <td>${Array.isArray(staff.field_3202) ? staff.field_3202.join(', ') : (staff.field_3202 || 'None')}</td>
         <td>${staff.field_3208 || '0'}</td>
         <td>
           <button class="vespa-am-link-button" onclick="window.VESPAAccountManagement.viewLinkedAccounts('${staff.id}', 'staff')">
@@ -763,7 +788,7 @@
    * Create a student table row
    */
   function createStudentRow(student) {
-    const hasLoggedIn = student.field_539 === 'Yes' ? 'Yes' : 'No';
+    const hasLoggedIn = student.field_539 === 'Yes' || student.field_539 === true ? 'Yes' : 'No';
     
     return `
       <tr data-account-id="${student.id}">
@@ -771,14 +796,14 @@
           <input type="checkbox" class="vespa-am-checkbox row-checkbox" 
             value="${student.id}" onchange="window.VESPAAccountManagement.toggleRowSelection(this)">
         </td>
-        <td>${student.field_69 || 'N/A'}</td>
-        <td>${student.field_70 || 'N/A'}</td>
+        <td>${student.field_69?.full || student.field_69 || 'N/A'}</td>
+        <td>${student.field_70?.email || student.field_70 || 'N/A'}</td>
         <td>${student.field_708 || 'N/A'}</td>
         <td>${student.field_550 || 'N/A'}</td>
         <td>${student.field_123 || 'N/A'}</td>
         <td>${hasLoggedIn}</td>
-        <td>${student.field_3198 ? new Date(student.field_3198).toLocaleDateString() : 'Never'}</td>
-        <td>${student.field_3202 || 'None'}</td>
+        <td>${student.field_3198 ? formatDate(student.field_3198) : 'Never'}</td>
+        <td>${Array.isArray(student.field_3202) ? student.field_3202.join(', ') : (student.field_3202 || 'None')}</td>
         <td>${student.field_3208 || '0'}</td>
         <td>
           <button class="vespa-am-link-button" onclick="window.VESPAAccountManagement.viewLinkedAccounts('${student.id}', 'student')">
@@ -1037,13 +1062,17 @@
    */
   async function updateStaffRoles(accountId, newRoles) {
     try {
+      // newRoles now contains profile IDs like ['profile_5', 'profile_7']
+      // Convert profile IDs to role names for the backend
+      const roleNames = newRoles.map(profileId => ROLE_PROFILES[profileId] || profileId).filter(Boolean);
+      
       const response = await $.ajax({
         url: `${API_BASE_URL}account/update-staff-roles`,
         type: 'POST',
         contentType: 'application/json',
         data: JSON.stringify({
           accountId: accountId,
-          roles: newRoles
+          roles: roleNames // Send role names to backend
         }),
         xhrFields: { withCredentials: true }
       });
@@ -1335,7 +1364,22 @@
     };
   }
 
+  /**
+   * Format date helper
+   */
+  function formatDate(dateObj) {
+    if (typeof dateObj === 'string') {
+      return new Date(dateObj).toLocaleDateString();
+    } else if (dateObj && dateObj.date_formatted) {
+      return dateObj.date_formatted;
+    } else if (dateObj && dateObj.timestamp) {
+      return dateObj.timestamp;
+    }
+    return 'N/A';
+  }
+
   // Initialize the module when the script loads
   initialize();
 
 })();
+
