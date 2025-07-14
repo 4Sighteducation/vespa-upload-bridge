@@ -7031,6 +7031,24 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       window.API_BASE_URL = API_BASE_URL;
       window.DEBUG_MODE = DEBUG_MODE;
       
+      // Pass the school context to the module
+      window.selectedSchool = selectedSchool;
+      window.userContext = userContext;
+      
+      // Also check for emulation state
+      const emulationState = getEmulationState();
+      if (emulationState && emulationState.school && !selectedSchool) {
+        window.selectedSchool = {
+          ...emulationState.school,
+          emulatedAdmins: emulationState.admins
+        };
+      }
+      
+      debugLog("Context passed to Account Management module", {
+        selectedSchool: window.selectedSchool,
+        userContext: window.userContext
+      });
+      
       // Check if already loaded
       if (window.VESPAAccountManagement && window.VESPAAccountManagement.show) {
         debugLog("Account Management module already loaded, showing interface", null, 'info');
@@ -7042,7 +7060,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       showModal('Loading Account Management', '<div style="text-align: center; padding: 20px;"><div class="vespa-spinner"></div><p>Loading account management system...</p></div>');
       
       // Load the account management module from CDN
-      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/accountManagement1c.js';
+      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/accountManagement1d.js';
       
       try {
         await loadScript(scriptUrl);
@@ -7087,6 +7105,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
 
 
 
+    
     
 
 
