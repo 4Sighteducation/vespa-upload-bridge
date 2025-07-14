@@ -49,13 +49,13 @@
     window[MODULE_NAME] = {
       show: showAccountManagement,
       hide: hideAccountManagement,
-      refresh: refreshData,
-      toggleTableSelectAll: null, // Will be assigned later
-      toggleRowSelection: null,    // Will be assigned later
-      confirmDelete: null,         // Will be assigned later
-      updateLinkedStaff: null,     // Will be assigned later
-      reallocateStudent: null,     // Will be assigned later
-      saveActivities: null         // Will be assigned later
+      refresh: function() {
+        if (currentView === 'staff') {
+          loadAccountData('staff');
+        } else {
+          loadAccountData('student');
+        }
+      }
     };
 
     debugLog('Account Management module initialized successfully');
@@ -347,26 +347,75 @@
     const wizard = document.getElementById('vespa-upload-wizard');
     if (wizard) wizard.style.display = 'none';
 
-    // Get the main container
-    const container = document.querySelector(window.VESPA_UPLOAD_CONFIG?.elementSelector || '#vespa-container');
+    // Get the main container - try multiple selectors
+    let container = null;
+    
+    // First try the VESPA_UPLOAD_CONFIG selector
+    if (window.VESPA_UPLOAD_CONFIG?.elementSelector) {
+      container = document.querySelector(window.VESPA_UPLOAD_CONFIG.elementSelector);
+      debugLog('Trying VESPA_UPLOAD_CONFIG selector:', window.VESPA_UPLOAD_CONFIG.elementSelector);
+    }
+    
+    // Fallback to common Knack containers
+    if (!container) {
+      const selectors = [
+        '#vespa-container',
+        '.kn-content',
+        '#knack-body',
+        '#knack-dist_1',
+        '.kn-scene'
+      ];
+      
+      for (const selector of selectors) {
+        container = document.querySelector(selector);
+        if (container) {
+          debugLog('Found container with selector:', selector);
+          break;
+        }
+      }
+    }
+    
     if (!container) {
       showError('Unable to find container for Account Management');
+      debugLog('Error: No container found for Account Management');
       return;
+    }
+
+    // Check if account management already exists
+    const existingAM = document.getElementById('vespa-account-management');
+    if (existingAM) {
+      debugLog('Account Management already exists, removing old instance');
+      existingAM.remove();
     }
 
     // Create the account management interface
     const amContainer = document.createElement('div');
     amContainer.id = 'vespa-account-management';
     amContainer.className = 'vespa-account-management';
-    amContainer.innerHTML = createMainInterface();
+    
+    try {
+      amContainer.innerHTML = createMainInterface();
+      debugLog('Created main interface HTML');
+    } catch (error) {
+      debugLog('Error creating interface HTML:', error);
+      showError('Failed to create Account Management interface');
+      return;
+    }
 
     // Append to container
     container.appendChild(amContainer);
+    debugLog('Appended Account Management to container');
 
     // Bind events
-    bindInterfaceEvents();
+    try {
+      bindInterfaceEvents();
+      debugLog('Bound interface events');
+    } catch (error) {
+      debugLog('Error binding events:', error);
+    }
 
     // Load initial data
+    debugLog('Loading initial staff data');
     loadAccountData('staff');
   }
 
@@ -1292,4 +1341,3 @@
   initialize();
 
 })();
-
