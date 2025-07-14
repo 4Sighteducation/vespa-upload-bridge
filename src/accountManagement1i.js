@@ -75,20 +75,29 @@
       },
       // Add all button handler functions to the public API
       toggleSelectAll: toggleSelectAll,
-      changePasswords: changePasswords,
+      resetPasswords: resetPasswords,
       resendWelcomeEmails: resendWelcomeEmails,
       deleteAccounts: deleteAccounts,
-      viewLinkedAccounts: viewLinkedAccounts,
-      editStudentActivities: editStudentActivities,
-      toggleTableSelectAll: toggleTableSelectAll,
-      toggleRowSelection: toggleRowSelection,
       confirmDelete: confirmDelete,
-      updateLinkedStaff: updateLinkedStaff,
+      editStaffRoles: editStaffRoles,
+      saveStaffRoles: saveStaffRoles,
+      cancelEditRoles: cancelEditRoles,
+      viewLinkedAccounts: viewLinkedAccounts,
+      editLinkedStaff: editLinkedStaff,
+      saveLinkedStaff: saveLinkedStaff,
+      manageActivities: manageActivities,
+      saveActivities: saveActivities,
       reallocateStudent: reallocateStudent,
-      saveActivities: saveActivities
+      closeModal: closeModal,
+      closeSuccessModal: closeSuccessModal,
+      // Utility functions
+      getCustomerId: getCustomerId,
+      showError: showError,
+      showSuccess: showSuccess,
+      showModal: showModal
     };
 
-    debugLog('Account Management module initialized successfully');
+    debugLog('Account Management module initialized');
   }
 
   /**
@@ -525,7 +534,7 @@
         </button>
       </div>
 
-      <div id="am-content">
+      <div id="vespa-am-content">
         <div class="vespa-am-loading">
           <div class="vespa-spinner"></div>
           <p>Loading account data...</p>
@@ -583,54 +592,79 @@
   }
 
   /**
-   * Load account data from the API
+   * Load account data (staff or students)
    */
-  async function loadAccountData(type) {
-    try {
-      const content = document.getElementById('am-content');
-      content.innerHTML = `
-        <div class="vespa-am-loading">
-          <div class="vespa-spinner"></div>
-          <p>Loading ${type} accounts...</p>
-        </div>
-      `;
-
-      // Get customer context
-      const customerId = window.selectedSchool?.id || window.userContext?.customerId;
-      if (!customerId) {
-        throw new Error('No customer ID available');
-      }
-
-      // Call appropriate API endpoint
-      const endpoint = type === 'staff' ? 'account/get-staff' : 'account/get-students';
-      const response = await $.ajax({
-        url: `${API_BASE_URL}${endpoint}?customerId=${customerId}`,
-        type: 'GET',
-        xhrFields: { withCredentials: true }
-      });
-
-      if (response.success) {
-        if (type === 'staff') {
-          staffData = response.staff || [];
-          displayStaffTable(staffData);
+  function loadAccountData(type) {
+    debugLog(`Loading ${type} accounts`);
+    currentView = type;
+    
+    const customerId = getCustomerId();
+    if (!customerId) {
+      showError('No customer ID available');
+      return;
+    }
+    
+    // Show loading state
+    const contentArea = document.getElementById('vespa-am-content');
+    contentArea.innerHTML = '<div class="vespa-am-loading"><div class="vespa-spinner"></div><p>Loading accounts...</p></div>';
+    
+    // Update active tab
+    document.querySelectorAll('.vespa-am-tab').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.view === type);
+    });
+    
+    const endpoint = type === 'staff' ? 'get-staff' : 'get-students';
+    
+    $.ajax({
+      url: `${API_BASE_URL}account/${endpoint}`,
+      method: 'GET',
+      data: { customerId },
+      xhrFields: {
+        withCredentials: true
+      },
+      success: function(response) {
+        debugLog(`${type} accounts loaded:`, response);
+        
+        if (response.success && response.data) {
+          displayAccounts(response.data, type);
         } else {
-          studentData = response.students || [];
-          displayStudentTable(studentData);
+          showError('Failed to load accounts');
         }
-      } else {
-        throw new Error(response.message || 'Failed to load data');
+      },
+      error: function(xhr, status, error) {
+        debugLog(`Error loading ${type} accounts:`, error);
+        showError(`Failed to load ${type} accounts: ${error}`);
       }
+    });
+  }
 
-    } catch (error) {
-      debugLog('Error loading account data:', error);
-      document.getElementById('am-content').innerHTML = `
+  /**
+   * Display accounts in a table
+   */
+  function displayAccounts(accounts, type) {
+    const contentArea = document.getElementById('vespa-am-content');
+    
+    if (!accounts || accounts.length === 0) {
+      contentArea.innerHTML = `
         <div class="vespa-am-empty">
-          <p>Failed to load ${type} accounts: ${error.message}</p>
-          <button class="vespa-button primary" onclick="window.VESPAAccountManagement.refresh()">
-            Try Again
-          </button>
+          <p>No ${type} accounts found</p>
         </div>
       `;
+      return;
+    }
+    
+    // Store current data
+    if (type === 'staff') {
+      staffData = accounts;
+    } else {
+      studentData = accounts;
+    }
+    
+    // Build table based on type
+    if (type === 'staff') {
+      displayStaffTable(accounts);
+    } else {
+      displayStudentTable(accounts);
     }
   }
 
@@ -640,7 +674,7 @@
   function displayStaffTable(data) {
     const filteredData = filterData(data);
     
-    const content = document.getElementById('am-content');
+    const content = document.getElementById('vespa-am-content');
     
     if (filteredData.length === 0) {
       content.innerHTML = `
@@ -744,7 +778,7 @@
   function displayStudentTable(data) {
     const filteredData = filterData(data);
     
-    const content = document.getElementById('am-content');
+    const content = document.getElementById('vespa-am-content');
     
     if (filteredData.length === 0) {
       content.innerHTML = `
@@ -918,143 +952,180 @@
   }
 
   /**
-   * Change passwords for selected accounts
+   * Handle password reset for selected accounts
    */
-  async function changePasswords() {
-    if (selectedAccounts.size === 0) {
+  function resetPasswords() {
+    const selectedIds = getSelectedAccountIds();
+    if (selectedIds.length === 0) {
       showError('Please select at least one account');
       return;
     }
-
-    const confirmed = confirm(`Are you sure you want to reset passwords for ${selectedAccounts.size} account(s)?`);
-    if (!confirmed) return;
-
-    try {
-      const response = await $.ajax({
-        url: `${API_BASE_URL}account/reset-passwords`,
-        type: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify({
-          accountIds: Array.from(selectedAccounts),
-          accountType: currentView
-        }),
-        xhrFields: { withCredentials: true }
-      });
-
-      if (response.success) {
-        showSuccess(`Successfully reset passwords for ${response.count} account(s)`);
-        selectedAccounts.clear();
-        refreshData();
-      } else {
-        throw new Error(response.message || 'Failed to reset passwords');
-      }
-    } catch (error) {
-      debugLog('Error resetting passwords:', error);
-      showError(`Failed to reset passwords: ${error.message}`);
+    
+    // Confirm action
+    if (!confirm(`Reset passwords for ${selectedIds.length} account(s)?`)) {
+      return;
     }
+    
+    // Show loading state
+    showLoadingModal('Resetting passwords...');
+    
+    $.ajax({
+      url: `${API_BASE_URL}account/reset-passwords`,
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({
+        accountIds: selectedIds,
+        accountType: currentView
+      }),
+      xhrFields: {
+        withCredentials: true
+      },
+      success: function(response) {
+        closeLoadingModal();
+        
+        if (response.success) {
+          showSuccessModal(`Successfully reset ${response.successCount} password(s)`, function() {
+            loadAccountData(currentView);
+          });
+        } else {
+          const errorMsg = response.errors && response.errors.length > 0 
+            ? `Failed to reset some passwords: ${response.errors.join(', ')}`
+            : 'Failed to reset passwords';
+          showError(errorMsg);
+        }
+      },
+      error: function(xhr, status, error) {
+        closeLoadingModal();
+        showError(`Failed to reset passwords: ${error}`);
+      }
+    });
   }
 
   /**
-   * Resend welcome emails for selected accounts
+   * Handle resending welcome emails
    */
-  async function resendWelcomeEmails() {
-    if (selectedAccounts.size === 0) {
+  function resendWelcomeEmails() {
+    const selectedIds = getSelectedAccountIds();
+    if (selectedIds.length === 0) {
       showError('Please select at least one account');
       return;
     }
-
-    const confirmed = confirm(`Send welcome emails to ${selectedAccounts.size} account(s)?`);
-    if (!confirmed) return;
-
-    try {
-      const response = await $.ajax({
-        url: `${API_BASE_URL}account/resend-welcome-emails`,
-        type: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify({
-          accountIds: Array.from(selectedAccounts),
-          accountType: currentView
-        }),
-        xhrFields: { withCredentials: true }
-      });
-
-      if (response.success) {
-        showSuccess(`Successfully sent welcome emails to ${response.count} account(s)`);
-        selectedAccounts.clear();
-        refreshData();
-      } else {
-        throw new Error(response.message || 'Failed to send emails');
-      }
-    } catch (error) {
-      debugLog('Error sending welcome emails:', error);
-      showError(`Failed to send welcome emails: ${error.message}`);
+    
+    // Confirm action
+    if (!confirm(`Resend welcome emails to ${selectedIds.length} account(s)?`)) {
+      return;
     }
+    
+    // Show loading state
+    showLoadingModal('Sending welcome emails...');
+    
+    $.ajax({
+      url: `${API_BASE_URL}account/resend-welcome-emails`,
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({
+        accountIds: selectedIds,
+        accountType: currentView
+      }),
+      xhrFields: {
+        withCredentials: true
+      },
+      success: function(response) {
+        closeLoadingModal();
+        
+        if (response.success) {
+          showSuccessModal(`Successfully sent ${response.successCount} welcome email(s)`, function() {
+            // No need to reload, just show success
+          });
+        } else {
+          const errorMsg = response.errors && response.errors.length > 0 
+            ? `Failed to send some emails: ${response.errors.join(', ')}`
+            : 'Failed to send welcome emails';
+          showError(errorMsg);
+        }
+      },
+      error: function(xhr, status, error) {
+        closeLoadingModal();
+        showError(`Failed to send welcome emails: ${error}`);
+      }
+    });
   }
 
   /**
-   * Delete selected accounts
+   * Handle account deletion
    */
-  async function deleteAccounts() {
-    if (selectedAccounts.size === 0) {
+  function deleteAccounts() {
+    const selectedIds = getSelectedAccountIds();
+    if (selectedIds.length === 0) {
       showError('Please select at least one account');
       return;
     }
-
-    // Show confirmation modal with details
-    const modalContent = `
-      <div style="padding: 20px;">
-        <p><strong>⚠️ Warning: This action cannot be undone!</strong></p>
-        <p>You are about to delete ${selectedAccounts.size} ${currentView} account(s).</p>
-        ${currentView === 'student' ? '<p>This will also delete all associated records in Object_10 and Object_29.</p>' : ''}
-        <p>Please type <strong>DELETE</strong> to confirm:</p>
-        <input type="text" id="delete-confirm-input" style="width: 100%; padding: 8px; margin: 10px 0; border: 1px solid #dc3545; border-radius: 4px;">
-        <div style="margin-top: 20px; text-align: right;">
-          <button class="vespa-button secondary" onclick="window.closeModal()">Cancel</button>
-          <button class="vespa-button primary" style="background: #dc3545; margin-left: 10px;" onclick="window.VESPAAccountManagement.confirmDelete()">
-            Delete Accounts
-          </button>
+    
+    // Create confirmation modal
+    const confirmModal = `
+      <div class="vespa-am-delete-confirm">
+        <h3>Confirm Account Deletion</h3>
+        <p>You are about to delete ${selectedIds.length} account(s).</p>
+        ${currentView === 'student' ? '<p class="warning">⚠️ This will also delete all related student records (Object_6, Object_10, Object_29).</p>' : ''}
+        <p>This action cannot be undone.</p>
+        <p>Type <strong>DELETE</strong> to confirm:</p>
+        <input type="text" id="delete-confirm-input" placeholder="Type DELETE to confirm">
+        <div class="button-group">
+          <button onclick="window.VESPAAccountManagement.confirmDelete()" class="danger">Delete Accounts</button>
+          <button onclick="window.VESPAAccountManagement.closeModal()">Cancel</button>
         </div>
       </div>
     `;
-
-    showModal('Confirm Account Deletion', modalContent);
+    
+    showModal(confirmModal);
   }
 
   /**
    * Confirm and execute account deletion
    */
-  async function confirmDelete() {
+  function confirmDelete() {
     const confirmInput = document.getElementById('delete-confirm-input');
     if (!confirmInput || confirmInput.value !== 'DELETE') {
       showError('Please type DELETE to confirm');
       return;
     }
-
+    
+    const selectedIds = getSelectedAccountIds();
     closeModal();
-
-    try {
-      const response = await $.ajax({
-        url: `${API_BASE_URL}account/delete-accounts`,
-        type: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify({
-          accountIds: Array.from(selectedAccounts),
-          accountType: currentView
-        }),
-        xhrFields: { withCredentials: true }
-      });
-
-      if (response.success) {
-        showSuccess(`Successfully deleted ${response.count} account(s)`);
-        selectedAccounts.clear();
-        refreshData();
-      } else {
-        throw new Error(response.message || 'Failed to delete accounts');
+    
+    // Show loading state
+    showLoadingModal('Deleting accounts...');
+    
+    $.ajax({
+      url: `${API_BASE_URL}account/delete-accounts`,
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({
+        accountIds: selectedIds,
+        accountType: currentView
+      }),
+      xhrFields: {
+        withCredentials: true
+      },
+      success: function(response) {
+        closeLoadingModal();
+        
+        if (response.success) {
+          showSuccessModal(`Successfully deleted ${response.successCount} account(s)`, function() {
+            loadAccountData(currentView);
+          });
+        } else {
+          const errorMsg = response.errors && response.errors.length > 0 
+            ? `Failed to delete some accounts: ${response.errors.join(', ')}`
+            : 'Failed to delete accounts';
+          showError(errorMsg);
+        }
+      },
+      error: function(xhr, status, error) {
+        closeLoadingModal();
+        showError(`Failed to delete accounts: ${error}`);
       }
-    } catch (error) {
-      debugLog('Error deleting accounts:', error);
-      showError(`Failed to delete accounts: ${error.message}`);
-    }
+    });
   }
 
   /**
@@ -1376,6 +1447,66 @@
       return dateObj.timestamp;
     }
     return 'N/A';
+  }
+
+  /**
+   * Get selected account IDs from the table
+   */
+  function getSelectedAccountIds() {
+    const selectedIds = [];
+    document.querySelectorAll('.row-checkbox:checked').forEach(cb => {
+      selectedIds.push(cb.value);
+    });
+    return selectedIds;
+  }
+
+  /**
+   * Show loading modal
+   */
+  function showLoadingModal(message) {
+    const modal = `
+      <div class="vespa-am-loading-modal">
+        <div class="spinner"></div>
+        <p>${message}</p>
+      </div>
+    `;
+    showModal(modal);
+  }
+
+  /**
+   * Close loading modal
+   */
+  function closeLoadingModal() {
+    closeModal();
+  }
+
+  /**
+   * Show success modal
+   */
+  function showSuccessModal(message, callback) {
+    const modal = `
+      <div class="vespa-am-success-modal">
+        <div class="success-icon">✓</div>
+        <h3>Success!</h3>
+        <p>${message}</p>
+        <button onclick="window.VESPAAccountManagement.closeSuccessModal()">OK</button>
+      </div>
+    `;
+    showModal(modal);
+    
+    // Store callback for when modal is closed
+    window.VESPAAccountManagement._successCallback = callback;
+  }
+
+  /**
+   * Close success modal
+   */
+  function closeSuccessModal() {
+    closeModal();
+    if (window.VESPAAccountManagement._successCallback) {
+      window.VESPAAccountManagement._successCallback();
+      delete window.VESPAAccountManagement._successCallback;
+    }
   }
 
   // Initialize the module when the script loads
