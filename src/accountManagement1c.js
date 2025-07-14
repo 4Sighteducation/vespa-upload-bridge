@@ -51,7 +51,11 @@
       hide: hideAccountManagement,
       refresh: refreshData,
       toggleTableSelectAll: null, // Will be assigned later
-      toggleRowSelection: null    // Will be assigned later
+      toggleRowSelection: null,    // Will be assigned later
+      confirmDelete: null,         // Will be assigned later
+      updateLinkedStaff: null,     // Will be assigned later
+      reallocateStudent: null,     // Will be assigned later
+      saveActivities: null         // Will be assigned later
     };
 
     debugLog('Account Management module initialized successfully');
@@ -939,7 +943,8 @@
   /**
    * Confirm and execute account deletion
    */
-  window.VESPAAccountManagement.confirmDelete = async function() {
+  if (window.VESPAAccountManagement) {
+    window.VESPAAccountManagement.confirmDelete = async function() {
     const confirmInput = document.getElementById('delete-confirm-input');
     if (confirmInput.value !== 'DELETE') {
       showError('Please type DELETE to confirm');
@@ -972,6 +977,7 @@
       showError(`Failed to delete accounts: ${error.message}`);
     }
   };
+  }
 
   /**
    * Update staff roles
@@ -1104,7 +1110,8 @@
   /**
    * Update linked staff for a student
    */
-  window.VESPAAccountManagement.updateLinkedStaff = async function(studentId) {
+  if (window.VESPAAccountManagement) {
+    window.VESPAAccountManagement.updateLinkedStaff = async function(studentId) {
     try {
       const tutors = document.getElementById('linked-tutors').value;
       const headOfYear = document.getElementById('linked-hoy').value;
@@ -1134,14 +1141,17 @@
       showError(`Failed to update linked staff: ${error.message}`);
     }
   };
+  }
 
   /**
    * Reallocate a student to different staff
    */
-  window.VESPAAccountManagement.reallocateStudent = async function(studentId, currentStaffId) {
-    // This would show a modal to select new staff and reallocate
-    showError('Student reallocation feature coming soon');
-  };
+  if (window.VESPAAccountManagement) {
+    window.VESPAAccountManagement.reallocateStudent = async function(studentId, currentStaffId) {
+      // This would show a modal to select new staff and reallocate
+      showError('Student reallocation feature coming soon');
+    };
+  }
 
   /**
    * Edit student activities
@@ -1224,35 +1234,37 @@
   /**
    * Save student activities
    */
-  window.VESPAAccountManagement.saveActivities = async function(studentId) {
-    try {
-      const selectedActivities = [];
-      document.querySelectorAll('.vespa-activity-checkbox:checked').forEach(cb => {
-        selectedActivities.push(cb.value);
-      });
+  if (window.VESPAAccountManagement) {
+    window.VESPAAccountManagement.saveActivities = async function(studentId) {
+      try {
+        const selectedActivities = [];
+        document.querySelectorAll('.vespa-activity-checkbox:checked').forEach(cb => {
+          selectedActivities.push(cb.value);
+        });
 
-      const response = await $.ajax({
-        url: `${API_BASE_URL}account/update-student-activities`,
-        type: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify({
-          studentId: studentId,
-          activities: selectedActivities
-        }),
-        xhrFields: { withCredentials: true }
-      });
+        const response = await $.ajax({
+          url: `${API_BASE_URL}account/update-student-activities`,
+          type: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({
+            studentId: studentId,
+            activities: selectedActivities
+          }),
+          xhrFields: { withCredentials: true }
+        });
 
-      if (response.success) {
-        showSuccess('Student activities updated successfully');
-        closeModal();
-      } else {
-        throw new Error(response.message || 'Failed to update activities');
+        if (response.success) {
+          showSuccess('Student activities updated successfully');
+          closeModal();
+        } else {
+          throw new Error(response.message || 'Failed to update activities');
+        }
+      } catch (error) {
+        debugLog('Error updating activities:', error);
+        showError(`Failed to update activities: ${error.message}`);
       }
-    } catch (error) {
-      debugLog('Error updating activities:', error);
-      showError(`Failed to update activities: ${error.message}`);
-    }
-  };
+    };
+  }
 
   /**
    * Refresh current data
