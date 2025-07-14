@@ -1,6 +1,6 @@
 /**
  * VESPA Account Management Module
- * Version 1.0
+ * Version 1.1 - Fixed AJAX and UI issues
  * 
  * This module provides comprehensive account management functionality
  * for staff and student accounts in the VESPA system.
@@ -37,6 +37,8 @@
   let staffData = [];
   let studentData = [];
   let currentFilters = {};
+  let staffDataTable = null;
+  let studentDataTable = null;
   
   // VESPA Activities configuration
   const VESPA_CATEGORIES = {
@@ -61,6 +63,9 @@
 
     // Add module styles
     addModuleStyles();
+    
+    // Load DataTables CSS and JS
+    loadDataTablesAssets();
 
     // Make public API available - only include functions that actually exist
     window[MODULE_NAME] = {
@@ -100,6 +105,55 @@
     };
 
     debugLog('Account Management module initialized');
+  }
+
+  /**
+   * Load DataTables assets
+   */
+  function loadDataTablesAssets() {
+    // Add DataTables CSS
+    if (!document.getElementById('datatables-css')) {
+      const dtCSS = document.createElement('link');
+      dtCSS.id = 'datatables-css';
+      dtCSS.rel = 'stylesheet';
+      dtCSS.href = 'https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css';
+      document.head.appendChild(dtCSS);
+    }
+    
+    // Add DataTables Buttons CSS
+    if (!document.getElementById('datatables-buttons-css')) {
+      const dtButtonsCSS = document.createElement('link');
+      dtButtonsCSS.id = 'datatables-buttons-css';
+      dtButtonsCSS.rel = 'stylesheet';
+      dtButtonsCSS.href = 'https://cdn.datatables.net/buttons/2.4.1/css/buttons.dataTables.min.css';
+      document.head.appendChild(dtButtonsCSS);
+    }
+    
+    // Load DataTables JS
+    if (typeof $.fn.DataTable === 'undefined') {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js';
+      script.onload = () => {
+        // Load DataTables Buttons
+        const buttonsScript = document.createElement('script');
+        buttonsScript.src = 'https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js';
+        document.head.appendChild(buttonsScript);
+        
+        // Load additional button scripts
+        const scripts = [
+          'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+          'https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js',
+          'https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js'
+        ];
+        
+        scripts.forEach(src => {
+          const s = document.createElement('script');
+          s.src = src;
+          document.head.appendChild(s);
+        });
+      };
+      document.head.appendChild(script);
+    }
   }
 
   /**
@@ -242,6 +296,7 @@
         overflow-x: auto;
         border: 1px solid #dee2e6;
         border-radius: 8px;
+        padding: 10px;
       }
 
       .vespa-am-table {
@@ -272,11 +327,20 @@
         cursor: pointer;
       }
 
-      .vespa-am-role-select {
-        padding: 5px;
-        border: 1px solid #ced4da;
+      .vespa-am-role-display {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+      
+      .vespa-am-role-badge {
+        display: inline-block;
+        padding: 3px 8px;
+        background: #e3f2fd;
+        color: #1976d2;
         border-radius: 4px;
-        background: white;
+        font-size: 12px;
+        font-weight: 500;
       }
 
       .vespa-am-link-button {
@@ -287,6 +351,7 @@
         border-radius: 4px;
         cursor: pointer;
         font-size: 12px;
+        margin: 2px;
       }
 
       .vespa-am-link-button:hover {
@@ -369,6 +434,47 @@
         display: flex;
         gap: 10px;
         margin-top: 10px;
+      }
+      
+      /* DataTables custom styling */
+      .dataTables_wrapper {
+        padding: 10px 0;
+      }
+      
+      .dataTables_filter {
+        margin-bottom: 20px;
+      }
+      
+      .dataTables_filter input {
+        padding: 8px 12px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        width: 300px;
+      }
+      
+      table.dataTable thead th {
+        background: #f8f9fa !important;
+      }
+      
+      table.dataTable.no-footer {
+        border-bottom: 1px solid #dee2e6;
+      }
+      
+      .dt-buttons {
+        margin-bottom: 15px;
+      }
+      
+      .dt-button {
+        padding: 6px 12px !important;
+        background: #6c757d !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 4px !important;
+        margin-right: 5px !important;
+      }
+      
+      .dt-button:hover {
+        background: #5a6268 !important;
       }
     `;
 
@@ -524,8 +630,8 @@
           <input type="checkbox" id="am-select-all" style="margin-right: 5px;">
           Select All
         </button>
-        <button class="vespa-button primary" onclick="window.VESPAAccountManagement.changePasswords()">
-          🔑 Change Password(s)
+        <button class="vespa-button primary" onclick="window.VESPAAccountManagement.resetPasswords()">
+          🔑 Reset Password(s)
         </button>
         <button class="vespa-button primary" onclick="window.VESPAAccountManagement.resendWelcomeEmails()">
           ✉️ Resend Welcome Email(s)
@@ -619,7 +725,7 @@
     
     $.ajax({
       url: `${API_BASE_URL}account/${endpoint}`,
-      method: 'GET',
+      type: 'GET',
       data: { customerId },
       xhrFields: {
         withCredentials: true
@@ -674,11 +780,9 @@
    * Display staff table
    */
   function displayStaffTable(data) {
-    const filteredData = filterData(data);
-    
     const content = document.getElementById('vespa-am-content');
     
-    if (filteredData.length === 0) {
+    if (data.length === 0) {
       content.innerHTML = `
         <div class="vespa-am-empty">
           <p>No staff accounts found</p>
@@ -689,7 +793,7 @@
 
     content.innerHTML = `
       <div class="vespa-am-table-container">
-        <table class="vespa-am-table">
+        <table id="staff-datatable" class="vespa-am-table display">
           <thead>
             <tr>
               <th style="width: 40px;">
@@ -709,20 +813,28 @@
             </tr>
           </thead>
           <tbody>
-            ${filteredData.map(staff => createStaffRow(staff)).join('')}
+            ${data.map(staff => createStaffRow(staff)).join('')}
           </tbody>
         </table>
       </div>
     `;
 
-    // Make role selects editable
-    document.querySelectorAll('.vespa-am-role-select').forEach(select => {
-      select.addEventListener('change', (e) => {
-        const accountId = e.target.dataset.accountId;
-        const newRoles = Array.from(e.target.selectedOptions).map(opt => opt.value);
-        updateStaffRoles(accountId, newRoles);
-      });
-    });
+    // Initialize DataTable after a brief delay
+    setTimeout(() => {
+      if ($.fn.DataTable) {
+        staffDataTable = $('#staff-datatable').DataTable({
+          pageLength: 25,
+          dom: 'Bfrtip',
+          buttons: [
+            'copy', 'csv', 'excel', 'print'
+          ],
+          columnDefs: [
+            { orderable: false, targets: [0, -1] } // Disable sorting on checkbox and actions columns
+          ],
+          order: [[1, 'asc']] // Sort by name by default
+        });
+      }
+    }, 100);
   }
 
   /**
@@ -734,11 +846,14 @@
     const rolesArray = Array.isArray(roles) ? roles : [roles];
     
     // Convert profile IDs to role names for display
-    const roleNames = rolesArray.map(profileId => ROLE_PROFILES[profileId] || profileId).filter(Boolean);
+    const roleNames = rolesArray
+      .filter(role => role && role !== 'profile_6') // Exclude student role
+      .map(profileId => ROLE_PROFILES[profileId] || profileId);
     
-    // For role select, we need to handle both known and unknown roles
-    const knownRoles = ['profile_5', 'profile_7', 'profile_18', 'profile_25', 'profile_78', 'profile_8'];
-    const unknownRoles = rolesArray.filter(role => role && !knownRoles.includes(role) && role !== 'profile_6');
+    // Create role badges HTML
+    const rolesHtml = roleNames.length > 0 
+      ? roleNames.map(role => `<span class="vespa-am-role-badge">${role}</span>`).join(' ')
+      : '<span style="color: #999;">No roles assigned</span>';
     
     return `
       <tr data-account-id="${staff.id}">
@@ -752,15 +867,9 @@
         <td>${staff.field_123 || 'N/A'}</td>
         <td>${hasLoggedIn}</td>
         <td>
-          <select class="vespa-am-role-select" multiple size="6" data-account-id="${staff.id}">
-            <option value="profile_5" ${rolesArray.includes('profile_5') ? 'selected' : ''}>Staff Admin</option>
-            <option value="profile_7" ${rolesArray.includes('profile_7') ? 'selected' : ''}>Tutor</option>
-            <option value="profile_18" ${rolesArray.includes('profile_18') ? 'selected' : ''}>Head of Year</option>
-            <option value="profile_25" ${rolesArray.includes('profile_25') ? 'selected' : ''}>Head of Dept</option>
-            <option value="profile_78" ${rolesArray.includes('profile_78') ? 'selected' : ''}>Subject Teacher</option>
-            <option value="profile_8" ${rolesArray.includes('profile_8') ? 'selected' : ''}>General Staff</option>
-            ${unknownRoles.map(role => `<option value="${role}" selected disabled style="color: #999;">${role} (Custom)</option>`).join('')}
-          </select>
+          <div class="vespa-am-role-display">
+            ${rolesHtml}
+          </div>
         </td>
         <td>${staff.field_3198 ? formatDate(staff.field_3198) : 'Never'}</td>
         <td>${Array.isArray(staff.field_3202) ? staff.field_3202.join(', ') : (staff.field_3202 || 'None')}</td>
@@ -768,6 +877,9 @@
         <td>
           <button class="vespa-am-link-button" onclick="window.VESPAAccountManagement.viewLinkedAccounts('${staff.id}', 'staff')">
             View Links
+          </button>
+          <button class="vespa-am-link-button" onclick="window.VESPAAccountManagement.editStaffRoles('${staff.id}')">
+            Edit Roles
           </button>
         </td>
       </tr>
@@ -778,11 +890,9 @@
    * Display student table
    */
   function displayStudentTable(data) {
-    const filteredData = filterData(data);
-    
     const content = document.getElementById('vespa-am-content');
     
-    if (filteredData.length === 0) {
+    if (data.length === 0) {
       content.innerHTML = `
         <div class="vespa-am-empty">
           <p>No student accounts found</p>
@@ -793,7 +903,7 @@
 
     content.innerHTML = `
       <div class="vespa-am-table-container">
-        <table class="vespa-am-table">
+        <table id="student-datatable" class="vespa-am-table display">
           <thead>
             <tr>
               <th style="width: 40px;">
@@ -813,11 +923,28 @@
             </tr>
           </thead>
           <tbody>
-            ${filteredData.map(student => createStudentRow(student)).join('')}
+            ${data.map(student => createStudentRow(student)).join('')}
           </tbody>
         </table>
       </div>
     `;
+
+    // Initialize DataTable after a brief delay
+    setTimeout(() => {
+      if ($.fn.DataTable) {
+        studentDataTable = $('#student-datatable').DataTable({
+          pageLength: 25,
+          dom: 'Bfrtip',
+          buttons: [
+            'copy', 'csv', 'excel', 'print'
+          ],
+          columnDefs: [
+            { orderable: false, targets: [0, -1] } // Disable sorting on checkbox and actions columns
+          ],
+          order: [[1, 'asc']] // Sort by name by default
+        });
+      }
+    }, 100);
   }
 
   /**
@@ -973,7 +1100,7 @@
     
     $.ajax({
       url: `${API_BASE_URL}account/reset-passwords`,
-      method: 'POST',
+      type: 'POST',
       contentType: 'application/json',
       data: JSON.stringify({
         accountIds: selectedIds,
@@ -1023,7 +1150,7 @@
     
     $.ajax({
       url: `${API_BASE_URL}account/resend-welcome-emails`,
-      method: 'POST',
+      type: 'POST',
       contentType: 'application/json',
       data: JSON.stringify({
         accountIds: selectedIds,
@@ -1079,7 +1206,7 @@
       </div>
     `;
     
-    showModal(confirmModal);
+    showModal('Confirm Deletion', confirmModal);
   }
 
   /**
@@ -1100,7 +1227,7 @@
     
     $.ajax({
       url: `${API_BASE_URL}account/delete-accounts`,
-      method: 'POST',
+      type: 'POST',
       contentType: 'application/json',
       data: JSON.stringify({
         accountIds: selectedIds,
@@ -1131,6 +1258,70 @@
   }
 
   /**
+   * Show edit roles modal for staff
+   */
+  window.VESPAAccountManagement.editStaffRoles = function(staffId) {
+    const staff = staffData.find(s => s.id === staffId);
+    if (!staff) return;
+    
+    const currentRoles = Array.isArray(staff.field_73) ? staff.field_73 : (staff.field_73 ? [staff.field_73] : []);
+    
+    const modalContent = `
+      <div style="padding: 20px;">
+        <h4>Edit Roles for ${staff.field_69}</h4>
+        <p>Select the roles for this staff member:</p>
+        
+        <div style="margin: 20px 0;">
+          <label style="display: block; margin: 10px 0;">
+            <input type="checkbox" id="role-profile_5" value="profile_5" ${currentRoles.includes('profile_5') ? 'checked' : ''}>
+            Staff Admin
+          </label>
+          <label style="display: block; margin: 10px 0;">
+            <input type="checkbox" id="role-profile_7" value="profile_7" ${currentRoles.includes('profile_7') ? 'checked' : ''}>
+            Tutor
+          </label>
+          <label style="display: block; margin: 10px 0;">
+            <input type="checkbox" id="role-profile_18" value="profile_18" ${currentRoles.includes('profile_18') ? 'checked' : ''}>
+            Head of Year
+          </label>
+          <label style="display: block; margin: 10px 0;">
+            <input type="checkbox" id="role-profile_25" value="profile_25" ${currentRoles.includes('profile_25') ? 'checked' : ''}>
+            Head of Department
+          </label>
+          <label style="display: block; margin: 10px 0;">
+            <input type="checkbox" id="role-profile_78" value="profile_78" ${currentRoles.includes('profile_78') ? 'checked' : ''}>
+            Subject Teacher
+          </label>
+          <label style="display: block; margin: 10px 0;">
+            <input type="checkbox" id="role-profile_8" value="profile_8" ${currentRoles.includes('profile_8') ? 'checked' : ''}>
+            General Staff
+          </label>
+        </div>
+        
+        <div style="text-align: right; margin-top: 20px;">
+          <button class="vespa-button secondary" onclick="window.VESPAAccountManagement.closeModal()">Cancel</button>
+          <button class="vespa-button primary" onclick="window.VESPAAccountManagement.saveStaffRoles('${staffId}')">Save Roles</button>
+        </div>
+      </div>
+    `;
+    
+    showModal('Edit Staff Roles', modalContent);
+  }
+
+  /**
+   * Save staff roles
+   */
+  window.VESPAAccountManagement.saveStaffRoles = async function(staffId) {
+    const newRoles = [];
+    document.querySelectorAll('input[id^="role-"]:checked').forEach(cb => {
+      newRoles.push(cb.value);
+    });
+    
+    closeModal();
+    await updateStaffRoles(staffId, newRoles);
+  }
+
+  /**
    * Update staff roles
    */
   async function updateStaffRoles(accountId, newRoles) {
@@ -1152,14 +1343,14 @@
 
       if (response.success) {
         showSuccess('Staff roles updated successfully');
+        // Refresh the data
+        loadAccountData(currentView);
       } else {
         throw new Error(response.message || 'Failed to update roles');
       }
     } catch (error) {
       debugLog('Error updating staff roles:', error);
       showError(`Failed to update roles: ${error.message}`);
-      // Refresh to revert changes
-      refreshData();
     }
   }
 
@@ -1467,12 +1658,12 @@
    */
   function showLoadingModal(message) {
     const modal = `
-      <div class="vespa-am-loading-modal">
+      <div class="vespa-am-loading-modal" style="text-align: center; padding: 20px;">
         <div class="spinner"></div>
         <p>${message}</p>
       </div>
     `;
-    showModal(modal);
+    showModal('Processing...', modal);
   }
 
   /**
@@ -1487,14 +1678,14 @@
    */
   function showSuccessModal(message, callback) {
     const modal = `
-      <div class="vespa-am-success-modal">
-        <div class="success-icon">✓</div>
+      <div class="vespa-am-success-modal" style="text-align: center; padding: 20px;">
+        <div class="success-icon" style="font-size: 48px; color: #28a745;">✓</div>
         <h3>Success!</h3>
         <p>${message}</p>
-        <button onclick="window.VESPAAccountManagement.closeSuccessModal()">OK</button>
+        <button class="vespa-button primary" onclick="window.VESPAAccountManagement.closeSuccessModal()">OK</button>
       </div>
     `;
-    showModal(modal);
+    showModal('Success', modal);
     
     // Store callback for when modal is closed
     window.VESPAAccountManagement._successCallback = callback;
