@@ -1428,10 +1428,26 @@ function renderSelectTypeStep() {
           </div>
         </div>
       </div>
+      
+      <div class="vespa-stage-container" style="margin-bottom: 30px; padding: 20px; background: #e6f3ff; border-radius: 8px; border: 2px solid #0066cc;">
+        <h3 style="color: #004080; margin-bottom: 15px;">⚙️ Stage 3: Account Management</h3>
+        <p style="margin-bottom: 15px;">Manage existing staff and student accounts, reset passwords, update roles, and manage linked relationships.</p>
+        
+        <div class="vespa-upload-options">
+          <div class="vespa-upload-option">
+            <input type="radio" id="account-management" name="upload-type" value="account-management">
+            <label for="account-management">
+              <div class="vespa-option-icon">👤</div>
+              <div class="vespa-option-title">Account Management</div>
+              <div class="vespa-option-description">Manage staff & student accounts, passwords, roles, and relationships</div>
+            </label>
+          </div>
+        </div>
+      </div>
     `;
   }
-  
-  /**
+
+/**
    * Check if staff exist and update UI accordingly
    */
   async function checkStaffExistence() {
@@ -1459,7 +1475,7 @@ function renderSelectTypeStep() {
           staffStatus.style.display = 'inline-block';
           staffStatus.style.color = '#28a745';
         }
-      } else {
+    } else {
         // Disable student upload
         if (studentOption) studentOption.disabled = true;
         if (disabledMessage) disabledMessage.style.display = 'block';
@@ -1469,7 +1485,7 @@ function renderSelectTypeStep() {
           staffStatus.style.color = '#dc3545';
         }
       }
-    } catch (error) {
+  } catch (error) {
       debugLog('Error checking staff existence:', error, 'warn');
       // Don't let this error prevent the interface from working
       // Just hide the status indicators if there's an error
@@ -1477,15 +1493,15 @@ function renderSelectTypeStep() {
       const disabledMessage = document.getElementById('student-disabled-message');
       if (staffStatus) staffStatus.style.display = 'none';
       if (disabledMessage) disabledMessage.style.display = 'none';
-    }
   }
-  
-  /**
+}
+
+/**
    * Render the select school step (super user only)
-   * @returns {string} HTML for the step
-   */
-  function renderSelectSchoolStep() {
-    return `
+ * @returns {string} HTML for the step
+ */
+function renderSelectSchoolStep() {
+  return `
       <h2>Select School to Emulate</h2>
       <p>As a Super User, choose the VESPA Customer account you want to upload data for.</p>
       
@@ -1495,14 +1511,14 @@ function renderSelectTypeStep() {
           <option value="">-- Loading schools... --</option>
           <!-- Schools will be dynamically populated by fetchVespaCustomers -->
         </select>
-      </div>
+    </div>
       
       <div id="emulation-details-container" style="display: none; margin-top: 15px; padding: 10px; background-color: #fff8e1; border: 1px solid #ffecb3; border-radius: 4px;">
         <h4>Emulation Mode Active</h4>
         <div id="emulation-school-name"></div>
         <div id="emulation-admin-email"></div>
         <div id="emulation-status"></div>
-      </div>
+    </div>
 
       <div id="school-details" class="vespa-school-details" style="display: none; margin-top:15px;">
         <h3>Selected School Details (from object_2)</h3>
@@ -1517,14 +1533,14 @@ function renderSelectTypeStep() {
           </div>
           <!-- Add more object_2 details if needed -->
         </div>
-      </div>
-    `;
-  }
-  
-  /**
+    </div>
+  `;
+}
+
+/**
    * Render the upload CSV step
-   * @returns {string} HTML for the step
-   */
+ * @returns {string} HTML for the step
+ */
   function renderUploadCsvStep() {
     debugLog("renderUploadCsvStep called", { 
       uploadMethod: window.uploadMethod, 
@@ -1608,23 +1624,23 @@ function renderSelectTypeStep() {
           <label for="csv-file">
             <div class="vespa-file-icon">📄</div>
             <div class="vespa-file-text">Drag & drop your CSV file here or click to browse</div>
-          </label>
-        </div>
-        
+            </label>
+          </div>
+          
         <div class="vespa-template-download">
           <p>Don't have a template? Download one below:</p>
           <button id="download-template" class="vespa-button secondary">Download ${buttonText} Template</button>
           <div id="download-status-message" style="display: none;"></div>
+          </div>
         </div>
-      </div>
-      
+        
       <div class="vespa-info-box">
         <div class="vespa-info-icon">ℹ️</div>
         <div class="vespa-info-content">
           <strong>CSV Format Requirements:</strong>
           ${requirementsHtml}
-        </div>
-      </div>
+            </div>
+            </div>
     `;
   }
   
@@ -1661,7 +1677,7 @@ function renderSelectTypeStep() {
     } else { // Fallback if uploadType is unknown at this stage
       tableHeaders = `<th>Data Column 1</th><th>Data Column 2</th><th>Data Column 3</th><th>Data Column 4</th><th>Data Column 5</th>`;
       colSpan = 6;
-    }
+  }
     
     return `
       <h2>Validate Data</h2>
@@ -3477,6 +3493,10 @@ function prevStep() {
       } else if (uploadType === 'academic-data') {
         debugLog("Proceeding to Academic Data Management interface", null, 'info');
         showAcademicDataInterface();
+        return;
+      } else if (uploadType === 'account-management') {
+        debugLog("Loading Account Management System", null, 'info');
+        loadAccountManagementModule();
         return;
       }
     }
@@ -5656,7 +5676,7 @@ function bindStepEvents() {
       // NOW load the custom data table script AFTER configuration is set
       debugLog("Loading script from CDN...", null, 'info');
       // Load the fixed version with proper URL construction
-      await loadScript('https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/customDataTable1d.js');
+      await loadScript('https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/customDataTable1c.js');
       
       debugLog("Script loaded successfully", null, 'success');
       
@@ -7000,7 +7020,74 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
     }
   }
 
+  /**
+   * Load the account management module
+   */
+  async function loadAccountManagementModule() {
+    try {
+      debugLog("Loading account management module", null, 'info');
+      
+      // Set the API URL for the module to use
+      window.API_BASE_URL = API_BASE_URL;
+      window.DEBUG_MODE = DEBUG_MODE;
+      
+      // Check if already loaded
+      if (window.VESPAAccountManagement && window.VESPAAccountManagement.show) {
+        debugLog("Account Management module already loaded, showing interface", null, 'info');
+        window.VESPAAccountManagement.show();
+        return;
+      }
+      
+      // Show loading indicator
+      showModal('Loading Account Management', '<div style="text-align: center; padding: 20px;"><div class="vespa-spinner"></div><p>Loading account management system...</p></div>');
+      
+      // Load the account management module from CDN
+      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/accountManagement1a.js';
+      
+      try {
+        await loadScript(scriptUrl);
+        debugLog("Account Management script loaded from CDN", null, 'success');
+      } catch (error) {
+        debugLog("Failed to load from CDN, trying local file", error, 'warn');
+        // Fallback to local file if CDN fails
+        await loadScript('/accountManagement.js');
+      }
+      
+      // Wait a bit for initialization
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Close loading modal
+      closeModal();
+      
+      // Check if module loaded successfully
+      if (window.VESPAAccountManagement && window.VESPAAccountManagement.show) {
+        debugLog("Account Management module loaded successfully", null, 'success');
+        
+        // Hide the wizard
+        const wizard = document.getElementById('vespa-upload-wizard');
+        if (wizard) wizard.style.display = 'none';
+        
+        // Show the account management interface
+        window.VESPAAccountManagement.show();
+      } else {
+        throw new Error('Account Management module failed to initialize');
+      }
+      
+    } catch (error) {
+      debugLog('Error loading account management module:', error, 'error');
+      closeModal();
+      showError('Failed to load account management system. Please refresh and try again.');
+      
+      // Reset to step 1
+      currentStep = 1;
+      uploadType = null;
+      renderStep(1);
+    }
+  }
 
+
+
+    
 
 
 
