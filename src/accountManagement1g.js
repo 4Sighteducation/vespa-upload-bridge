@@ -55,7 +55,20 @@
         } else {
           loadAccountData('student');
         }
-      }
+      },
+      // Add all button handler functions to the public API
+      toggleSelectAll: toggleSelectAll,
+      changePasswords: changePasswords,
+      resendWelcomeEmails: resendWelcomeEmails,
+      deleteAccounts: deleteAccounts,
+      viewLinkedAccounts: viewLinkedAccounts,
+      editStudentActivities: editStudentActivities,
+      toggleTableSelectAll: toggleTableSelectAll,
+      toggleRowSelection: toggleRowSelection,
+      confirmDelete: confirmDelete,
+      updateLinkedStaff: updateLinkedStaff,
+      reallocateStudent: reallocateStudent,
+      saveActivities: saveActivities
     };
 
     debugLog('Account Management module initialized successfully');
@@ -521,13 +534,10 @@
     document.getElementById('am-filter-year').addEventListener('change', applyFilters);
     document.getElementById('am-filter-group').addEventListener('input', debounce(applyFilters, 300));
 
-    // Make functions available globally for onclick handlers
-    window.VESPAAccountManagement.toggleSelectAll = toggleSelectAll;
-    window.VESPAAccountManagement.changePasswords = changePasswords;
-    window.VESPAAccountManagement.resendWelcomeEmails = resendWelcomeEmails;
-    window.VESPAAccountManagement.deleteAccounts = deleteAccounts;
-    window.VESPAAccountManagement.viewLinkedAccounts = viewLinkedAccounts;
-    window.VESPAAccountManagement.editStudentActivities = editStudentActivities;
+    // Select all checkbox event
+    document.getElementById('am-select-all').addEventListener('change', function() {
+      toggleSelectAll();
+    });
   }
 
   /**
@@ -852,38 +862,34 @@
   /**
    * Toggle table select all
    */
-  if (window.VESPAAccountManagement) {
-    window.VESPAAccountManagement.toggleTableSelectAll = function(checkbox) {
-      document.querySelectorAll('.row-checkbox').forEach(cb => {
-        cb.checked = checkbox.checked;
-        if (checkbox.checked) {
-          selectedAccounts.add(cb.value);
-        } else {
-          selectedAccounts.delete(cb.value);
-        }
-      });
-      document.getElementById('am-select-all').checked = checkbox.checked;
-    };
+  function toggleTableSelectAll(checkbox) {
+    document.querySelectorAll('.row-checkbox').forEach(cb => {
+      cb.checked = checkbox.checked;
+      if (checkbox.checked) {
+        selectedAccounts.add(cb.value);
+      } else {
+        selectedAccounts.delete(cb.value);
+      }
+    });
+    document.getElementById('am-select-all').checked = checkbox.checked;
   }
 
   /**
    * Toggle individual row selection
    */
-  if (window.VESPAAccountManagement) {
-    window.VESPAAccountManagement.toggleRowSelection = function(checkbox) {
-      if (checkbox.checked) {
-        selectedAccounts.add(checkbox.value);
-      } else {
-        selectedAccounts.delete(checkbox.value);
-      }
-      
-      // Update select all checkboxes
-      const allChecked = document.querySelectorAll('.row-checkbox:checked').length === 
-                        document.querySelectorAll('.row-checkbox').length;
-      document.getElementById('am-select-all').checked = allChecked;
-      const tableSelectAll = document.getElementById('table-select-all');
-      if (tableSelectAll) tableSelectAll.checked = allChecked;
-    };
+  function toggleRowSelection(checkbox) {
+    if (checkbox.checked) {
+      selectedAccounts.add(checkbox.value);
+    } else {
+      selectedAccounts.delete(checkbox.value);
+    }
+    
+    // Update select all checkboxes
+    const allChecked = document.querySelectorAll('.row-checkbox:checked').length === 
+                      document.querySelectorAll('.row-checkbox').length;
+    document.getElementById('am-select-all').checked = allChecked;
+    const tableSelectAll = document.getElementById('table-select-all');
+    if (tableSelectAll) tableSelectAll.checked = allChecked;
   }
 
   /**
@@ -992,10 +998,9 @@
   /**
    * Confirm and execute account deletion
    */
-  if (window.VESPAAccountManagement) {
-    window.VESPAAccountManagement.confirmDelete = async function() {
+  async function confirmDelete() {
     const confirmInput = document.getElementById('delete-confirm-input');
-    if (confirmInput.value !== 'DELETE') {
+    if (!confirmInput || confirmInput.value !== 'DELETE') {
       showError('Please type DELETE to confirm');
       return;
     }
@@ -1025,7 +1030,6 @@
       debugLog('Error deleting accounts:', error);
       showError(`Failed to delete accounts: ${error.message}`);
     }
-  };
   }
 
   /**
@@ -1159,8 +1163,7 @@
   /**
    * Update linked staff for a student
    */
-  if (window.VESPAAccountManagement) {
-    window.VESPAAccountManagement.updateLinkedStaff = async function(studentId) {
+  async function updateLinkedStaff(studentId) {
     try {
       const tutors = document.getElementById('linked-tutors').value;
       const headOfYear = document.getElementById('linked-hoy').value;
@@ -1189,17 +1192,14 @@
       debugLog('Error updating linked staff:', error);
       showError(`Failed to update linked staff: ${error.message}`);
     }
-  };
   }
 
   /**
    * Reallocate a student to different staff
    */
-  if (window.VESPAAccountManagement) {
-    window.VESPAAccountManagement.reallocateStudent = async function(studentId, currentStaffId) {
-      // This would show a modal to select new staff and reallocate
-      showError('Student reallocation feature coming soon');
-    };
+  async function reallocateStudent(studentId, currentStaffId) {
+    // This would show a modal to select new staff and reallocate
+    showError('Student reallocation feature coming soon');
   }
 
   /**
@@ -1283,36 +1283,34 @@
   /**
    * Save student activities
    */
-  if (window.VESPAAccountManagement) {
-    window.VESPAAccountManagement.saveActivities = async function(studentId) {
-      try {
-        const selectedActivities = [];
-        document.querySelectorAll('.vespa-activity-checkbox:checked').forEach(cb => {
-          selectedActivities.push(cb.value);
-        });
+  async function saveActivities(studentId) {
+    try {
+      const selectedActivities = [];
+      document.querySelectorAll('.vespa-activity-checkbox:checked').forEach(cb => {
+        selectedActivities.push(cb.value);
+      });
 
-        const response = await $.ajax({
-          url: `${API_BASE_URL}account/update-student-activities`,
-          type: 'POST',
-          contentType: 'application/json',
-          data: JSON.stringify({
-            studentId: studentId,
-            activities: selectedActivities
-          }),
-          xhrFields: { withCredentials: true }
-        });
+      const response = await $.ajax({
+        url: `${API_BASE_URL}account/update-student-activities`,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+          studentId: studentId,
+          activities: selectedActivities
+        }),
+        xhrFields: { withCredentials: true }
+      });
 
-        if (response.success) {
-          showSuccess('Student activities updated successfully');
-          closeModal();
-        } else {
-          throw new Error(response.message || 'Failed to update activities');
-        }
-      } catch (error) {
-        debugLog('Error updating activities:', error);
-        showError(`Failed to update activities: ${error.message}`);
+      if (response.success) {
+        showSuccess('Student activities updated successfully');
+        closeModal();
+      } else {
+        throw new Error(response.message || 'Failed to update activities');
       }
-    };
+    } catch (error) {
+      debugLog('Error updating activities:', error);
+      showError(`Failed to update activities: ${error.message}`);
+    }
   }
 
   /**
