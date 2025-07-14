@@ -49,7 +49,9 @@
     window[MODULE_NAME] = {
       show: showAccountManagement,
       hide: hideAccountManagement,
-      refresh: refreshData
+      refresh: refreshData,
+      toggleTableSelectAll: null, // Will be assigned later
+      toggleRowSelection: null    // Will be assigned later
     };
 
     debugLog('Account Management module initialized successfully');
@@ -797,35 +799,39 @@
   /**
    * Toggle table select all
    */
-  window.VESPAAccountManagement.toggleTableSelectAll = function(checkbox) {
-    document.querySelectorAll('.row-checkbox').forEach(cb => {
-      cb.checked = checkbox.checked;
-      if (checkbox.checked) {
-        selectedAccounts.add(cb.value);
-      } else {
-        selectedAccounts.delete(cb.value);
-      }
-    });
-    document.getElementById('am-select-all').checked = checkbox.checked;
-  };
+  if (window.VESPAAccountManagement) {
+    window.VESPAAccountManagement.toggleTableSelectAll = function(checkbox) {
+      document.querySelectorAll('.row-checkbox').forEach(cb => {
+        cb.checked = checkbox.checked;
+        if (checkbox.checked) {
+          selectedAccounts.add(cb.value);
+        } else {
+          selectedAccounts.delete(cb.value);
+        }
+      });
+      document.getElementById('am-select-all').checked = checkbox.checked;
+    };
+  }
 
   /**
    * Toggle individual row selection
    */
-  window.VESPAAccountManagement.toggleRowSelection = function(checkbox) {
-    if (checkbox.checked) {
-      selectedAccounts.add(checkbox.value);
-    } else {
-      selectedAccounts.delete(checkbox.value);
-    }
-    
-    // Update select all checkboxes
-    const allChecked = document.querySelectorAll('.row-checkbox:checked').length === 
-                      document.querySelectorAll('.row-checkbox').length;
-    document.getElementById('am-select-all').checked = allChecked;
-    const tableSelectAll = document.getElementById('table-select-all');
-    if (tableSelectAll) tableSelectAll.checked = allChecked;
-  };
+  if (window.VESPAAccountManagement) {
+    window.VESPAAccountManagement.toggleRowSelection = function(checkbox) {
+      if (checkbox.checked) {
+        selectedAccounts.add(checkbox.value);
+      } else {
+        selectedAccounts.delete(checkbox.value);
+      }
+      
+      // Update select all checkboxes
+      const allChecked = document.querySelectorAll('.row-checkbox:checked').length === 
+                        document.querySelectorAll('.row-checkbox').length;
+      document.getElementById('am-select-all').checked = allChecked;
+      const tableSelectAll = document.getElementById('table-select-all');
+      if (tableSelectAll) tableSelectAll.checked = allChecked;
+    };
+  }
 
   /**
    * Change passwords for selected accounts
