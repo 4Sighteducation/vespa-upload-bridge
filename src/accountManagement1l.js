@@ -101,7 +101,11 @@
       // Utility functions
       showError: showError,
       showSuccess: showSuccess,
-      getSelectedAccountIds: getSelectedAccountIds
+      getSelectedAccountIds: getSelectedAccountIds,
+      
+      // Additional functions that were being added later
+      editStaffRoles: editStaffRoles,
+      saveStaffRoles: saveStaffRoles
     };
 
     debugLog('Account Management module initialized');
@@ -1260,7 +1264,7 @@
   /**
    * Show edit roles modal for staff
    */
-  window.VESPAAccountManagement.editStaffRoles = function(staffId) {
+  function editStaffRoles(staffId) {
     const staff = staffData.find(s => s.id === staffId);
     if (!staff) return;
     
@@ -1311,7 +1315,7 @@
   /**
    * Save staff roles
    */
-  window.VESPAAccountManagement.saveStaffRoles = async function(staffId) {
+  async function saveStaffRoles(staffId) {
     const newRoles = [];
     document.querySelectorAll('input[id^="role-"]:checked').forEach(cb => {
       newRoles.push(cb.value);
@@ -1724,4 +1728,5 @@
   initialize();
 
 })();
+
 
