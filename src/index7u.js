@@ -6456,6 +6456,10 @@ function bindStepEvents() {
             // Specifically log email field to debug [object Object] issue
             debugLog("First lead email field (field_3440):", response.leads[0].field_3440, 'info');
             debugLog("Type of email field:", typeof response.leads[0].field_3440, 'info');
+            if (typeof response.leads[0].field_3440 === 'object') {
+              debugLog("Email object keys:", Object.keys(response.leads[0].field_3440), 'info');
+              debugLog("Email object values:", response.leads[0].field_3440, 'info');
+            }
           }
           
           response.leads.forEach(lead => {
@@ -6473,6 +6477,23 @@ function bindStepEvents() {
             const accounts = lead.field_3532 || 'N/A';
             const converted = lead.field_3447 === 'Yes';
             
+            // Extract email properly from object or string
+            let email = 'No email';
+            if (lead.field_3440) {
+              if (typeof lead.field_3440 === 'string') {
+                email = lead.field_3440;
+              } else if (typeof lead.field_3440 === 'object') {
+                // Try different possible object structures
+                email = lead.field_3440.email || 
+                        lead.field_3440.email_raw ||
+                        lead.field_3440.raw || 
+                        lead.field_3440.value ||
+                        lead.field_3440.formatted ||
+                        lead.field_3440.field_3440 || // Sometimes Knack nests the field name
+                        JSON.stringify(lead.field_3440);
+              }
+            }
+            
             leadsHtml += `
               <div class="lead-item" data-lead-id="${lead.id}" 
                 style="background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 4px; cursor: pointer; border: 1px solid #ddd; transition: all 0.2s;" 
@@ -6484,7 +6505,7 @@ function bindStepEvents() {
                     <h4 style="margin: 0 0 5px 0; color: #007bff;">${lead.field_3439 || 'Unknown Organization'}</h4>
                     <p style="margin: 0; color: #666; font-size: 14px;">
                       <strong>Contact:</strong> ${contactName} | 
-                      <strong>Email:</strong> ${typeof lead.field_3440 === 'object' ? (lead.field_3440.email || lead.field_3440.raw || JSON.stringify(lead.field_3440)) : (lead.field_3440 || 'No email')} | 
+                      <strong>Email:</strong> ${email} | 
                       <strong>Product:</strong> ${product}
                       ${product !== 'Training' ? ` | <strong>Accounts:</strong> ${accounts}` : ''}
                     </p>
@@ -6512,7 +6533,15 @@ function bindStepEvents() {
             if (leadItem) {
               const leadId = leadItem.getAttribute('data-lead-id');
               if (leadId) {
-                window.selectLead(leadId);
+                debugLog("Lead item clicked, ID:", leadId);
+                // Call loadLeadData directly instead of going through window.selectLead
+                if (typeof loadLeadData === 'function') {
+                  loadLeadData(leadId);
+                } else if (typeof window.loadLeadData === 'function') {
+                  window.loadLeadData(leadId);
+                } else {
+                  debugLog("loadLeadData function not found!", null, 'error');
+                }
               }
             }
           });
@@ -6602,10 +6631,22 @@ function bindStepEvents() {
           
           // Email - field_3440 → adminEmail (handle if it's an object)
           if (form.adminEmail) {
-            const email = typeof lead.field_3440 === 'object' ? 
-              (lead.field_3440.email || lead.field_3440.raw || '') : 
-              (lead.field_3440 || '');
+            let email = '';
+            if (lead.field_3440) {
+              if (typeof lead.field_3440 === 'string') {
+                email = lead.field_3440;
+              } else if (typeof lead.field_3440 === 'object') {
+                email = lead.field_3440.email || 
+                        lead.field_3440.email_raw ||
+                        lead.field_3440.raw || 
+                        lead.field_3440.value ||
+                        lead.field_3440.formatted ||
+                        lead.field_3440.field_3440 || 
+                        '';
+              }
+            }
             form.adminEmail.value = email;
+            debugLog("Setting admin email to:", email, 'info');
           }
           
           // Phone - field_3442 → phone
@@ -7972,7 +8013,6 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
 
 
     
-
 
 
 
