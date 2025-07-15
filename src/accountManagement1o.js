@@ -129,6 +129,7 @@
       dtCSS.rel = 'stylesheet';
       dtCSS.href = 'https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css';
       document.head.appendChild(dtCSS);
+      debugLog('Added DataTables CSS');
     }
     
     // Add DataTables Buttons CSS
@@ -138,70 +139,51 @@
       dtButtonsCSS.rel = 'stylesheet';
       dtButtonsCSS.href = 'https://cdn.datatables.net/buttons/2.4.1/css/buttons.dataTables.min.css';
       document.head.appendChild(dtButtonsCSS);
+      debugLog('Added DataTables Buttons CSS');
+    }
+    
+    // Check jQuery version
+    if (typeof $ !== 'undefined' && $.fn && $.fn.jquery) {
+      debugLog('jQuery version:', $.fn.jquery);
     }
     
     // Wait for jQuery to be available before loading DataTables
+    let jqueryCheckCount = 0;
     const loadDataTablesWhenReady = () => {
+      jqueryCheckCount++;
+      
       if (typeof $ === 'undefined' || typeof jQuery === 'undefined') {
-        debugLog('jQuery not ready, waiting...');
+        debugLog(`jQuery not ready, waiting... (attempt ${jqueryCheckCount})`);
+        
+        // Give up after 50 attempts (5 seconds)
+        if (jqueryCheckCount > 50) {
+          debugLog('ERROR: jQuery never became available, giving up on DataTables');
+          return;
+        }
+        
         // jQuery not ready, check again in 100ms
         setTimeout(loadDataTablesWhenReady, 100);
         return;
       }
       
       debugLog('jQuery is ready, checking DataTables...');
+      debugLog('jQuery.fn.DataTable type:', typeof $.fn.DataTable);
       
       // Load DataTables JS
       if (typeof $.fn.DataTable === 'undefined') {
-        debugLog('Loading DataTables core...');
+        debugLog('DataTables not found, loading core...');
         const script = document.createElement('script');
         script.src = 'https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js';
         script.onload = () => {
           debugLog('DataTables core loaded successfully');
+          debugLog('DataTable is now available:', typeof $.fn.DataTable !== 'undefined');
           
-          // Load DataTables Buttons after DataTables is loaded
-          const buttonsScript = document.createElement('script');
-          buttonsScript.src = 'https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js';
-          buttonsScript.onload = () => {
-            debugLog('DataTables Buttons loaded');
-            
-            // Load additional button scripts with proper sequencing
-            const loadScript = (src, name) => {
-              return new Promise((resolve, reject) => {
-                const s = document.createElement('script');
-                s.src = src;
-                s.onload = () => {
-                  debugLog(`${name} loaded`);
-                  resolve();
-                };
-                s.onerror = () => {
-                  debugLog(`Failed to load ${name}`);
-                  reject(new Error(`Failed to load ${name}`));
-                };
-                document.head.appendChild(s);
-              });
-            };
-            
-            // Load scripts in sequence
-            Promise.all([
-              loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'JSZip'),
-              loadScript('https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js', 'Buttons HTML5'),
-              loadScript('https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js', 'Buttons Print')
-            ]).then(() => {
-              debugLog('All DataTables extensions loaded successfully');
-              // Trigger a custom event to indicate DataTables is ready
-              window.dispatchEvent(new Event('datatables-ready'));
-            }).catch(error => {
-              debugLog('Error loading DataTables extensions:', error);
-            });
-          };
-          buttonsScript.onerror = () => {
-            debugLog('Failed to load DataTables Buttons');
-          };
-          document.head.appendChild(buttonsScript);
+          // Skip buttons for now - just get basic DataTables working
+          debugLog('Triggering datatables-ready event');
+          window.dispatchEvent(new Event('datatables-ready'));
         };
-        script.onerror = () => {
-          debugLog('Failed to load DataTables core');
+        script.onerror = (error) => {
+          debugLog('ERROR: Failed to load DataTables core', error);
         };
         document.head.appendChild(script);
       } else {
@@ -1276,8 +1258,10 @@
         debugLog(`${type} accounts loaded:`, response);
         
         if (response.success && response.data) {
+          debugLog(`Calling displayAccounts with ${response.data.length} records`);
           displayAccounts(response.data, type);
         } else {
+          debugLog('Response not successful or no data');
           showError('Failed to load accounts');
         }
       },
@@ -1292,9 +1276,16 @@
    * Display accounts in a table
    */
   function displayAccounts(accounts, type) {
+    debugLog(`displayAccounts called with type: ${type}, accounts:`, accounts);
     const contentArea = document.getElementById('vespa-am-content');
     
+    if (!contentArea) {
+      debugLog('ERROR: vespa-am-content not found in displayAccounts');
+      return;
+    }
+    
     if (!accounts || accounts.length === 0) {
+      debugLog(`No ${type} accounts found, showing empty state`);
       contentArea.innerHTML = `
         <div class="vespa-am-empty">
           <p>No ${type} accounts found</p>
@@ -1303,6 +1294,7 @@
       return;
     }
     
+    debugLog(`Storing ${accounts.length} ${type} records`);
     // Store current data
     if (type === 'staff') {
       staffData = accounts;
@@ -1311,6 +1303,7 @@
     }
     
     // Build table based on type
+    debugLog(`Calling display${type.charAt(0).toUpperCase() + type.slice(1)}Table`);
     if (type === 'staff') {
       displayStaffTable(accounts);
     } else {
@@ -1322,7 +1315,13 @@
    * Display staff table
    */
   function displayStaffTable(data) {
+    debugLog(`displayStaffTable called with ${data.length} records`);
     const content = document.getElementById('vespa-am-content');
+    
+    if (!content) {
+      debugLog('ERROR: vespa-am-content element not found!');
+      return;
+    }
     
     if (data.length === 0) {
       content.innerHTML = `
@@ -1361,139 +1360,146 @@
       </div>
     `;
 
-    // Initialize DataTable when ready
-    const initDataTable = () => {
-      if (typeof $ === 'undefined' || typeof $.fn === 'undefined' || typeof $.fn.DataTable === 'undefined') {
-        debugLog('DataTables not ready, retrying...');
-        // DataTables not ready yet, try again
-        setTimeout(initDataTable, 100);
+    debugLog('Table HTML added to DOM');
+
+    // Wait for DataTables to be ready, then initialize
+    const waitForDataTables = () => {
+      debugLog('Waiting for DataTables...');
+      
+      // Check if jQuery exists
+      if (typeof $ === 'undefined') {
+        debugLog('jQuery not available yet, waiting...');
+        setTimeout(waitForDataTables, 500);
         return;
       }
       
+      // Check if DataTables exists
+      if (typeof $.fn === 'undefined' || typeof $.fn.DataTable === 'undefined') {
+        debugLog('DataTables plugin not available yet, waiting...');
+        // Listen for our custom event
+        window.addEventListener('datatables-ready', initDataTable, { once: true });
+        return;
+      }
+      
+      // DataTables is ready, initialize
+      initDataTable();
+    };
+    
+    // Initialize DataTable
+    const initDataTable = () => {
+      debugLog('Starting DataTable initialization');
+      
       try {
-        debugLog('Initializing staff DataTable...');
-        
-        // Custom search function for role filtering
-        $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
-          // Only apply to staff table
-          if (!settings.nTable || settings.nTable.id !== 'staff-datatable') return true;
-          
-          // Get filter values
-          const searchTerm = document.getElementById('am-search')?.value?.toLowerCase() || '';
-          const groupFilter = document.getElementById('am-filter-group')?.value?.toLowerCase() || '';
-          const roleFilter = document.getElementById('am-filter-role')?.value || '';
-          
-          // Get row data - strip HTML tags
-          const name = (data[1] || '').toLowerCase();
-          const email = (data[2] || '').toLowerCase();
-          const group = (data[3] || '').toLowerCase();
-          const rolesHtml = data[6] || '';
-          
-          // Search filter
-          if (searchTerm) {
-            if (!name.includes(searchTerm) && !email.includes(searchTerm)) {
-              return false;
-            }
-          }
-          
-          // Group filter
-          if (groupFilter && !group.includes(groupFilter)) {
-            return false;
-          }
-          
-          // Role filter
-          if (roleFilter) {
-            if (roleFilter === 'No Role') {
-              if (!rolesHtml.includes('No roles assigned')) {
-                return false;
-              }
-            } else {
-              if (!rolesHtml.includes(roleFilter)) {
-                return false;
-              }
-            }
-          }
-          
-          return true;
-        });
-        
         // Test if table exists
         const tableElement = document.getElementById('staff-datatable');
         if (!tableElement) {
           debugLog('ERROR: staff-datatable element not found!');
           return;
         }
-        debugLog('Table element found:', tableElement);
+        debugLog('Table element found');
         
-        // Initialize DataTable with simplified config first
-        try {
-          staffDataTable = $('#staff-datatable').DataTable({
-            pageLength: 50,
-            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
-            dom: 'lfrtip', // Simplified dom - just length, filter, table, info, pagination
-            columnDefs: [
-              { orderable: false, targets: [0, 10] } // Checkbox and Actions columns
-            ],
-            order: [[1, 'asc']], // Sort by name by default
-            initComplete: function() {
-              debugLog('Staff DataTable init complete - table is sortable now');
-              
-              // Bind custom filter events after table is initialized
-              const searchInput = document.getElementById('am-search');
-              const groupInput = document.getElementById('am-filter-group');
-              const roleSelect = document.getElementById('am-filter-role');
-              
-              if (searchInput) {
-                searchInput.removeEventListener('input', handleSearchInput);
-                searchInput.addEventListener('input', handleSearchInput);
-                debugLog('Search input event bound');
-              }
-              
-              if (groupInput) {
-                groupInput.removeEventListener('input', handleGroupInput);
-                groupInput.addEventListener('input', handleGroupInput);
-                debugLog('Group input event bound');
-              }
-              
-              if (roleSelect) {
-                roleSelect.removeEventListener('change', handleRoleChange);
-                roleSelect.addEventListener('change', handleRoleChange);
-                debugLog('Role select event bound');
-              }
-            }
-          });
-          
-          debugLog('DataTable instance created:', staffDataTable);
-        } catch (error) {
-          debugLog('ERROR creating DataTable:', error);
-          console.error('Full error:', error);
-        }
+        // Initialize with very basic config
+        staffDataTable = $('#staff-datatable').DataTable({
+          paging: true,
+          ordering: true,
+          info: true,
+          pageLength: 50,
+          order: [[1, 'asc']]
+        });
         
-        // Define event handlers
-        const handleSearchInput = debounce(() => {
-          debugLog('Search input changed:', document.getElementById('am-search').value);
-          if (staffDataTable) staffDataTable.draw();
-        }, 300);
+        debugLog('Basic DataTable initialized successfully');
         
-        const handleGroupInput = debounce(() => {
-          debugLog('Group input changed:', document.getElementById('am-filter-group').value);
-          if (staffDataTable) staffDataTable.draw();
-        }, 300);
+        // Now add our custom filters
+        setupCustomFilters();
         
-        const handleRoleChange = () => {
-          debugLog('Role filter changed:', document.getElementById('am-filter-role').value);
-          if (staffDataTable) staffDataTable.draw();
-        };
+      } catch (error) {
+        debugLog('ERROR initializing DataTable:', error.message);
+        console.error('Full DataTable error:', error);
         
-        debugLog('Staff DataTable initialized successfully');
-      } catch (e) {
-        debugLog('Error initializing staff DataTable:', e);
-        console.error('DataTable initialization error:', e);
+        // Fall back to no DataTables
+        debugLog('Falling back to standard table without DataTables');
       }
     };
     
-    // Start initialization
-    initDataTable();
+    // Setup custom filters
+    const setupCustomFilters = () => {
+      debugLog('Setting up custom filters');
+      
+      // Clear any existing search functions
+      $.fn.dataTable.ext.search = [];
+      
+      // Add custom search function
+      $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+        // Only apply to staff table
+        if (!settings.nTable || settings.nTable.id !== 'staff-datatable') return true;
+        
+        // Get filter values
+        const searchTerm = document.getElementById('am-search')?.value?.toLowerCase() || '';
+        const groupFilter = document.getElementById('am-filter-group')?.value?.toLowerCase() || '';
+        const roleFilter = document.getElementById('am-filter-role')?.value || '';
+        
+        // Get row data
+        const name = (data[1] || '').toLowerCase();
+        const email = (data[2] || '').toLowerCase();
+        const group = (data[3] || '').toLowerCase();
+        const rolesHtml = data[6] || '';
+        
+        // Apply filters
+        if (searchTerm && !name.includes(searchTerm) && !email.includes(searchTerm)) {
+          return false;
+        }
+        
+        if (groupFilter && !group.includes(groupFilter)) {
+          return false;
+        }
+        
+        if (roleFilter) {
+          if (roleFilter === 'No Role') {
+            if (!rolesHtml.includes('No roles assigned')) {
+              return false;
+            }
+          } else {
+            if (!rolesHtml.includes(roleFilter)) {
+              return false;
+            }
+          }
+        }
+        
+        return true;
+      });
+      
+      // Bind filter events
+      const searchInput = document.getElementById('am-search');
+      const groupInput = document.getElementById('am-filter-group');
+      const roleSelect = document.getElementById('am-filter-role');
+      
+      if (searchInput) {
+        searchInput.addEventListener('input', debounce(() => {
+          debugLog('Search changed:', searchInput.value);
+          if (staffDataTable) staffDataTable.draw();
+        }, 300));
+        debugLog('Search filter bound');
+      }
+      
+      if (groupInput) {
+        groupInput.addEventListener('input', debounce(() => {
+          debugLog('Group filter changed:', groupInput.value);
+          if (staffDataTable) staffDataTable.draw();
+        }, 300));
+        debugLog('Group filter bound');
+      }
+      
+      if (roleSelect) {
+        roleSelect.addEventListener('change', () => {
+          debugLog('Role filter changed:', roleSelect.value);
+          if (staffDataTable) staffDataTable.draw();
+        });
+        debugLog('Role filter bound');
+      }
+    };
+    
+    // Start the process
+    waitForDataTables();
   }
 
   /**
@@ -1600,131 +1606,138 @@
       </div>
     `;
 
-    // Initialize DataTable when ready
-    const initDataTable = () => {
-      if (typeof $ === 'undefined' || typeof $.fn === 'undefined' || typeof $.fn.DataTable === 'undefined') {
-        debugLog('DataTables not ready for student table, retrying...');
-        // DataTables not ready yet, try again
-        setTimeout(initDataTable, 100);
+    debugLog('Student table HTML added to DOM');
+
+    // Wait for DataTables to be ready, then initialize
+    const waitForDataTables = () => {
+      debugLog('Waiting for DataTables (student)...');
+      
+      // Check if jQuery exists
+      if (typeof $ === 'undefined') {
+        debugLog('jQuery not available yet, waiting...');
+        setTimeout(waitForDataTables, 500);
         return;
       }
       
+      // Check if DataTables exists
+      if (typeof $.fn === 'undefined' || typeof $.fn.DataTable === 'undefined') {
+        debugLog('DataTables plugin not available yet, waiting...');
+        // Listen for our custom event
+        window.addEventListener('datatables-ready', initDataTable, { once: true });
+        return;
+      }
+      
+      // DataTables is ready, initialize
+      initDataTable();
+    };
+    
+    // Initialize DataTable
+    const initDataTable = () => {
+      debugLog('Starting student DataTable initialization');
+      
       try {
-        debugLog('Initializing student DataTable...');
-        
-        // Custom search function for student filtering
-        $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
-          // Only apply to student table
-          if (!settings.nTable || settings.nTable.id !== 'student-datatable') return true;
-          
-          // Get filter values
-          const searchTerm = document.getElementById('am-search')?.value?.toLowerCase() || '';
-          const yearFilter = document.getElementById('am-filter-year')?.value || '';
-          const groupFilter = document.getElementById('am-filter-group')?.value?.toLowerCase() || '';
-          
-          // Get row data
-          const name = (data[1] || '').toLowerCase();
-          const email = (data[2] || '').toLowerCase();
-          const group = (data[3] || '').toLowerCase();
-          const year = data[4] || '';
-          
-          // Search filter
-          if (searchTerm) {
-            if (!name.includes(searchTerm) && !email.includes(searchTerm)) {
-              return false;
-            }
-          }
-          
-          // Year filter
-          if (yearFilter && year !== yearFilter) {
-            return false;
-          }
-          
-          // Group filter
-          if (groupFilter && !group.includes(groupFilter)) {
-            return false;
-          }
-          
-          return true;
-        });
-        
         // Test if table exists
         const tableElement = document.getElementById('student-datatable');
         if (!tableElement) {
           debugLog('ERROR: student-datatable element not found!');
           return;
         }
-        debugLog('Student table element found:', tableElement);
+        debugLog('Student table element found');
         
-        // Initialize DataTable with simplified config
-        try {
-          studentDataTable = $('#student-datatable').DataTable({
-            pageLength: 50,
-            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
-            dom: 'lfrtip', // Simplified dom
-            columnDefs: [
-              { orderable: false, targets: [0, 10] } // Checkbox and Actions columns
-            ],
-            order: [[1, 'asc']], // Sort by name by default
-            initComplete: function() {
-              debugLog('Student DataTable init complete - table is sortable now');
-              
-              // Bind custom filter events after table is initialized
-              const searchInput = document.getElementById('am-search');
-              const yearSelect = document.getElementById('am-filter-year');
-              const groupInput = document.getElementById('am-filter-group');
-              
-              if (searchInput) {
-                searchInput.removeEventListener('input', handleStudentSearchInput);
-                searchInput.addEventListener('input', handleStudentSearchInput);
-                debugLog('Student search input event bound');
-              }
-              
-              if (yearSelect) {
-                yearSelect.removeEventListener('change', handleYearChange);
-                yearSelect.addEventListener('change', handleYearChange);
-                debugLog('Year select event bound');
-              }
-              
-              if (groupInput) {
-                groupInput.removeEventListener('input', handleStudentGroupInput);
-                groupInput.addEventListener('input', handleStudentGroupInput);
-                debugLog('Student group input event bound');
-              }
-            }
-          });
-          
-          debugLog('Student DataTable instance created:', studentDataTable);
-        } catch (error) {
-          debugLog('ERROR creating student DataTable:', error);
-          console.error('Full error:', error);
-        }
+        // Initialize with very basic config
+        studentDataTable = $('#student-datatable').DataTable({
+          paging: true,
+          ordering: true,
+          info: true,
+          pageLength: 50,
+          order: [[1, 'asc']]
+        });
         
-        // Define event handlers
-        const handleStudentSearchInput = debounce(() => {
-          debugLog('Student search input changed:', document.getElementById('am-search').value);
-          if (studentDataTable) studentDataTable.draw();
-        }, 300);
+        debugLog('Basic student DataTable initialized successfully');
         
-        const handleYearChange = () => {
-          debugLog('Year filter changed:', document.getElementById('am-filter-year').value);
-          if (studentDataTable) studentDataTable.draw();
-        };
+        // Now add our custom filters
+        setupStudentFilters();
         
-        const handleStudentGroupInput = debounce(() => {
-          debugLog('Student group input changed:', document.getElementById('am-filter-group').value);
-          if (studentDataTable) studentDataTable.draw();
-        }, 300);
+      } catch (error) {
+        debugLog('ERROR initializing student DataTable:', error.message);
+        console.error('Full DataTable error:', error);
         
-        debugLog('Student DataTable initialized successfully');
-      } catch (e) {
-        debugLog('Error initializing student DataTable:', e);
-        console.error('DataTable initialization error:', e);
+        // Fall back to no DataTables
+        debugLog('Falling back to standard table without DataTables');
       }
     };
     
-    // Start initialization
-    initDataTable();
+    // Setup custom filters for students
+    const setupStudentFilters = () => {
+      debugLog('Setting up student custom filters');
+      
+      // Clear any existing search functions
+      $.fn.dataTable.ext.search = [];
+      
+      // Add custom search function
+      $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+        // Only apply to student table
+        if (!settings.nTable || settings.nTable.id !== 'student-datatable') return true;
+        
+        // Get filter values
+        const searchTerm = document.getElementById('am-search')?.value?.toLowerCase() || '';
+        const yearFilter = document.getElementById('am-filter-year')?.value || '';
+        const groupFilter = document.getElementById('am-filter-group')?.value?.toLowerCase() || '';
+        
+        // Get row data
+        const name = (data[1] || '').toLowerCase();
+        const email = (data[2] || '').toLowerCase();
+        const group = (data[3] || '').toLowerCase();
+        const year = data[4] || '';
+        
+        // Apply filters
+        if (searchTerm && !name.includes(searchTerm) && !email.includes(searchTerm)) {
+          return false;
+        }
+        
+        if (yearFilter && year !== yearFilter) {
+          return false;
+        }
+        
+        if (groupFilter && !group.includes(groupFilter)) {
+          return false;
+        }
+        
+        return true;
+      });
+      
+      // Bind filter events
+      const searchInput = document.getElementById('am-search');
+      const yearSelect = document.getElementById('am-filter-year');
+      const groupInput = document.getElementById('am-filter-group');
+      
+      if (searchInput) {
+        searchInput.addEventListener('input', debounce(() => {
+          debugLog('Student search changed:', searchInput.value);
+          if (studentDataTable) studentDataTable.draw();
+        }, 300));
+        debugLog('Student search filter bound');
+      }
+      
+      if (yearSelect) {
+        yearSelect.addEventListener('change', () => {
+          debugLog('Year filter changed:', yearSelect.value);
+          if (studentDataTable) studentDataTable.draw();
+        });
+        debugLog('Year filter bound');
+      }
+      
+      if (groupInput) {
+        groupInput.addEventListener('input', debounce(() => {
+          debugLog('Student group filter changed:', groupInput.value);
+          if (studentDataTable) studentDataTable.draw();
+        }, 300));
+        debugLog('Student group filter bound');
+      }
+    };
+    
+    // Start the process
+    waitForDataTables();
   }
 
   /**
@@ -2554,3 +2567,4 @@
   initialize();
 
 })();
+
