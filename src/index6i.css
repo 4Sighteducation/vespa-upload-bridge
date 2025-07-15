@@ -1887,6 +1887,96 @@ code {
   font-size: 24px;
 }
 
+/* Lead Management Styles */
+.lead-form-section {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+}
+
+.lead-form-section h3 {
+  color: #28a745;
+  margin-bottom: 20px;
+}
+
+.lead-item {
+  background: white;
+  padding: 15px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.lead-item:hover {
+  background-color: #f8f9fa;
+  border-color: #007bff;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.lead-item h4 {
+  margin: 0 0 5px 0;
+  color: #007bff;
+}
+
+.lead-item p {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.vespa-leads-modal {
+  padding: 20px;
+}
+
+/* Spinner animation */
+@keyframes spinner-border {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner-border {
+  display: inline-block;
+  width: 2rem;
+  height: 2rem;
+  vertical-align: text-bottom;
+  border: 0.25em solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spinner-border .75s linear infinite;
+}
+
+.vespa-lead-search {
+  margin-bottom: 20px;
+}
+
+#leads-list {
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 10px;
+}
+
+/* Custom scrollbar for leads list */
+#leads-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+#leads-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+#leads-list::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+#leads-list::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
 /* Renewal System Multi-Select Styles */
 select[multiple] {
   width: 100%;
@@ -1952,5 +2042,3 @@ select[multiple] option:checked {
 .renewal-form-row select[multiple]::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
-
-
