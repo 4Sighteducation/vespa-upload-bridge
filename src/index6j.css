@@ -2042,3 +2042,78 @@ select[multiple] option:checked {
 .renewal-form-row select[multiple]::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
+
+/* Account Management Table Styles */
+.vespa-account-management {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.vespa-account-management table.dataTable {
+  font-size: 13px !important;
+}
+
+.vespa-account-management table.dataTable thead th {
+  font-size: 12px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.vespa-account-management table.dataTable tbody td {
+  font-size: 13px !important;
+  padding: 8px 12px !important;
+}
+
+/* Ensure DataTables buttons align with our design */
+.vespa-account-management .dt-button {
+  font-family: inherit !important;
+  text-transform: none !important;
+}
+
+/* Fix for DataTables search input */
+.vespa-account-management .dataTables_filter input {
+  font-family: inherit !important;
+}
+
+/* Ensure proper modal styling */
+.vespa-modal input[type="text"],
+.vespa-modal select,
+.vespa-modal textarea {
+  font-family: inherit;
+}
+
+/* Account Management specific button styles */
+.vespa-account-management .vespa-button {
+  font-family: inherit;
+  letter-spacing: 0.3px;
+}
+
+/* Compact table adjustments */
+.vespa-account-management table.dataTable.compact tbody td {
+  line-height: 1.4;
+}
+
+/* Better print styles for Account Management */
+@media print {
+  .vespa-account-management .vespa-am-filters,
+  .vespa-account-management .vespa-am-actions,
+  .vespa-account-management .dt-buttons,
+  .vespa-account-management .dataTables_filter,
+  .vespa-account-management .dataTables_length,
+  .vespa-account-management .dataTables_paginate,
+  .vespa-account-management th.no-sort,
+  .vespa-account-management td.no-sort {
+    display: none !important;
+  }
+  
+  .vespa-account-management table.dataTable {
+    border: 1px solid #000 !important;
+  }
+  
+  .vespa-account-management table.dataTable th,
+  .vespa-account-management table.dataTable td {
+    border: 1px solid #000 !important;
+  }
+}
+
