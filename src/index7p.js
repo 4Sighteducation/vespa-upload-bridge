@@ -4200,14 +4200,21 @@ function bindStepEvents() {
   window.handleGCSEFileUpload = handleGCSEFileUpload;
   window.downloadPriorAttainmentResults = downloadPriorAttainmentResults;
   
-  // Other global functions that might be called from HTML
+  // Customer Management and Lead functions
   window.handleFlowTypeChange = handleFlowTypeChange;
+  window.handleAccountTypeChange = handleAccountTypeChange;
+  window.handleCycleModeChange = handleCycleModeChange;
+  window.calculateTotal = calculateTotal;
+  window.checkEmailAvailability = checkEmailAvailability;
   window.loadCustomDataTable = loadCustomDataTable;
   window.showLeadForm = showLeadForm;
   window.handleProductChange = handleProductChange;
   window.showLoadFromLeadsModal = showLoadFromLeadsModal;
   window.closeLeadsModal = closeLeadsModal;
   window.loadLeadData = loadLeadData;
+  window.selectLead = selectLead;
+  window.filterLeads = filterLeads;
+  window.resetLeadForm = resetLeadForm;
   
   // KS5 Workflow functions
   window.showKS5WorkflowInterface = showKS5WorkflowInterface;
@@ -6167,13 +6174,34 @@ function bindStepEvents() {
         } else {
             debugLog("calculateTotal function not found during initialization", null, 'error');
         }
+        
+        // Check initial account type
+        handleAccountTypeChange();
+        
+        // Initialize flow type (shows Load from Leads button for default selection)
+        handleFlowTypeChange();
     }, 50);
+  }
+  
+  /**
+   * Check email availability (placeholder function)
+   */
+  window.checkEmailAvailability = async function() {
+    const emailInput = document.getElementById('admin-email');
+    const messageDiv = document.getElementById('email-availability-message');
     
-    // Check initial account type
-    handleAccountTypeChange();
+    if (!emailInput || !messageDiv) return;
     
-    // Initialize flow type (shows Load from Leads button for default selection)
-    handleFlowTypeChange();
+    const email = emailInput.value.trim();
+    if (!email || !email.includes('@')) {
+      messageDiv.textContent = '';
+      return;
+    }
+    
+    // For now, just show a placeholder message
+    // In future, this could check against Knack API
+    messageDiv.style.color = '#28a745';
+    messageDiv.textContent = '✓ Email format valid';
   }
   
   /**
@@ -6241,7 +6269,14 @@ function bindStepEvents() {
     
     if (flowType === 'new-lead') {
       // Hide customer-specific sections, show lead sections
-      customerFormElements.forEach(el => el.style.display = 'none');
+      customerFormElements.forEach(el => {
+        el.style.display = 'none';
+        // Disable required fields in hidden sections to prevent validation errors
+        el.querySelectorAll('[required]').forEach(input => {
+          input.setAttribute('data-was-required', 'true');
+          input.removeAttribute('required');
+        });
+      });
       if (loadFromLeadsContainer) loadFromLeadsContainer.style.display = 'none';
       // Show lead form
       showLeadForm();
@@ -6249,7 +6284,14 @@ function bindStepEvents() {
       if (submitBtn) submitBtn.textContent = 'Create Lead & Send Proposal';
     } else if (flowType === 'new-invoice-email') {
       // Show customer form sections
-      customerFormElements.forEach(el => el.style.display = 'block');
+      customerFormElements.forEach(el => {
+        el.style.display = 'block';
+        // Re-enable required fields that were disabled
+        el.querySelectorAll('[data-was-required]').forEach(input => {
+          input.setAttribute('required', '');
+          input.removeAttribute('data-was-required');
+        });
+      });
       // Hide lead form if it exists
       const leadForm = document.getElementById('lead-form-container');
       if (leadForm) leadForm.style.display = 'none';
@@ -7815,6 +7857,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
 
 
 
+    
     
 
     
