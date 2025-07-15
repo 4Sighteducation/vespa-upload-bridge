@@ -105,7 +105,9 @@
       
       // Additional functions that were being added later
       editStaffRoles: editStaffRoles,
-      saveStaffRoles: saveStaffRoles
+      saveStaffRoles: saveStaffRoles,
+      syncStaffAdminConnections: syncStaffAdminConnections,
+      handleStaffAdminToggle: handleStaffAdminToggle
     };
 
     debugLog('Account Management module initialized');
@@ -261,247 +263,699 @@
     if (document.getElementById('vespa-account-management-styles')) return;
 
     const styles = `
+      /* Modern, professional Account Management styles */
       .vespa-account-management {
         padding: 20px;
-        max-width: 1400px;
+        max-width: 100%;
         margin: 0 auto;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        color: #2c3e50;
       }
 
       .vespa-am-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 30px;
-        padding-bottom: 20px;
-        border-bottom: 2px solid #e0e0e0;
+        margin-bottom: 24px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #e1e4e8;
+      }
+
+      .vespa-am-header h2 {
+        font-size: 24px;
+        font-weight: 600;
+        color: #1a202c;
+        margin: 0;
       }
 
       .vespa-am-tabs {
         display: flex;
-        gap: 10px;
-        margin-bottom: 20px;
+        gap: 0;
+        margin-bottom: 24px;
+        border-bottom: 1px solid #e1e4e8;
       }
 
       .vespa-am-tab {
-        padding: 10px 20px;
-        background: #f8f9fa;
-        border: 1px solid #dee2e6;
-        border-radius: 4px;
+        padding: 12px 24px;
+        background: transparent;
+        border: none;
+        border-bottom: 3px solid transparent;
         cursor: pointer;
-        transition: all 0.3s;
+        transition: all 0.2s;
+        color: #64748b;
+        font-weight: 500;
+        font-size: 14px;
+      }
+
+      .vespa-am-tab:hover {
+        color: #1e40af;
+        background: #f8fafc;
       }
 
       .vespa-am-tab.active {
-        background: #007bff;
-        color: white;
-        border-color: #007bff;
+        color: #1e40af;
+        border-bottom-color: #1e40af;
+        background: transparent;
       }
 
       .vespa-am-filters {
         display: flex;
-        gap: 15px;
+        gap: 12px;
         margin-bottom: 20px;
-        padding: 15px;
-        background: #f8f9fa;
-        border-radius: 8px;
+        padding: 16px;
+        background: #f8fafc;
+        border-radius: 6px;
+        border: 1px solid #e1e4e8;
       }
 
       .vespa-am-filter-group {
         flex: 1;
+        min-width: 0;
+      }
+
+      .vespa-am-filter-group label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        color: #64748b;
+        margin-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .vespa-am-filter-group input,
+      .vespa-am-filter-group select {
+        width: 100%;
+        padding: 6px 10px;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        font-size: 13px;
+        color: #1a202c;
+        background: white;
+        transition: all 0.2s;
+      }
+
+      .vespa-am-filter-group input:focus,
+      .vespa-am-filter-group select:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
       }
 
       .vespa-am-actions {
         display: flex;
-        gap: 10px;
+        gap: 8px;
         margin-bottom: 20px;
-        padding: 15px;
-        background: #e3f2fd;
-        border-radius: 8px;
-      }
-
-      .vespa-am-table-container {
-        overflow-x: auto;
-        border: 1px solid #dee2e6;
-        border-radius: 8px;
-        padding: 10px;
-      }
-
-      .vespa-am-table {
-        width: 100%;
-        border-collapse: collapse;
-      }
-
-      .vespa-am-table th {
-        background: #f8f9fa;
         padding: 12px;
-        text-align: left;
-        font-weight: 600;
-        border-bottom: 2px solid #dee2e6;
+        background: white;
+        border-radius: 6px;
+        border: 1px solid #e1e4e8;
+        flex-wrap: wrap;
       }
 
-      .vespa-am-table td {
-        padding: 10px 12px;
-        border-bottom: 1px solid #e9ecef;
+      .vespa-am-actions .vespa-button {
+        padding: 6px 12px;
+        font-size: 13px;
+        font-weight: 500;
+        border-radius: 4px;
+        transition: all 0.2s;
       }
 
-      .vespa-am-table tr:hover {
-        background: #f8f9fa;
+      .vespa-am-actions .vespa-button.primary {
+        background: #3b82f6;
+        color: white;
+        border: 1px solid #3b82f6;
       }
 
+      .vespa-am-actions .vespa-button.primary:hover {
+        background: #2563eb;
+        border-color: #2563eb;
+      }
+
+      .vespa-am-actions .vespa-button.secondary {
+        background: white;
+        color: #64748b;
+        border: 1px solid #cbd5e1;
+      }
+
+      .vespa-am-actions .vespa-button.secondary:hover {
+        background: #f8fafc;
+        color: #475569;
+        border-color: #94a3b8;
+      }
+
+      .vespa-am-actions .vespa-button[style*="background: #dc3545"] {
+        background: #ef4444 !important;
+        border: 1px solid #ef4444;
+      }
+
+      .vespa-am-actions .vespa-button[style*="background: #dc3545"]:hover {
+        background: #dc2626 !important;
+        border-color: #dc2626;
+      }
+
+      /* DataTable container */
+      .vespa-am-table-container {
+        background: white;
+        border: 1px solid #e1e4e8;
+        border-radius: 6px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      }
+
+      /* Override DataTables styles for modern look */
+      .vespa-am-table {
+        width: 100% !important;
+        border-collapse: separate !important;
+        border-spacing: 0 !important;
+        font-size: 13px !important;
+      }
+
+      table.dataTable {
+        margin: 0 !important;
+      }
+
+      .dataTables_wrapper {
+        padding: 16px !important;
+      }
+
+      .dataTables_length,
+      .dataTables_filter {
+        margin-bottom: 16px !important;
+      }
+
+      .dataTables_length select,
+      .dataTables_filter input {
+        padding: 4px 8px !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 4px !important;
+        font-size: 13px !important;
+      }
+
+      .dataTables_filter input {
+        width: 200px !important;
+        margin-left: 8px !important;
+      }
+
+      /* Table header */
+      table.dataTable thead th {
+        background: #f8fafc !important;
+        padding: 10px 12px !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        color: #64748b !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+        border-bottom: 1px solid #e1e4e8 !important;
+        cursor: pointer !important;
+        position: relative !important;
+        white-space: nowrap !important;
+      }
+
+      table.dataTable thead th:hover {
+        background: #f1f5f9 !important;
+      }
+
+      /* Sorting indicators */
+      table.dataTable thead .sorting:after,
+      table.dataTable thead .sorting_asc:after,
+      table.dataTable thead .sorting_desc:after {
+        position: absolute !important;
+        right: 8px !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        font-size: 10px !important;
+        opacity: 0.5 !important;
+      }
+
+      table.dataTable thead .sorting:after {
+        content: "⇅" !important;
+      }
+
+      table.dataTable thead .sorting_asc:after {
+        content: "↑" !important;
+        opacity: 1 !important;
+      }
+
+      table.dataTable thead .sorting_desc:after {
+        content: "↓" !important;
+        opacity: 1 !important;
+      }
+
+      /* Table body */
+      table.dataTable tbody td {
+        padding: 8px 12px !important;
+        font-size: 13px !important;
+        color: #1a202c !important;
+        border-bottom: 1px solid #f1f5f9 !important;
+        vertical-align: middle !important;
+      }
+
+      table.dataTable tbody tr {
+        transition: background-color 0.1s !important;
+      }
+
+      table.dataTable tbody tr:hover {
+        background-color: #f8fafc !important;
+      }
+
+      table.dataTable tbody tr:last-child td {
+        border-bottom: none !important;
+      }
+
+      /* Checkbox styling */
       .vespa-am-checkbox {
-        width: 18px;
-        height: 18px;
+        width: 16px !important;
+        height: 16px !important;
         cursor: pointer;
+        accent-color: #3b82f6;
       }
 
+      /* Role badges */
       .vespa-am-role-display {
         display: flex;
         flex-wrap: wrap;
-        gap: 5px;
+        gap: 4px;
       }
       
       .vespa-am-role-badge {
         display: inline-block;
-        padding: 3px 8px;
-        background: #e3f2fd;
-        color: #1976d2;
-        border-radius: 4px;
-        font-size: 12px;
+        padding: 2px 8px;
+        background: #e0f2fe;
+        color: #0369a1;
+        border-radius: 3px;
+        font-size: 11px;
         font-weight: 500;
+        white-space: nowrap;
       }
 
+      /* Action buttons */
       .vespa-am-link-button {
-        padding: 5px 10px;
-        background: #6c757d;
+        padding: 4px 8px;
+        background: #64748b;
         color: white;
         border: none;
-        border-radius: 4px;
+        border-radius: 3px;
         cursor: pointer;
-        font-size: 12px;
-        margin: 2px;
+        font-size: 11px;
+        font-weight: 500;
+        margin: 1px;
+        transition: all 0.2s;
+        white-space: nowrap;
       }
 
       .vespa-am-link-button:hover {
-        background: #5a6268;
+        background: #475569;
+        transform: translateY(-1px);
       }
 
-      .vespa-am-loading {
-        text-align: center;
-        padding: 40px;
-        color: #6c757d;
+      .vespa-am-link-button[style*="background: #17a2b8"] {
+        background: #0891b2 !important;
       }
 
+      .vespa-am-link-button[style*="background: #17a2b8"]:hover {
+        background: #0e7490 !important;
+      }
+
+      /* Empty state */
       .vespa-am-empty {
         text-align: center;
-        padding: 60px;
-        color: #6c757d;
+        padding: 48px;
+        color: #94a3b8;
       }
 
+      /* Loading state */
+      .vespa-am-loading {
+        text-align: center;
+        padding: 48px;
+        color: #64748b;
+      }
+
+      .vespa-spinner {
+        display: inline-block;
+        width: 32px;
+        height: 32px;
+        border: 3px solid #e1e4e8;
+        border-top-color: #3b82f6;
+        border-radius: 50%;
+        animation: vespa-spin 1s linear infinite;
+      }
+
+      @keyframes vespa-spin {
+        to { transform: rotate(360deg); }
+      }
+
+      /* Pagination */
+      .dataTables_paginate {
+        margin-top: 16px !important;
+      }
+
+      .paginate_button {
+        padding: 4px 8px !important;
+        margin: 0 2px !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 3px !important;
+        background: white !important;
+        color: #64748b !important;
+        font-size: 12px !important;
+        cursor: pointer !important;
+        transition: all 0.2s !important;
+      }
+
+      .paginate_button:hover {
+        background: #f8fafc !important;
+        border-color: #94a3b8 !important;
+        color: #475569 !important;
+      }
+
+      .paginate_button.current {
+        background: #3b82f6 !important;
+        border-color: #3b82f6 !important;
+        color: white !important;
+      }
+
+      .paginate_button.disabled {
+        opacity: 0.5 !important;
+        cursor: not-allowed !important;
+      }
+
+      /* DataTables info text */
+      .dataTables_info {
+        font-size: 12px !important;
+        color: #64748b !important;
+        margin-top: 16px !important;
+      }
+
+      /* Export buttons */
+      .dt-buttons {
+        margin-bottom: 16px !important;
+      }
+      
+      .dt-button {
+        padding: 6px 12px !important;
+        background: white !important;
+        color: #64748b !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 4px !important;
+        margin-right: 6px !important;
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        cursor: pointer !important;
+        transition: all 0.2s !important;
+      }
+      
+      .dt-button:hover {
+        background: #f8fafc !important;
+        color: #475569 !important;
+        border-color: #94a3b8 !important;
+      }
+
+      /* Modal improvements */
+      .vespa-modal {
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+      }
+
+      .vespa-modal-header {
+        background: #f8fafc;
+        border-bottom: 1px solid #e1e4e8;
+      }
+
+      .vespa-modal-title {
+        font-size: 16px !important;
+        font-weight: 600 !important;
+        color: #1a202c !important;
+      }
+
+      /* Responsive adjustments */
+      @media (max-width: 768px) {
+        .vespa-am-filters {
+          flex-direction: column;
+        }
+        
+        .vespa-am-actions {
+          flex-direction: column;
+        }
+        
+        .vespa-am-actions .vespa-button {
+          width: 100%;
+        }
+        
+        .dataTables_length,
+        .dataTables_filter {
+          width: 100%;
+          text-align: left !important;
+        }
+        
+        .dataTables_filter input {
+          width: 100% !important;
+          margin-top: 8px !important;
+          margin-left: 0 !important;
+        }
+      }
+
+      /* Fix select all alignment */
+      #am-select-all {
+        margin-right: 8px;
+        vertical-align: middle;
+      }
+
+      /* Improve table density */
+      table.dataTable.compact thead th,
+      table.dataTable.compact tbody td {
+        padding: 6px 10px !important;
+      }
+
+      /* No footer line */
+      table.dataTable.no-footer {
+        border-bottom: none !important;
+      }
+
+      /* Activity and Student Management Styles */
       .vespa-activity-grid {
         display: grid;
-        gap: 20px;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 16px;
         margin-top: 20px;
       }
 
       .vespa-activity-category {
-        border: 2px solid #e0e0e0;
-        border-radius: 8px;
-        padding: 15px;
+        border: 1px solid #e1e4e8;
+        border-radius: 6px;
+        padding: 16px;
+        background: #f8fafc;
       }
 
       .vespa-activity-category h4 {
         margin-top: 0;
-        margin-bottom: 15px;
+        margin-bottom: 12px;
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
+        font-size: 14px;
+        font-weight: 600;
       }
 
       .vespa-activity-item {
         display: flex;
         align-items: center;
-        gap: 10px;
-        padding: 8px;
-        margin-bottom: 5px;
-        background: #f8f9fa;
+        gap: 8px;
+        padding: 6px 8px;
+        margin-bottom: 4px;
+        background: white;
         border-radius: 4px;
+        border: 1px solid #e1e4e8;
+        transition: all 0.2s;
+      }
+
+      .vespa-activity-item:hover {
+        background: #f0f9ff;
+        border-color: #3b82f6;
       }
 
       .vespa-activity-checkbox {
-        width: 20px;
-        height: 20px;
+        width: 18px;
+        height: 18px;
+        accent-color: #3b82f6;
+      }
+
+      .vespa-activity-item label {
+        flex: 1;
+        font-size: 13px;
+        cursor: pointer;
       }
 
       .vespa-activity-level {
-        padding: 2px 8px;
-        background: #e9ecef;
+        padding: 2px 6px;
+        background: #e1e4e8;
         border-radius: 3px;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 500;
+        color: #64748b;
       }
 
       .vespa-linked-students-list {
         max-height: 400px;
         overflow-y: auto;
+        padding-right: 8px;
+      }
+
+      .vespa-linked-students-list::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      .vespa-linked-students-list::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 3px;
+      }
+
+      .vespa-linked-students-list::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 3px;
+      }
+
+      .vespa-linked-students-list::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
       }
 
       .vespa-student-link-item {
-        padding: 10px;
-        border: 1px solid #dee2e6;
+        padding: 12px;
+        border: 1px solid #e1e4e8;
         border-radius: 4px;
-        margin-bottom: 10px;
-        background: #ffffff;
+        margin-bottom: 8px;
+        background: white;
+        transition: all 0.2s;
       }
 
       .vespa-student-link-item:hover {
-        background: #f8f9fa;
+        background: #f8fafc;
+        border-color: #cbd5e1;
+      }
+
+      .vespa-student-link-item > div {
+        margin-bottom: 4px;
+        font-size: 13px;
+      }
+
+      .vespa-student-link-item strong {
+        color: #1a202c;
+        font-weight: 600;
       }
 
       .vespa-reallocation-controls {
         display: flex;
-        gap: 10px;
-        margin-top: 10px;
+        gap: 8px;
+        margin-top: 8px;
       }
-      
-      /* DataTables custom styling */
-      .dataTables_wrapper {
-        padding: 10px 0;
+
+      /* Modal content improvements */
+      .vespa-modal-body {
+        font-size: 14px;
       }
-      
-      .dataTables_filter {
+
+      .vespa-modal-body h4 {
+        font-size: 16px;
+        font-weight: 600;
+        color: #1a202c;
+        margin-bottom: 16px;
+      }
+
+      .vespa-modal-body input[type="text"],
+      .vespa-modal-body select {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        font-size: 13px;
+        margin-top: 4px;
+      }
+
+      .vespa-modal-body label {
+        display: block;
+        font-weight: 600;
+        color: #64748b;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
         margin-bottom: 20px;
       }
-      
-      .dataTables_filter input {
-        padding: 8px 12px;
-        border: 1px solid #ced4da;
+
+      /* Success/Error/Loading modals */
+      .vespa-am-delete-confirm {
+        padding: 20px;
+      }
+
+      .vespa-am-delete-confirm h3 {
+        color: #dc2626;
+        margin-bottom: 16px;
+      }
+
+      .vespa-am-delete-confirm p {
+        margin-bottom: 12px;
+        line-height: 1.6;
+      }
+
+      .vespa-am-delete-confirm .warning {
+        background: #fef2f2;
+        color: #991b1b;
+        padding: 12px;
         border-radius: 4px;
-        width: 300px;
+        border-left: 4px solid #dc2626;
+        margin-bottom: 16px;
       }
-      
-      table.dataTable thead th {
-        background: #f8f9fa !important;
+
+      .vespa-am-delete-confirm input[type="text"] {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        font-size: 14px;
+        margin-bottom: 16px;
       }
-      
-      table.dataTable.no-footer {
-        border-bottom: 1px solid #dee2e6;
+
+      .vespa-am-delete-confirm .button-group {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
       }
-      
-      .dt-buttons {
-        margin-bottom: 15px;
+
+      .vespa-am-delete-confirm .danger {
+        background: #dc2626;
+        color: white;
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        font-weight: 500;
+        cursor: pointer;
       }
-      
-      .dt-button {
-        padding: 6px 12px !important;
-        background: #6c757d !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 4px !important;
-        margin-right: 5px !important;
+
+      .vespa-am-delete-confirm .danger:hover {
+        background: #b91c1c;
       }
-      
-      .dt-button:hover {
-        background: #5a6268 !important;
+
+      .vespa-am-loading-modal,
+      .vespa-am-success-modal {
+        text-align: center;
+        padding: 32px;
+      }
+
+      .success-icon {
+        font-size: 48px;
+        color: #22c55e;
+        margin-bottom: 16px;
+      }
+
+      /* Staff admin warning */
+      #staff-admin-warning {
+        background: #fef3c7;
+        border: 1px solid #fcd34d;
+        padding: 10px;
+        margin: 0 0 10px 25px;
+        border-radius: 4px;
+        font-size: 13px;
+      }
+
+      #staff-admin-warning strong {
+        color: #92400e;
       }
     `;
 
@@ -630,13 +1084,12 @@
 
       <div class="vespa-am-filters">
         <div class="vespa-am-filter-group">
-          <label>Search:</label>
-          <input type="text" id="am-search" placeholder="Search by name or email..." 
-            style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px;">
+          <label>Search</label>
+          <input type="text" id="am-search" placeholder="Search by name or email...">
         </div>
-        <div class="vespa-am-filter-group">
-          <label>Year Group:</label>
-          <select id="am-filter-year" style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px;">
+        <div class="vespa-am-filter-group" id="year-filter-group">
+          <label>Year Group</label>
+          <select id="am-filter-year">
             <option value="">All Years</option>
             <option value="9">Year 9</option>
             <option value="10">Year 10</option>
@@ -646,15 +1099,27 @@
           </select>
         </div>
         <div class="vespa-am-filter-group">
-          <label>Group:</label>
-          <input type="text" id="am-filter-group" placeholder="e.g., 12A" 
-            style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px;">
+          <label>Group</label>
+          <input type="text" id="am-filter-group" placeholder="e.g., 12A">
+        </div>
+        <div class="vespa-am-filter-group" id="role-filter-group" style="display: none;">
+          <label>User Role</label>
+          <select id="am-filter-role">
+            <option value="">All Roles</option>
+            <option value="Staff Admin">Staff Admin</option>
+            <option value="Tutor">Tutor</option>
+            <option value="Head of Year">Head of Year</option>
+            <option value="Head of Dept">Head of Department</option>
+            <option value="Subject Teacher">Subject Teacher</option>
+            <option value="General Staff">General Staff</option>
+            <option value="No Role">No Role Assigned</option>
+          </select>
         </div>
       </div>
 
       <div class="vespa-am-actions">
         <button class="vespa-button secondary" onclick="window.VESPAAccountManagement.toggleSelectAll()">
-          <input type="checkbox" id="am-select-all" style="margin-right: 5px;">
+          <input type="checkbox" id="am-select-all">
           Select All
         </button>
         <button class="vespa-button primary" onclick="window.VESPAAccountManagement.resetPasswords()">
@@ -690,11 +1155,6 @@
       });
     });
 
-    // Search and filters
-    document.getElementById('am-search').addEventListener('input', debounce(applyFilters, 300));
-    document.getElementById('am-filter-year').addEventListener('change', applyFilters);
-    document.getElementById('am-filter-group').addEventListener('input', debounce(applyFilters, 300));
-
     // Select all checkbox event
     document.getElementById('am-select-all').addEventListener('change', function() {
       toggleSelectAll();
@@ -714,13 +1174,35 @@
     });
 
     // Update filters visibility
-    const yearFilter = document.getElementById('am-filter-year').parentElement;
-    yearFilter.style.display = view === 'staff' ? 'block' : 'block'; // Both can filter by year
+    const roleFilter = document.getElementById('role-filter-group');
+    const yearFilter = document.getElementById('year-filter-group');
+    
+    if (view === 'staff') {
+      roleFilter.style.display = 'block';
+      yearFilter.style.display = 'none';
+    } else {
+      roleFilter.style.display = 'none';
+      yearFilter.style.display = 'block';
+    }
 
     // Clear filters
     document.getElementById('am-search').value = '';
     document.getElementById('am-filter-year').value = '';
     document.getElementById('am-filter-group').value = '';
+    document.getElementById('am-filter-role').value = '';
+
+    // Reset select all
+    document.getElementById('am-select-all').checked = false;
+
+    // Destroy existing DataTable if it exists
+    if (staffDataTable) {
+      staffDataTable.destroy();
+      staffDataTable = null;
+    }
+    if (studentDataTable) {
+      studentDataTable.destroy();
+      studentDataTable = null;
+    }
 
     // Load data for the selected view
     loadAccountData(view);
@@ -820,10 +1302,10 @@
 
     content.innerHTML = `
       <div class="vespa-am-table-container">
-        <table id="staff-datatable" class="vespa-am-table display">
+        <table id="staff-datatable" class="vespa-am-table display compact">
           <thead>
             <tr>
-              <th style="width: 40px;">
+              <th class="no-sort" style="width: 30px;">
                 <input type="checkbox" class="vespa-am-checkbox" id="table-select-all"
                   onchange="window.VESPAAccountManagement.toggleTableSelectAll(this)">
               </th>
@@ -831,12 +1313,12 @@
               <th>Email</th>
               <th>Group</th>
               <th>Account ID</th>
-              <th>Has Logged In</th>
+              <th>Logged In</th>
               <th>User Role(s)</th>
               <th>Last Login</th>
-              <th>Features Used</th>
-              <th>Login Count</th>
-              <th>Actions</th>
+              <th>Features</th>
+              <th>Logins</th>
+              <th class="no-sort">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -855,17 +1337,115 @@
       }
       
       try {
+        // Custom search function for role filtering
+        $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+          // Only apply to staff table
+          if (settings.nTable.id !== 'staff-datatable') return true;
+          
+          // Get filter values
+          const searchTerm = document.getElementById('am-search').value.toLowerCase();
+          const groupFilter = document.getElementById('am-filter-group').value.toLowerCase();
+          const roleFilter = document.getElementById('am-filter-role').value;
+          
+          // Get row data
+          const name = data[1].toLowerCase();
+          const email = data[2].toLowerCase();
+          const group = data[3].toLowerCase();
+          const roles = data[6];
+          
+          // Search filter
+          if (searchTerm && !name.includes(searchTerm) && !email.includes(searchTerm)) {
+            return false;
+          }
+          
+          // Group filter
+          if (groupFilter && !group.includes(groupFilter)) {
+            return false;
+          }
+          
+          // Role filter
+          if (roleFilter) {
+            if (roleFilter === 'No Role') {
+              if (!roles.includes('No roles assigned')) {
+                return false;
+              }
+            } else {
+              if (!roles.includes(roleFilter)) {
+                return false;
+              }
+            }
+          }
+          
+          return true;
+        });
+        
         staffDataTable = $('#staff-datatable').DataTable({
-          pageLength: 25,
-          dom: 'Bfrtip',
+          pageLength: 50,
+          lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+          dom: 'Blfrtip',
           buttons: [
-            'copy', 'csv', 'excel', 'print'
+            {
+              extend: 'copy',
+              exportOptions: {
+                columns: ':not(.no-sort)'
+              }
+            },
+            {
+              extend: 'csv',
+              exportOptions: {
+                columns: ':not(.no-sort)'
+              }
+            },
+            {
+              extend: 'excel',
+              exportOptions: {
+                columns: ':not(.no-sort)'
+              }
+            },
+            {
+              extend: 'print',
+              exportOptions: {
+                columns: ':not(.no-sort)'
+              }
+            }
           ],
           columnDefs: [
-            { orderable: false, targets: [0, -1] } // Disable sorting on checkbox and actions columns
+            { orderable: false, targets: 'no-sort' },
+            { width: '30px', targets: 0 },
+            { width: '150px', targets: 1 },
+            { width: '200px', targets: 2 },
+            { width: '60px', targets: 3 },
+            { width: '80px', targets: 4 },
+            { width: '50px', targets: 5 },
+            { width: '200px', targets: 6 },
+            { width: '100px', targets: 7 },
+            { width: '150px', targets: 8 },
+            { width: '50px', targets: 9 },
+            { width: '180px', targets: -1 }
           ],
-          order: [[1, 'asc']] // Sort by name by default
+          order: [[1, 'asc']], // Sort by name by default
+          autoWidth: false,
+          scrollX: true,
+          language: {
+            search: "_INPUT_",
+            searchPlaceholder: "Search table...",
+            lengthMenu: "Show _MENU_ entries"
+          }
         });
+        
+        // Bind custom filter events
+        document.getElementById('am-search').addEventListener('input', debounce(() => {
+          staffDataTable.draw();
+        }, 300));
+        
+        document.getElementById('am-filter-group').addEventListener('input', debounce(() => {
+          staffDataTable.draw();
+        }, 300));
+        
+        document.getElementById('am-filter-role').addEventListener('change', () => {
+          staffDataTable.draw();
+        });
+        
         debugLog('Staff DataTable initialized successfully');
       } catch (e) {
         debugLog('Error initializing staff DataTable:', e);
@@ -894,14 +1474,20 @@
       ? roleNames.map(role => `<span class="vespa-am-role-badge">${role}</span>`).join(' ')
       : '<span style="color: #999;">No roles assigned</span>';
     
+    // Extract email properly
+    const email = staff.field_70?.email || staff.field_70 || 'N/A';
+    
+    // Extract name properly
+    const name = staff.field_69?.full || staff.field_69 || 'N/A';
+    
     return `
       <tr data-account-id="${staff.id}">
         <td>
           <input type="checkbox" class="vespa-am-checkbox row-checkbox" 
             value="${staff.id}" onchange="window.VESPAAccountManagement.toggleRowSelection(this)">
         </td>
-        <td>${staff.field_69?.full || staff.field_69 || 'N/A'}</td>
-        <td>${staff.field_70?.email || staff.field_70 || 'N/A'}</td>
+        <td>${name}</td>
+        <td>${email}</td>
         <td>${staff.field_708 || 'N/A'}</td>
         <td>${staff.field_123 || 'N/A'}</td>
         <td>${hasLoggedIn}</td>
@@ -920,6 +1506,12 @@
           <button class="vespa-am-link-button" onclick="window.VESPAAccountManagement.editStaffRoles('${staff.id}')">
             Edit Roles
           </button>
+          ${roleNames.includes('Staff Admin') ? `
+            <button class="vespa-am-link-button" style="background: #17a2b8;" 
+              onclick="window.VESPAAccountManagement.syncStaffAdminConnections('${staff.id}', '${email}')">
+              Sync Connections
+            </button>
+          ` : ''}
         </td>
       </tr>
     `;
@@ -942,10 +1534,10 @@
 
     content.innerHTML = `
       <div class="vespa-am-table-container">
-        <table id="student-datatable" class="vespa-am-table display">
+        <table id="student-datatable" class="vespa-am-table display compact">
           <thead>
             <tr>
-              <th style="width: 40px;">
+              <th class="no-sort" style="width: 30px;">
                 <input type="checkbox" class="vespa-am-checkbox" id="table-select-all"
                   onchange="window.VESPAAccountManagement.toggleTableSelectAll(this)">
               </th>
@@ -954,11 +1546,11 @@
               <th>Group</th>
               <th>Year</th>
               <th>Account ID</th>
-              <th>Has Logged In</th>
+              <th>Logged In</th>
               <th>Last Login</th>
-              <th>Features Used</th>
-              <th>Login Count</th>
-              <th>Actions</th>
+              <th>Features</th>
+              <th>Logins</th>
+              <th class="no-sort">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -977,17 +1569,107 @@
       }
       
       try {
+        // Custom search function for student filtering
+        $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+          // Only apply to student table
+          if (settings.nTable.id !== 'student-datatable') return true;
+          
+          // Get filter values
+          const searchTerm = document.getElementById('am-search').value.toLowerCase();
+          const yearFilter = document.getElementById('am-filter-year').value;
+          const groupFilter = document.getElementById('am-filter-group').value.toLowerCase();
+          
+          // Get row data
+          const name = data[1].toLowerCase();
+          const email = data[2].toLowerCase();
+          const group = data[3].toLowerCase();
+          const year = data[4];
+          
+          // Search filter
+          if (searchTerm && !name.includes(searchTerm) && !email.includes(searchTerm)) {
+            return false;
+          }
+          
+          // Year filter
+          if (yearFilter && year !== yearFilter) {
+            return false;
+          }
+          
+          // Group filter
+          if (groupFilter && !group.includes(groupFilter)) {
+            return false;
+          }
+          
+          return true;
+        });
+        
         studentDataTable = $('#student-datatable').DataTable({
-          pageLength: 25,
-          dom: 'Bfrtip',
+          pageLength: 50,
+          lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+          dom: 'Blfrtip',
           buttons: [
-            'copy', 'csv', 'excel', 'print'
+            {
+              extend: 'copy',
+              exportOptions: {
+                columns: ':not(.no-sort)'
+              }
+            },
+            {
+              extend: 'csv',
+              exportOptions: {
+                columns: ':not(.no-sort)'
+              }
+            },
+            {
+              extend: 'excel',
+              exportOptions: {
+                columns: ':not(.no-sort)'
+              }
+            },
+            {
+              extend: 'print',
+              exportOptions: {
+                columns: ':not(.no-sort)'
+              }
+            }
           ],
           columnDefs: [
-            { orderable: false, targets: [0, -1] } // Disable sorting on checkbox and actions columns
+            { orderable: false, targets: 'no-sort' },
+            { width: '30px', targets: 0 },
+            { width: '150px', targets: 1 },
+            { width: '200px', targets: 2 },
+            { width: '60px', targets: 3 },
+            { width: '50px', targets: 4 },
+            { width: '80px', targets: 5 },
+            { width: '50px', targets: 6 },
+            { width: '100px', targets: 7 },
+            { width: '150px', targets: 8 },
+            { width: '50px', targets: 9 },
+            { width: '150px', targets: -1 }
           ],
-          order: [[1, 'asc']] // Sort by name by default
+          order: [[1, 'asc']], // Sort by name by default
+          autoWidth: false,
+          scrollX: true,
+          language: {
+            search: "_INPUT_",
+            searchPlaceholder: "Search table...",
+            lengthMenu: "Show _MENU_ entries"
+          }
         });
+        
+        // Bind custom filter events
+        document.getElementById('am-search').addEventListener('input', debounce(() => {
+          studentDataTable.draw();
+        }, 300));
+        
+        document.getElementById('am-filter-year').addEventListener('change', () => {
+          studentDataTable.draw();
+        });
+        
+        document.getElementById('am-filter-group').addEventListener('input', debounce(() => {
+          studentDataTable.draw();
+        }, 300));
+        
         debugLog('Student DataTable initialized successfully');
       } catch (e) {
         debugLog('Error initializing student DataTable:', e);
@@ -1004,20 +1686,31 @@
   function createStudentRow(student) {
     const hasLoggedIn = student.field_539 === 'Yes' || student.field_539 === true ? 'Yes' : 'No';
     
+    // Extract email properly
+    const email = student.field_70?.email || student.field_70 || 'N/A';
+    
+    // Extract name properly
+    const name = student.field_69?.full || student.field_69 || 'N/A';
+    
+    // Format features used
+    const featuresUsed = Array.isArray(student.field_3202) 
+      ? student.field_3202.join(', ') 
+      : (student.field_3202 || 'None');
+    
     return `
       <tr data-account-id="${student.id}">
         <td>
           <input type="checkbox" class="vespa-am-checkbox row-checkbox" 
             value="${student.id}" onchange="window.VESPAAccountManagement.toggleRowSelection(this)">
         </td>
-        <td>${student.field_69?.full || student.field_69 || 'N/A'}</td>
-        <td>${student.field_70?.email || student.field_70 || 'N/A'}</td>
+        <td>${name}</td>
+        <td>${email}</td>
         <td>${student.field_708 || 'N/A'}</td>
         <td>${student.field_550 || 'N/A'}</td>
         <td>${student.field_123 || 'N/A'}</td>
         <td>${hasLoggedIn}</td>
         <td>${student.field_3198 ? formatDate(student.field_3198) : 'Never'}</td>
-        <td>${Array.isArray(student.field_3202) ? student.field_3202.join(', ') : (student.field_3202 || 'None')}</td>
+        <td title="${featuresUsed}">${featuresUsed}</td>
         <td>${student.field_3208 || '0'}</td>
         <td>
           <button class="vespa-am-link-button" onclick="window.VESPAAccountManagement.viewLinkedAccounts('${student.id}', 'student')">
@@ -1031,48 +1724,7 @@
     `;
   }
 
-  /**
-   * Filter data based on current filters
-   */
-  function filterData(data) {
-    const searchTerm = document.getElementById('am-search').value.toLowerCase();
-    const yearFilter = document.getElementById('am-filter-year').value;
-    const groupFilter = document.getElementById('am-filter-group').value.toLowerCase();
 
-    return data.filter(item => {
-      // Search filter
-      if (searchTerm) {
-        const name = (item.field_69 || '').toLowerCase();
-        const email = (item.field_70 || '').toLowerCase();
-        if (!name.includes(searchTerm) && !email.includes(searchTerm)) {
-          return false;
-        }
-      }
-
-      // Year filter
-      if (yearFilter && item.field_550 !== yearFilter) {
-        return false;
-      }
-
-      // Group filter
-      if (groupFilter && !(item.field_708 || '').toLowerCase().includes(groupFilter)) {
-        return false;
-      }
-
-      return true;
-    });
-  }
-
-  /**
-   * Apply filters to the current view
-   */
-  function applyFilters() {
-    if (currentView === 'staff') {
-      displayStaffTable(staffData);
-    } else {
-      displayStudentTable(studentData);
-    }
-  }
 
   /**
    * Toggle select all checkbox
@@ -1324,9 +1976,13 @@
         
         <div style="margin: 20px 0;">
           <label style="display: block; margin: 10px 0;">
-            <input type="checkbox" id="role-profile_5" value="profile_5" ${currentRoles.includes('profile_5') ? 'checked' : ''}>
+            <input type="checkbox" id="role-profile_5" value="profile_5" ${currentRoles.includes('profile_5') ? 'checked' : ''} 
+              onchange="window.VESPAAccountManagement.handleStaffAdminToggle(this)">
             Staff Admin
           </label>
+          <div id="staff-admin-warning" style="display: none; background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; margin: 0 0 10px 25px; border-radius: 4px; font-size: 13px;">
+            <strong>⚠️ Important:</strong> Adding Staff Admin role will automatically connect this user to all student and staff records in the system for administrative access.
+          </div>
           <label style="display: block; margin: 10px 0;">
             <input type="checkbox" id="role-profile_7" value="profile_7" ${currentRoles.includes('profile_7') ? 'checked' : ''}>
             Tutor
@@ -1769,6 +2425,82 @@
     
     debugLog('No customer ID found in context');
     return null;
+  }
+
+  /**
+   * Handle toggling the Staff Admin checkbox to show/hide warning
+   */
+  function handleStaffAdminToggle(checkbox) {
+    const warning = document.getElementById('staff-admin-warning');
+    if (warning) {
+      warning.style.display = checkbox.checked ? 'block' : 'none';
+    }
+  }
+
+  /**
+   * Sync staff admin connections across all objects
+   */
+  async function syncStaffAdminConnections(staffId, staffEmail) {
+    try {
+      const customerId = getCustomerId();
+      if (!customerId) {
+        showError('Unable to determine customer ID');
+        return;
+      }
+      
+      // Confirm the action
+      if (!confirm(`This will sync all connections for ${staffEmail} as a Staff Admin across all student and staff records. This may take a moment. Continue?`)) {
+        return;
+      }
+      
+      // Show loading modal
+      showLoadingModal('Syncing staff admin connections across all records...');
+      
+      const response = await $.ajax({
+        url: `${API_BASE_URL}account/sync-staff-admin-connections`,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+          staffEmail: staffEmail,
+          customerId: customerId
+        }),
+        xhrFields: { withCredentials: true }
+      });
+      
+      closeLoadingModal();
+      
+      if (response.success) {
+        let message = 'Staff admin connections synced successfully!';
+        if (response.details && response.details.updates) {
+          message += '\n\nUpdates:\n' + response.details.updates.join('\n');
+        }
+        if (response.details && response.details.errors && response.details.errors.length > 0) {
+          message += '\n\nErrors:\n' + response.details.errors.slice(0, 5).join('\n');
+          if (response.details.errors.length > 5) {
+            message += '\n... and ' + (response.details.errors.length - 5) + ' more errors';
+          }
+        }
+        
+        showModal('Sync Complete', `
+          <div style="padding: 20px;">
+            <p><strong>${response.message}</strong></p>
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-top: 15px; max-height: 400px; overflow-y: auto;">
+              <pre style="white-space: pre-wrap; font-size: 12px;">${message}</pre>
+            </div>
+            <div style="text-align: right; margin-top: 20px;">
+              <button class="vespa-button primary" onclick="window.VESPAAccountManagement.closeModal()">OK</button>
+            </div>
+          </div>
+        `);
+      } else {
+        throw new Error(response.message || 'Sync failed');
+      }
+      
+    } catch (error) {
+      closeLoadingModal();
+      debugLog('Error syncing staff admin connections:', error);
+      showError(`Failed to sync connections: ${error.message}`);
+    }
   }
 
   // Initialize the module when the script loads
