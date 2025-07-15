@@ -6001,7 +6001,7 @@ function bindStepEvents() {
               </label>
               <input type="number" id="quantity" name="quantity" required min="1" value="100"
                 style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
-                onchange="calculateTotal()">
+                onchange="calculateTotal()" oninput="calculateTotal()">
             </div>
             
             <div class="vespa-form-group">
@@ -6010,7 +6010,7 @@ function bindStepEvents() {
               </label>
               <input type="number" id="rate" name="rate" required min="0" step="0.01" value="25.00"
                 style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
-                onchange="calculateTotal()">
+                onchange="calculateTotal()" oninput="calculateTotal()">
             </div>
             
             <div class="vespa-form-group">
@@ -6019,7 +6019,7 @@ function bindStepEvents() {
               </label>
               <input type="number" id="discount" name="discount" min="0" max="100" value="0"
                 style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
-                onchange="calculateTotal()">
+                onchange="calculateTotal()" oninput="calculateTotal()">
             </div>
           </div>
           
@@ -6039,10 +6039,10 @@ function bindStepEvents() {
               </label>
               <div style="margin-top: 10px;">
                 <label style="margin-right: 20px;">
-                  <input type="radio" name="vatChargeable" value="Yes" checked onchange="calculateTotal()"> Yes
+                  <input type="radio" name="vatChargeable" value="Yes" checked onchange="calculateTotal()" onclick="calculateTotal()"> Yes
                 </label>
                 <label>
-                  <input type="radio" name="vatChargeable" value="No" onchange="calculateTotal()"> No
+                  <input type="radio" name="vatChargeable" value="No" onchange="calculateTotal()" onclick="calculateTotal()"> No
                 </label>
               </div>
             </div>
@@ -6148,9 +6148,15 @@ function bindStepEvents() {
     
     // Initialize total calculation after a small delay to ensure DOM is ready
     setTimeout(() => {
-        calculateTotal();
-        // Also call it again after another small delay in case values aren't loaded yet
-        setTimeout(calculateTotal, 100);
+        // Ensure calculateTotal is available
+        if (typeof calculateTotal === 'function' || typeof window.calculateTotal === 'function') {
+            calculateTotal();
+            // Also call it again after another small delay in case values aren't loaded yet
+            setTimeout(calculateTotal, 100);
+            setTimeout(calculateTotal, 500); // One more time to be sure
+        } else {
+            debugLog("calculateTotal function not found during initialization", null, 'error');
+        }
     }, 50);
     
     // Check initial account type
@@ -6161,9 +6167,22 @@ function bindStepEvents() {
    * Calculate order total - Global function for new customer form
    */
   window.calculateTotal = function() {
-    const quantity = parseFloat(document.getElementById('quantity')?.value) || 0;
-    const rate = parseFloat(document.getElementById('rate')?.value) || 0;
-    const discount = parseFloat(document.getElementById('discount')?.value) || 0;
+    const quantityEl = document.getElementById('quantity');
+    const rateEl = document.getElementById('rate');
+    const discountEl = document.getElementById('discount');
+    
+    if (!quantityEl || !rateEl || !discountEl) {
+      debugLog("calculateTotal: Required elements not found", {
+        quantity: !!quantityEl,
+        rate: !!rateEl,
+        discount: !!discountEl
+      }, 'warn');
+      return;
+    }
+    
+    const quantity = parseFloat(quantityEl.value) || 0;
+    const rate = parseFloat(rateEl.value) || 0;
+    const discount = parseFloat(discountEl.value) || 0;
     const vatCheckbox = document.querySelector('input[name="vatChargeable"]:checked');
     const vatChargeable = vatCheckbox ? vatCheckbox.value === 'Yes' : true;
     
@@ -6173,9 +6192,24 @@ function bindStepEvents() {
     let vatAmount = vatChargeable ? afterDiscount * 0.20 : 0; // 20% VAT
     let total = afterDiscount + vatAmount;
     
+    debugLog("calculateTotal calculation:", {
+      quantity,
+      rate,
+      discount,
+      vatChargeable,
+      subtotal,
+      discountAmount,
+      afterDiscount,
+      vatAmount,
+      total
+    });
+    
     const orderTotalEl = document.getElementById('order-total');
     if (orderTotalEl) {
       orderTotalEl.textContent = `£${total.toFixed(2)}`;
+      debugLog(`calculateTotal: Updated total to £${total.toFixed(2)}`, null, 'success');
+    } else {
+      debugLog("calculateTotal: order-total element not found", null, 'error');
     }
   }
   
@@ -7114,6 +7148,8 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
   }
 
 
+
+    
 
     
 
