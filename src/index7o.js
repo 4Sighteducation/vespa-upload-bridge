@@ -388,7 +388,7 @@ function addStyles() {
   linkElement.id = 'vespa-upload-styles';
   linkElement.rel = 'stylesheet';
   linkElement.type = 'text/css';
-  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index6h.css';
+  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index6i.css';
   
   document.head.appendChild(linkElement);
   debugLog("Dynamically linked external CSS: " + linkElement.href, null, 'info');
@@ -4203,6 +4203,11 @@ function bindStepEvents() {
   // Other global functions that might be called from HTML
   window.handleFlowTypeChange = handleFlowTypeChange;
   window.loadCustomDataTable = loadCustomDataTable;
+  window.showLeadForm = showLeadForm;
+  window.handleProductChange = handleProductChange;
+  window.showLoadFromLeadsModal = showLoadFromLeadsModal;
+  window.closeLeadsModal = closeLeadsModal;
+  window.loadLeadData = loadLeadData;
   
   // KS5 Workflow functions
   window.showKS5WorkflowInterface = showKS5WorkflowInterface;
@@ -5845,18 +5850,22 @@ function bindStepEvents() {
             <select id="flow-type" name="flowType" required onchange="handleFlowTypeChange()"
               style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px;">
               <option value="">-- Select an action --</option>
-              <optgroup label="New Customer">
-                <option value="new-no-email">Set up new user ONLY (no email)</option>
-                <option value="new-estimate">Set up new user and generate estimate (no welcome email)</option>
-                <option value="new-invoice-email" selected>Set up new user - generate invoice AND send welcome email</option>
-              </optgroup>
-              <optgroup label="Existing Customer">
-                <option value="update-details">Update current user organisation/order details only</option>
-                <option value="update-estimate">Update current user and send renewal estimate</option>
-                <option value="update-invoice-email">Update current user - generate invoice AND send welcome email</option>
-              </optgroup>
+              <option value="new-invoice-email" selected>Set up new user - generate invoice AND send welcome email</option>
+              <option value="new-lead">Generate new lead and send email proposal</option>
             </select>
           </div>
+          
+          <div id="load-from-leads-container" style="text-align: right; margin-bottom: 20px; display: none;">
+            <button type="button" id="load-from-leads-btn" class="vespa-button secondary" onclick="showLoadFromLeadsModal()">
+              📋 Load from Leads
+            </button>
+          </div>
+          
+          <div id="lead-form-container" style="display: none;">
+            <!-- Lead form will be dynamically inserted here -->
+          </div>
+          
+          <div class="customer-form-section">
           <h3 style="color: #007bff; margin-bottom: 20px;">Organization Information</h3>
           
           <div class="vespa-form-group" style="margin-bottom: 20px;">
@@ -6129,6 +6138,7 @@ function bindStepEvents() {
               </div>
             </div>
           </div>
+          </div> <!-- End of customer-form-section -->
           
           <div class="vespa-form-actions" style="margin-top: 30px; text-align: right;">
             <button type="button" class="vespa-button secondary" onclick="backToUploadWizard()">Cancel</button>
@@ -6161,6 +6171,9 @@ function bindStepEvents() {
     
     // Check initial account type
     handleAccountTypeChange();
+    
+    // Initialize flow type (shows Load from Leads button for default selection)
+    handleFlowTypeChange();
   }
   
   /**
@@ -6218,9 +6231,35 @@ function bindStepEvents() {
    */
   function handleFlowTypeChange() {
     const flowType = document.getElementById('flow-type').value;
-    // For update flows, we'd need to add customer search functionality
-    // For now, all flows use the same form
     debugLog("Flow type changed to:", flowType);
+    
+    // Toggle between customer form and lead form
+    const customerFormElements = document.querySelectorAll('.customer-form-section');
+    const leadFormElements = document.querySelectorAll('.lead-form-section');
+    const loadFromLeadsContainer = document.getElementById('load-from-leads-container');
+    const submitBtn = document.getElementById('create-customer-btn');
+    
+    if (flowType === 'new-lead') {
+      // Hide customer-specific sections, show lead sections
+      customerFormElements.forEach(el => el.style.display = 'none');
+      if (loadFromLeadsContainer) loadFromLeadsContainer.style.display = 'none';
+      // Show lead form
+      showLeadForm();
+      // Update submit button text
+      if (submitBtn) submitBtn.textContent = 'Create Lead & Send Proposal';
+    } else if (flowType === 'new-invoice-email') {
+      // Show customer form sections
+      customerFormElements.forEach(el => el.style.display = 'block');
+      // Hide lead form if it exists
+      const leadForm = document.getElementById('lead-form-container');
+      if (leadForm) leadForm.style.display = 'none';
+      
+      // Show "Load from Leads" container
+      if (loadFromLeadsContainer) loadFromLeadsContainer.style.display = 'block';
+      
+      // Update submit button text
+      if (submitBtn) submitBtn.textContent = 'Create Customer Account';
+    }
   }
   
   /**
@@ -6264,6 +6303,483 @@ function bindStepEvents() {
   
   // This function is moved to global scope after this function definition
   
+  /**
+   * Show load from leads modal
+   */
+  function showLoadFromLeadsModal() {
+    // Create modal
+    const modal = document.createElement('div');
+    modal.className = 'vespa-modal';
+    modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;';
+    
+    modal.innerHTML = `
+      <div class="vespa-modal-content" style="background: white; padding: 30px; border-radius: 8px; max-width: 800px; width: 90%; max-height: 80vh; overflow-y: auto;">
+        <h3 style="margin: 0 0 20px 0; color: #007bff;">Load Customer Data from Lead</h3>
+        <p style="margin: 0 0 20px 0; color: #666;">Select a lead to populate the customer form:</p>
+        
+        <div id="leads-loading" style="text-align: center; padding: 40px;">
+          <div class="spinner-border" style="width: 3rem; height: 3rem; border: 0.25em solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spinner-border .75s linear infinite;"></div>
+          <p style="margin-top: 10px;">Loading leads...</p>
+        </div>
+        
+        <div id="leads-list" style="display: none;"></div>
+        
+        <div style="margin-top: 20px; text-align: right;">
+          <button type="button" class="vespa-button secondary" onclick="closeLeadsModal()">Cancel</button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Load leads
+    loadLeads();
+  }
+  
+  /**
+   * Close the leads modal
+   */
+  function closeLeadsModal() {
+    const modal = document.querySelector('.vespa-modal');
+    if (modal) modal.remove();
+  }
+  
+  /**
+   * Load leads from API
+   */
+  async function loadLeads() {
+    try {
+      const response = await $.ajax({
+        url: `${API_BASE_URL}leads/list?converted=false`,
+        type: 'GET',
+        xhrFields: { withCredentials: true }
+      });
+      
+      const loadingDiv = document.getElementById('leads-loading');
+      const listDiv = document.getElementById('leads-list');
+      
+      if (loadingDiv) loadingDiv.style.display = 'none';
+      if (listDiv) {
+        listDiv.style.display = 'block';
+        
+        if (response.leads && response.leads.length > 0) {
+          let leadsHtml = '';
+          response.leads.forEach(lead => {
+            const contactName = `${lead.field_3530?.first || ''} ${lead.field_3530?.last || ''}`.trim();
+            const product = lead.field_3531 || 'Not specified';
+            const accounts = lead.field_3532 || 'N/A';
+            
+            leadsHtml += `
+              <div class="lead-item" onclick="loadLeadData('${lead.id}')" style="background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 4px; cursor: pointer; border: 1px solid #ddd;">
+                <h4 style="margin: 0 0 5px 0; color: #007bff;">${lead.field_3439}</h4>
+                <p style="margin: 0; color: #666; font-size: 14px;">
+                  <strong>Contact:</strong> ${contactName} | 
+                  <strong>Email:</strong> ${lead.field_3440} | 
+                  <strong>Product:</strong> ${product}
+                  ${product !== 'Training' ? ` | <strong>Accounts:</strong> ${accounts}` : ''}
+                </p>
+                <p style="margin: 5px 0 0 0; color: #999; font-size: 12px;">
+                  Lead Date: ${new Date(lead.field_3443).toLocaleDateString()}
+                </p>
+              </div>
+            `;
+          });
+          listDiv.innerHTML = leadsHtml;
+        } else {
+          listDiv.innerHTML = '<p style="text-align: center; color: #666;">No unconverted leads found.</p>';
+        }
+      }
+    } catch (error) {
+      debugLog("Error loading leads:", error, 'error');
+      const listDiv = document.getElementById('leads-list');
+      if (listDiv) {
+        listDiv.style.display = 'block';
+        listDiv.innerHTML = '<p style="text-align: center; color: #dc3545;">Error loading leads. Please try again.</p>';
+      }
+    }
+  }
+  
+  /**
+   * Load data from selected lead
+   */
+  async function loadLeadData(leadId) {
+    try {
+      // Get the specific lead data
+      const response = await $.ajax({
+        url: `${API_BASE_URL}leads/${leadId}`,
+        type: 'GET',
+        xhrFields: { withCredentials: true }
+      });
+      
+      if (response.lead) {
+        const lead = response.lead;
+        
+        // Populate form fields
+        const form = document.getElementById('new-customer-form');
+        if (form) {
+          // Organization info
+          if (form.orgName) form.orgName.value = lead.field_3439 || '';
+          
+          // Admin contact info
+          if (form.adminFirstName) form.adminFirstName.value = lead.field_3530?.first || '';
+          if (form.adminLastName) form.adminLastName.value = lead.field_3530?.last || '';
+          if (form.adminEmail) form.adminEmail.value = lead.field_3440 || '';
+          if (form.phone) form.phone.value = lead.field_3442 || '';
+          
+          // Notes - append lead info
+          if (form.notes) {
+            const leadInfo = `Converted from lead #${leadId} - ${lead.field_3531 || 'Product not specified'}`;
+            const existingNotes = lead.field_3445 || '';
+            form.notes.value = existingNotes ? `${leadInfo}\n\n${existingNotes}` : leadInfo;
+          }
+          
+          // Store lead ID for conversion tracking
+          if (form.leadId) {
+            form.leadId.value = leadId;
+          } else {
+            // Create hidden input to store lead ID
+            const leadIdInput = document.createElement('input');
+            leadIdInput.type = 'hidden';
+            leadIdInput.name = 'leadId';
+            leadIdInput.value = leadId;
+            form.appendChild(leadIdInput);
+          }
+          
+          // Close modal
+          closeLeadsModal();
+          
+          // Show success message
+          showSuccess(`Lead data loaded successfully for ${lead.field_3439}`);
+        }
+      }
+    } catch (error) {
+      debugLog("Error loading lead data:", error, 'error');
+      showError('Failed to load lead data. Please try again.');
+    }
+  }
+  
+  /**
+   * Handle product change in lead form
+   */
+  function handleProductChange() {
+    const productSelect = document.getElementById('lead-product');
+    const accountsContainer = document.getElementById('lead-accounts-container');
+    const accountTypeLabel = document.getElementById('account-type-label');
+    const accountTypeHelp = document.getElementById('account-type-help');
+    const accountsInput = document.getElementById('lead-accounts');
+    
+    if (!productSelect || !accountsContainer) return;
+    
+    const selectedProduct = productSelect.value;
+    
+    if (selectedProduct === 'Coaching Portal') {
+      accountsContainer.style.display = 'block';
+      accountTypeLabel.textContent = 'Student Accounts';
+      accountTypeHelp.textContent = 'Number of student accounts needed for the coaching portal';
+      accountsInput.required = true;
+    } else if (selectedProduct === 'Resource Portal') {
+      accountsContainer.style.display = 'block';
+      accountTypeLabel.textContent = 'Staff Accounts';
+      accountTypeHelp.textContent = 'Number of staff accounts needed for the resource portal';
+      accountsInput.required = true;
+    } else if (selectedProduct === 'Training') {
+      accountsContainer.style.display = 'none';
+      accountsInput.required = false;
+      accountsInput.value = '';
+    } else {
+      accountsContainer.style.display = 'none';
+      accountsInput.required = false;
+    }
+  }
+  
+  /**
+   * Show the lead form
+   */
+  function showLeadForm() {
+    const leadFormContainer = document.getElementById('lead-form-container');
+    if (!leadFormContainer) return;
+    
+    leadFormContainer.style.display = 'block';
+    leadFormContainer.innerHTML = `
+      <div class="lead-form-section">
+        <h3 style="color: #28a745; margin-bottom: 20px;">Lead Information</h3>
+        
+        <div class="vespa-form-group" style="margin-bottom: 20px;">
+          <label for="lead-date" style="display: block; font-weight: bold; margin-bottom: 5px;">
+            Date of Lead <span style="color: red;">*</span>
+          </label>
+          <input type="date" id="lead-date" name="leadDate" required 
+            value="${new Date().toISOString().split('T')[0]}"
+            style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+        </div>
+        
+        <div class="vespa-form-group" style="margin-bottom: 20px;">
+          <label for="lead-org-name" style="display: block; font-weight: bold; margin-bottom: 5px;">
+            Organization Name <span style="color: red;">*</span>
+          </label>
+          <input type="text" id="lead-org-name" name="leadOrgName" required 
+            style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+            placeholder="e.g., Springfield Academy">
+        </div>
+        
+        <div class="vespa-form-row" style="display: grid; grid-template-columns: auto 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+          <div class="vespa-form-group">
+            <label for="lead-contact-prefix" style="display: block; font-weight: bold; margin-bottom: 5px;">
+              Prefix
+            </label>
+            <select id="lead-contact-prefix" name="leadContactPrefix" 
+              style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+              <option value="">--</option>
+              <option value="Mr">Mr</option>
+              <option value="Mrs">Mrs</option>
+              <option value="Ms">Ms</option>
+              <option value="Dr">Dr</option>
+              <option value="Prof">Prof</option>
+            </select>
+          </div>
+          
+          <div class="vespa-form-group">
+            <label for="lead-contact-firstname" style="display: block; font-weight: bold; margin-bottom: 5px;">
+              First Name <span style="color: red;">*</span>
+            </label>
+            <input type="text" id="lead-contact-firstname" name="leadContactFirstname" required 
+              style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+          
+          <div class="vespa-form-group">
+            <label for="lead-contact-lastname" style="display: block; font-weight: bold; margin-bottom: 5px;">
+              Last Name <span style="color: red;">*</span>
+            </label>
+            <input type="text" id="lead-contact-lastname" name="leadContactLastname" required 
+              style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+        </div>
+        
+        <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+          <div class="vespa-form-group">
+            <label for="lead-email" style="display: block; font-weight: bold; margin-bottom: 5px;">
+              Email <span style="color: red;">*</span>
+            </label>
+            <input type="email" id="lead-email" name="leadEmail" required 
+              style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+              placeholder="contact@school.edu">
+          </div>
+          
+          <div class="vespa-form-group">
+            <label for="lead-telephone" style="display: block; font-weight: bold; margin-bottom: 5px;">
+              Telephone
+            </label>
+            <input type="tel" id="lead-telephone" name="leadTelephone" 
+              style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+              placeholder="+44 20 1234 5678">
+          </div>
+        </div>
+        
+        <div class="vespa-form-group" style="margin-bottom: 20px;">
+          <label for="lead-logo-url" style="display: block; font-weight: bold; margin-bottom: 5px;">
+            Logo URL
+          </label>
+          <input type="url" id="lead-logo-url" name="leadLogoUrl" 
+            style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+            placeholder="https://example.com/logo.png">
+        </div>
+        
+        <div class="vespa-form-group" style="margin-bottom: 20px;">
+          <label for="lead-product" style="display: block; font-weight: bold; margin-bottom: 5px;">
+            Product Interest <span style="color: red;">*</span>
+          </label>
+          <select id="lead-product" name="leadProduct" required onchange="handleProductChange()"
+            style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            <option value="">-- Select Product --</option>
+            <option value="Coaching Portal">Coaching Portal</option>
+            <option value="Resource Portal">Resource Portal</option>
+            <option value="Training">Training</option>
+          </select>
+        </div>
+        
+        <div id="lead-accounts-container" class="vespa-form-group" style="margin-bottom: 20px; display: none;">
+          <label for="lead-accounts" style="display: block; font-weight: bold; margin-bottom: 5px;">
+            Number of <span id="account-type-label">Accounts</span> <span style="color: red;">*</span>
+          </label>
+          <input type="number" id="lead-accounts" name="leadAccounts" min="1" 
+            placeholder="Enter number of accounts"
+            style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          <small id="account-type-help" style="color: #666; display: block; margin-top: 5px;"></small>
+        </div>
+        
+        <div class="vespa-form-group" style="margin-bottom: 20px;">
+          <label for="lead-estimate-link" style="display: block; font-weight: bold; margin-bottom: 5px;">
+            Estimate/Proposal Link <span style="color: red;">*</span>
+          </label>
+          <input type="url" id="lead-estimate-link" name="leadEstimateLink" required
+            style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+            placeholder="https://quickbooks.intuit.com/estimate/...">
+          <div class="help-text" style="font-size: 12px; color: #666; margin-top: 5px;">
+            Enter the QuickBooks estimate or proposal URL to include in the email
+          </div>
+        </div>
+        
+        <div class="vespa-form-group" style="margin-bottom: 20px;">
+          <label for="lead-notes" style="display: block; font-weight: bold; margin-bottom: 5px;">
+            Notes
+          </label>
+          <textarea id="lead-notes" name="leadNotes" rows="4"
+            style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"
+            placeholder="Any additional notes about this lead..."></textarea>
+        </div>
+        
+        <div class="vespa-form-group" style="margin-bottom: 20px; background: #f8f9fa; padding: 15px; border-radius: 4px;">
+          <label style="display: flex; align-items: center; cursor: pointer;">
+            <input type="checkbox" id="send-lead-email" name="sendLeadEmail" value="true" checked
+              style="margin-right: 10px; width: 18px; height: 18px;">
+            <span style="font-weight: bold;">Send proposal email immediately</span>
+          </label>
+          <div class="help-text" style="font-size: 12px; color: #666; margin-top: 5px; margin-left: 28px;">
+            Send the proposal email to the lead contact upon creation
+          </div>
+        </div>
+      </div>
+    `;
+    
+    // Update form submit button text
+    const submitBtn = document.getElementById('create-customer-btn');
+    if (submitBtn) {
+      submitBtn.textContent = 'Create Lead & Send Proposal';
+    }
+  }
+
+  /**
+   * Show modal to load from existing leads
+   */
+  window.showLoadFromLeadsModal = async function() {
+    try {
+      // Show loading modal first
+      showModal('Loading Leads', '<div style="text-align: center; padding: 20px;"><div class="vespa-spinner"></div><p>Loading leads...</p></div>');
+      
+      // Fetch leads from API
+      const response = await $.ajax({
+        url: `${API_BASE_URL}leads/list`,
+        type: 'GET',
+        xhrFields: { withCredentials: true }
+      });
+      
+      let modalContent = `
+        <div class="vespa-leads-modal">
+          <div class="vespa-lead-search" style="margin-bottom: 20px;">
+            <input type="text" id="lead-search-input" placeholder="Search leads by name, email, or organization..." 
+              style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;"
+              onkeyup="filterLeads()">
+          </div>
+          
+          <div id="leads-list" style="max-height: 400px; overflow-y: auto;">
+      `;
+      
+      if (response.success && response.leads && response.leads.length > 0) {
+        response.leads.forEach(lead => {
+          const converted = lead.field_3447 === 'Yes';
+          const contactName = `${lead.field_3530_raw?.first || ''} ${lead.field_3530_raw?.last || ''}`.trim();
+          
+          modalContent += `
+            <div class="lead-item" data-lead-id="${lead.id}" 
+              style="padding: 15px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 10px; cursor: pointer; transition: all 0.2s;"
+              onmouseover="this.style.backgroundColor='#f8f9fa'" 
+              onmouseout="this.style.backgroundColor='white'"
+              onclick="selectLead('${lead.id}')">
+              
+              <div style="display: flex; justify-content: space-between; align-items: start;">
+                <div style="flex: 1;">
+                  <h4 style="margin: 0 0 5px 0; color: #007bff;">${lead.field_3439 || 'Unknown Organization'}</h4>
+                  <p style="margin: 0; color: #666;">
+                    <strong>Contact:</strong> ${contactName}<br>
+                    <strong>Email:</strong> ${lead.field_3440 || 'No email'}<br>
+                    <strong>Date:</strong> ${lead.field_3443 ? new Date(lead.field_3443).toLocaleDateString() : 'Unknown'}
+                  </p>
+                </div>
+                <div style="text-align: right;">
+                  ${converted ? 
+                    '<span style="background: #d4edda; color: #155724; padding: 4px 8px; border-radius: 4px; font-size: 12px;">Converted</span>' : 
+                    '<span style="background: #fff3cd; color: #856404; padding: 4px 8px; border-radius: 4px; font-size: 12px;">Open</span>'
+                  }
+                </div>
+              </div>
+              
+              ${lead.field_3445 ? `<p style="margin: 10px 0 0 0; font-size: 14px; color: #777;"><em>${lead.field_3445}</em></p>` : ''}
+            </div>
+          `;
+        });
+      } else {
+        modalContent += '<p style="text-align: center; color: #666; padding: 40px;">No leads found.</p>';
+      }
+      
+      modalContent += `
+          </div>
+          
+          <div class="vespa-modal-actions" style="margin-top: 20px; text-align: right;">
+            <button class="vespa-button secondary" onclick="closeModal()">Cancel</button>
+          </div>
+        </div>
+      `;
+      
+      showModal('Select Lead to Convert', modalContent);
+      
+      // Store leads data for filtering
+      window.leadsData = response.leads || [];
+      
+    } catch (error) {
+      debugLog('Error loading leads:', error, 'error');
+      showError('Failed to load leads. Please try again.');
+      closeModal();
+    }
+  }
+  
+  /**
+   * Filter leads based on search input
+   */
+  window.filterLeads = function() {
+    const searchTerm = document.getElementById('lead-search-input').value.toLowerCase();
+    const leadItems = document.querySelectorAll('.lead-item');
+    
+    leadItems.forEach(item => {
+      const text = item.textContent.toLowerCase();
+      item.style.display = text.includes(searchTerm) ? 'block' : 'none';
+    });
+  }
+  
+  /**
+   * Select a lead and populate the customer form
+   */
+  window.selectLead = async function(leadId) {
+    try {
+      const lead = window.leadsData.find(l => l.id === leadId);
+      if (!lead) return;
+      
+      // Close the modal
+      closeModal();
+      
+      // Populate the customer form with lead data
+      document.getElementById('org-name').value = lead.field_3439 || '';
+      document.getElementById('admin-name').value = `${lead.field_3530_raw?.first || ''} ${lead.field_3530_raw?.last || ''}`.trim();
+      document.getElementById('admin-email').value = lead.field_3440 || '';
+      document.getElementById('phone').value = lead.field_3442 || '';
+      document.getElementById('logo-url').value = lead.field_3444 || '';
+      
+      // Pre-fill estimate URL if available
+      if (lead.field_3446) {
+        document.getElementById('invoice-url').value = lead.field_3446;
+      }
+      
+      // Show success message
+      showSuccess(`Lead "${lead.field_3439}" loaded successfully. Please complete the remaining fields.`);
+      
+      // Mark lead as converted after successful customer creation
+      window.convertedLeadId = leadId;
+      
+    } catch (error) {
+      debugLog('Error selecting lead:', error, 'error');
+      showError('Failed to load lead data.');
+    }
+  }
+
   /**
    * Calculate automatic cycle dates based on order date
    */
@@ -6375,6 +6891,15 @@ function bindStepEvents() {
       return;
     }
     
+    // Get flow type
+    const flowType = form.flowType?.value;
+    
+    // Handle lead creation
+    if (flowType === 'new-lead') {
+      await handleLeadCreation(form);
+      return;
+    }
+    
     // Disable submit button
     submitBtn.disabled = true;
     submitBtn.textContent = 'Creating Account...';
@@ -6479,6 +7004,23 @@ function bindStepEvents() {
       debugLog("Customer creation response:", response);
       
       if (response.success) {
+        // Check if this was converted from a lead
+        if (window.convertedLeadId) {
+          try {
+            // Mark the lead as converted
+            await $.ajax({
+              url: `${API_BASE_URL}leads/${window.convertedLeadId}/convert`,
+              type: 'PUT',
+              xhrFields: { withCredentials: true }
+            });
+            debugLog("Lead marked as converted", { leadId: window.convertedLeadId });
+            window.convertedLeadId = null; // Clear the flag
+          } catch (error) {
+            debugLog("Error marking lead as converted:", error, 'warn');
+            // Don't fail the whole process if lead conversion update fails
+          }
+        }
+        
         // Show success message
         statusDiv.style.display = 'block';
         statusDiv.style.background = '#d4edda';
@@ -6548,6 +7090,130 @@ function bindStepEvents() {
       // Re-enable submit button
       submitBtn.disabled = false;
       submitBtn.textContent = 'Create Customer Account';
+    }
+  }
+
+  /**
+   * Handle lead creation
+   */
+  async function handleLeadCreation(form) {
+    const submitBtn = document.getElementById('create-customer-btn');
+    const statusDiv = document.getElementById('creation-status');
+    
+    // Disable submit button
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Creating Lead...';
+    
+    try {
+      // Collect lead data
+      const leadData = {
+        field_3443: form.leadDate?.value || new Date().toISOString().split('T')[0], // Date of lead
+        field_3439: form.leadOrgName?.value.trim(), // Organization name
+        field_3530: { // Contact name (Person field)
+          prefix: form.leadContactPrefix?.value || '',
+          first: form.leadContactFirstname?.value.trim(),
+          last: form.leadContactLastname?.value.trim()
+        },
+        field_3440: form.leadEmail?.value.trim(), // Email
+        field_3442: form.leadTelephone?.value.trim() || '', // Telephone
+        field_3444: form.leadLogoUrl?.value.trim() || '', // Logo URL
+        field_3531: form.leadProduct?.value, // Product interest
+        field_3532: form.leadAccounts?.value || '', // Number of accounts
+        field_3448: 'Yes', // Estimate Sent
+        field_3446: form.leadEstimateLink?.value.trim(), // Estimate Link
+        field_3445: form.leadNotes?.value.trim() || '', // Notes
+        field_3447: 'No' // Converted (default to No)
+      };
+      
+      debugLog("Creating lead with data:", leadData);
+      
+      // Call API to create lead
+      const response = await $.ajax({
+        url: `${API_BASE_URL}leads/create`,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(leadData),
+        xhrFields: { withCredentials: true }
+      });
+      
+      if (response.success) {
+        debugLog("Lead created successfully:", response);
+        
+        // Send proposal email if checkbox is checked
+        if (form.sendLeadEmail?.checked) {
+          try {
+            const emailResponse = await $.ajax({
+              url: `${API_BASE_URL}leads/send-proposal`,
+              type: 'POST',
+              contentType: 'application/json',
+              data: JSON.stringify({
+                leadId: response.leadId,
+                leadData: leadData
+              }),
+              xhrFields: { withCredentials: true }
+            });
+            
+            debugLog("Proposal email sent:", emailResponse);
+          } catch (emailError) {
+            debugLog("Error sending proposal email:", emailError, 'error');
+            showError('Lead created but failed to send proposal email. You can send it manually later.');
+          }
+        }
+        
+        // Show success message
+        statusDiv.style.display = 'block';
+        statusDiv.style.background = '#d4edda';
+        statusDiv.style.color = '#155724';
+        statusDiv.innerHTML = `
+          <h3>✅ Lead Created Successfully!</h3>
+          <p><strong>Organization:</strong> ${leadData.field_3439}</p>
+          <p><strong>Contact:</strong> ${leadData.field_3530.first} ${leadData.field_3530.last}</p>
+          <p><strong>Email:</strong> ${leadData.field_3440}</p>
+          ${form.sendLeadEmail?.checked ? '<p><strong>Status:</strong> Proposal email sent!</p>' : ''}
+          <div style="margin-top: 20px;">
+            <button class="vespa-button primary" onclick="resetLeadForm()">Create Another Lead</button>
+            <button class="vespa-button secondary" onclick="backToUploadWizard()">Back to Main Menu</button>
+          </div>
+        `;
+        
+        // Hide the form
+        form.style.display = 'none';
+        
+      } else {
+        throw new Error(response.message || 'Failed to create lead');
+      }
+      
+    } catch (error) {
+      debugLog("Error creating lead:", error, 'error');
+      showError(`Failed to create lead: ${error.responseJSON?.message || error.message || 'Unknown error'}`);
+    } finally {
+      // Re-enable submit button
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Create Lead & Send Proposal';
+    }
+  }
+  
+  /**
+   * Reset lead form
+   */
+  window.resetLeadForm = function() {
+    const form = document.getElementById('new-customer-form');
+    const statusDiv = document.getElementById('creation-status');
+    
+    if (form) {
+      form.reset();
+      form.style.display = 'block';
+      
+      // Set flow type back to new-lead
+      const flowTypeSelect = document.getElementById('flow-type');
+      if (flowTypeSelect) {
+        flowTypeSelect.value = 'new-lead';
+        handleFlowTypeChange();
+      }
+    }
+    
+    if (statusDiv) {
+      statusDiv.style.display = 'none';
     }
   }
 
@@ -7148,8 +7814,6 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
   }
 
 
-
-    
 
     
 
