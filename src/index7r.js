@@ -6208,6 +6208,11 @@ function bindStepEvents() {
   }
   
   /**
+   * Handle account type change
+   */
+  window.handleAccountTypeChange = handleAccountTypeChange;
+  
+  /**
    * Check email availability (placeholder function)
    */
   window.checkEmailAvailability = async function() {
@@ -6416,6 +6421,7 @@ function bindStepEvents() {
   async function loadLeads() {
     try {
       debugLog("Loading leads from API", null, 'info');
+      debugLog("API URL being used:", `${API_BASE_URL}leads/list?converted=false`, 'info');
       
       const response = await $.ajax({
         url: `${API_BASE_URL}leads/list?converted=false`,
@@ -6424,6 +6430,7 @@ function bindStepEvents() {
       });
       
       debugLog("Leads API response:", response);
+      debugLog("Number of leads received:", response.leads ? response.leads.length : 0, 'info');
       
       const loadingDiv = document.getElementById('leads-loading');
       const listDiv = document.getElementById('leads-list');
@@ -6436,6 +6443,11 @@ function bindStepEvents() {
           let leadsHtml = '';
           // Store leads data globally for filtering
           window.leadsData = response.leads;
+          
+          // Log first lead to see field structure
+          if (response.leads.length > 0) {
+            debugLog("First lead data structure:", response.leads[0], 'info');
+          }
           
           response.leads.forEach(lead => {
             // Handle both raw and processed contact name formats
@@ -6576,6 +6588,29 @@ function bindStepEvents() {
             form.invoiceUrl.value = lead.field_3446;
           }
           
+          // Pre-populate other fields that might be present in leads
+          if (form.centreNumber && lead.field_3533) form.centreNumber.value = lead.field_3533 || '';
+          if (form.address && lead.field_3534) form.address.value = lead.field_3534 || '';
+          
+          // Pre-populate product-specific fields
+          if (lead.field_3531) {
+            // Set account type based on product
+            if (form.accountType) {
+              if (lead.field_3531 === 'Coaching Portal') {
+                form.accountType.value = 'COACHING PORTAL';
+              } else if (lead.field_3531 === 'Resource Portal') {
+                form.accountType.value = 'RESOURCE PORTAL';
+              }
+              // Trigger account type change to show/hide relevant fields
+              handleAccountTypeChange();
+            }
+          }
+          
+          // Pre-populate quantity if number of accounts is provided
+          if (form.quantity && lead.field_3532) {
+            form.quantity.value = lead.field_3532;
+          }
+          
           // Store lead ID for conversion tracking
           window.convertedLeadId = leadId;
           
@@ -6587,8 +6622,8 @@ function bindStepEvents() {
           
           // Trigger calculateTotal after a delay to ensure values are loaded
           setTimeout(() => {
-            if (typeof calculateTotal === 'function') {
-              calculateTotal();
+            if (typeof calculateTotal === 'function' || typeof window.calculateTotal === 'function') {
+              (window.calculateTotal || calculateTotal)();
             }
           }, 100);
         }
@@ -7883,6 +7918,8 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
   }
 
 
+
+    
 
     
 
