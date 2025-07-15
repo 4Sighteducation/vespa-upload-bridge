@@ -6146,11 +6146,37 @@ function bindStepEvents() {
     // Add form submission handler
     document.getElementById('new-customer-form').addEventListener('submit', handleNewCustomerSubmit);
     
-    // Initialize total calculation
-    calculateTotal();
+    // Initialize total calculation after a small delay to ensure DOM is ready
+    setTimeout(() => {
+        calculateTotal();
+        // Also call it again after another small delay in case values aren't loaded yet
+        setTimeout(calculateTotal, 100);
+    }, 50);
     
     // Check initial account type
     handleAccountTypeChange();
+  }
+  
+  /**
+   * Calculate order total - Global function for new customer form
+   */
+  window.calculateTotal = function() {
+    const quantity = parseFloat(document.getElementById('quantity')?.value) || 0;
+    const rate = parseFloat(document.getElementById('rate')?.value) || 0;
+    const discount = parseFloat(document.getElementById('discount')?.value) || 0;
+    const vatCheckbox = document.querySelector('input[name="vatChargeable"]:checked');
+    const vatChargeable = vatCheckbox ? vatCheckbox.value === 'Yes' : true;
+    
+    let subtotal = quantity * rate;
+    let discountAmount = subtotal * (discount / 100);
+    let afterDiscount = subtotal - discountAmount;
+    let vatAmount = vatChargeable ? afterDiscount * 0.20 : 0; // 20% VAT
+    let total = afterDiscount + vatAmount;
+    
+    const orderTotalEl = document.getElementById('order-total');
+    if (orderTotalEl) {
+      orderTotalEl.textContent = `£${total.toFixed(2)}`;
+    }
   }
   
   /**
@@ -6202,23 +6228,7 @@ function bindStepEvents() {
     }
   }
   
-  /**
-   * Calculate order total
-   */
-  window.calculateTotal = function() {
-    const quantity = parseFloat(document.getElementById('quantity').value) || 0;
-    const rate = parseFloat(document.getElementById('rate').value) || 0;
-    const discount = parseFloat(document.getElementById('discount').value) || 0;
-    const vatChargeable = document.querySelector('input[name="vatChargeable"]:checked').value === 'Yes';
-    
-    let subtotal = quantity * rate;
-    let discountAmount = subtotal * (discount / 100);
-    let afterDiscount = subtotal - discountAmount;
-    let vatAmount = vatChargeable ? afterDiscount * 0.20 : 0; // 20% VAT
-    let total = afterDiscount + vatAmount;
-    
-    document.getElementById('order-total').textContent = `£${total.toFixed(2)}`;
-  }
+  // This function is moved to global scope after this function definition
   
   /**
    * Calculate automatic cycle dates based on order date
@@ -7060,7 +7070,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       showModal('Loading Account Management', '<div style="text-align: center; padding: 20px;"><div class="vespa-spinner"></div><p>Loading account management system...</p></div>');
       
       // Load the account management module from CDN
-      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/accountManagement1m.js';
+      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/accountManagement1k.js';
       
       try {
         await loadScript(scriptUrl);
@@ -7104,6 +7114,8 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
   }
 
 
+
+    
 
     
     
