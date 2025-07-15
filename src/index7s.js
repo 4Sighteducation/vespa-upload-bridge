@@ -6562,10 +6562,10 @@ function bindStepEvents() {
         // Populate form fields
         const form = document.getElementById('new-customer-form');
         if (form) {
-          // Organization info
+          // Organization info - field_3439 → form.orgName
           if (form.orgName) form.orgName.value = lead.field_3439 || '';
           
-          // Handle contact name - check both raw and processed formats
+          // Handle contact name - field_3530 → adminName
           let firstName = '', lastName = '';
           if (lead.field_3530_raw && typeof lead.field_3530_raw === 'object') {
             firstName = lead.field_3530_raw.first || '';
@@ -6579,37 +6579,64 @@ function bindStepEvents() {
           if (form.adminName) {
             form.adminName.value = `${firstName} ${lastName}`.trim();
           }
+          
+          // Email - field_3440 → adminEmail
           if (form.adminEmail) form.adminEmail.value = lead.field_3440 || '';
+          
+          // Phone - field_3442 → phone
           if (form.phone) form.phone.value = lead.field_3442 || '';
+          
+          // Logo URL - field_3444 → logoUrl
           if (form.logoUrl) form.logoUrl.value = lead.field_3444 || '';
+          
+          // Address - field_3441 → address
+          if (form.address) form.address.value = lead.field_3441 || '';
           
           // Pre-populate invoice URL from estimate link if available
           if (form.invoiceUrl && lead.field_3446) {
             form.invoiceUrl.value = lead.field_3446;
           }
           
-          // Pre-populate other fields that might be present in leads
-          if (form.centreNumber && lead.field_3533) form.centreNumber.value = lead.field_3533 || '';
-          if (form.address && lead.field_3534) form.address.value = lead.field_3534 || '';
-          
-          // Pre-populate product-specific fields
-          if (lead.field_3531) {
-            // Set account type based on product
-            if (form.accountType) {
-              if (lead.field_3531 === 'Coaching Portal') {
-                form.accountType.value = 'COACHING PORTAL';
-              } else if (lead.field_3531 === 'Resource Portal') {
-                form.accountType.value = 'RESOURCE PORTAL';
-              }
-              // Trigger account type change to show/hide relevant fields
-              handleAccountTypeChange();
+          // Notes - field_3445 → could map to PO number or finance notes
+          // Check if notes contain a PO number pattern
+          if (lead.field_3445) {
+            const notes = lead.field_3445;
+            // Look for PO number pattern in notes (e.g., "PO: 12345" or "PO#12345")
+            const poMatch = notes.match(/PO[:#\s-]*(\S+)/i);
+            if (poMatch && form.poNumber) {
+              form.poNumber.value = poMatch[1];
             }
+            // You could also add the full notes to a notes field if you have one
           }
           
-          // Pre-populate quantity if number of accounts is provided
+          // Product - field_3531 → accountType
+          if (lead.field_3531 && form.accountType) {
+            // Set account type based on product
+            if (lead.field_3531 === 'Coaching Portal' || lead.field_3531.toLowerCase().includes('coaching')) {
+              form.accountType.value = 'COACHING PORTAL';
+            } else if (lead.field_3531 === 'Resource Portal' || lead.field_3531.toLowerCase().includes('resource')) {
+              form.accountType.value = 'RESOURCE PORTAL';
+            }
+            // Trigger account type change to show/hide relevant fields
+            handleAccountTypeChange();
+          }
+          
+          // Number of accounts - field_3532 → quantity
           if (form.quantity && lead.field_3532) {
             form.quantity.value = lead.field_3532;
           }
+          
+          debugLog("Lead data mapped to form fields", {
+            orgName: lead.field_3439,
+            contact: `${firstName} ${lastName}`,
+            email: lead.field_3440,
+            phone: lead.field_3442,
+            address: lead.field_3441,
+            logoUrl: lead.field_3444,
+            product: lead.field_3531,
+            accounts: lead.field_3532,
+            notes: lead.field_3445
+          }, 'info');
           
           // Store lead ID for conversion tracking
           window.convertedLeadId = leadId;
@@ -7920,10 +7947,6 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
 
 
     
-
-    
-
-
 
 
 
