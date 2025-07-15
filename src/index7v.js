@@ -6453,12 +6453,45 @@ function bindStepEvents() {
           // Log first lead to see field structure
           if (response.leads.length > 0) {
             debugLog("First lead data structure:", response.leads[0], 'info');
+            // Log all field names to see what's available
+            debugLog("All field names in first lead:", Object.keys(response.leads[0]), 'info');
             // Specifically log email field to debug [object Object] issue
             debugLog("First lead email field (field_3440):", response.leads[0].field_3440, 'info');
             debugLog("Type of email field:", typeof response.leads[0].field_3440, 'info');
             if (typeof response.leads[0].field_3440 === 'object') {
               debugLog("Email object keys:", Object.keys(response.leads[0].field_3440), 'info');
               debugLog("Email object values:", response.leads[0].field_3440, 'info');
+            }
+            // Also log phone, address, and logo URL fields
+            if (response.leads[0].field_3442 || response.leads[0].field_3442_raw) {
+              debugLog("Phone field (field_3442) type:", typeof response.leads[0].field_3442, 'info');
+              if (typeof response.leads[0].field_3442 === 'object') {
+                debugLog("Phone object:", response.leads[0].field_3442, 'info');
+              }
+              // Check for _raw version
+              if (response.leads[0].field_3442_raw) {
+                debugLog("Phone field_raw (field_3442_raw):", response.leads[0].field_3442_raw, 'info');
+              }
+            }
+            if (response.leads[0].field_3441 || response.leads[0].field_3441_raw) {
+              debugLog("Address field (field_3441) type:", typeof response.leads[0].field_3441, 'info');
+              if (typeof response.leads[0].field_3441 === 'object') {
+                debugLog("Address object:", response.leads[0].field_3441, 'info');
+              }
+              // Check for _raw version
+              if (response.leads[0].field_3441_raw) {
+                debugLog("Address field_raw (field_3441_raw):", response.leads[0].field_3441_raw, 'info');
+              }
+            }
+            if (response.leads[0].field_3444 || response.leads[0].field_3444_raw) {
+              debugLog("Logo URL field (field_3444) type:", typeof response.leads[0].field_3444, 'info');
+              if (typeof response.leads[0].field_3444 === 'object') {
+                debugLog("Logo URL object:", response.leads[0].field_3444, 'info');
+              }
+              // Check for _raw version
+              if (response.leads[0].field_3444_raw) {
+                debugLog("Logo URL field_raw (field_3444_raw):", response.leads[0].field_3444_raw, 'info');
+              }
             }
           }
           
@@ -6479,7 +6512,10 @@ function bindStepEvents() {
             
             // Extract email properly from object or string
             let email = 'No email';
-            if (lead.field_3440) {
+            // Check _raw version first
+            if (lead.field_3440_raw) {
+              email = lead.field_3440_raw;
+            } else if (lead.field_3440) {
               if (typeof lead.field_3440 === 'string') {
                 email = lead.field_3440;
               } else if (typeof lead.field_3440 === 'object') {
@@ -6611,11 +6647,14 @@ function bindStepEvents() {
         // Populate form fields
         const form = document.getElementById('new-customer-form');
         if (form) {
+          // Declare variables at the top for scope
+          let email = '', phone = '', address = '', logoUrl = '';
+          let firstName = '', lastName = '';
+          
           // Organization info - field_3439 → form.orgName
           if (form.orgName) form.orgName.value = lead.field_3439 || '';
           
           // Handle contact name - field_3530 → adminName
-          let firstName = '', lastName = '';
           if (lead.field_3530_raw && typeof lead.field_3530_raw === 'object') {
             firstName = lead.field_3530_raw.first || '';
             lastName = lead.field_3530_raw.last || '';
@@ -6631,8 +6670,11 @@ function bindStepEvents() {
           
           // Email - field_3440 → adminEmail (handle if it's an object)
           if (form.adminEmail) {
-            let email = '';
-            if (lead.field_3440) {
+            // Check for _raw version first (when using format=raw)
+            if (lead.field_3440_raw) {
+              email = lead.field_3440_raw;
+              debugLog("Using field_3440_raw for email:", email, 'info');
+            } else if (lead.field_3440) {
               if (typeof lead.field_3440 === 'string') {
                 email = lead.field_3440;
               } else if (typeof lead.field_3440 === 'object') {
@@ -6649,14 +6691,131 @@ function bindStepEvents() {
             debugLog("Setting admin email to:", email, 'info');
           }
           
-          // Phone - field_3442 → phone
-          if (form.phone) form.phone.value = lead.field_3442 || '';
+          // Phone - field_3442 → phone (handle if it's an object)
+          if (form.phone) {
+            // Check for _raw version first (when using format=raw)
+            if (lead.field_3442_raw) {
+              phone = lead.field_3442_raw;
+              debugLog("Using field_3442_raw for phone:", phone, 'info');
+            } else if (lead.field_3442) {
+              if (typeof lead.field_3442 === 'string') {
+                phone = lead.field_3442;
+              } else if (typeof lead.field_3442 === 'object') {
+                debugLog("Phone object structure:", lead.field_3442, 'info');
+                debugLog("Phone object keys:", Object.keys(lead.field_3442), 'info');
+                phone = lead.field_3442.phone || 
+                        lead.field_3442.phone_raw ||
+                        lead.field_3442.number ||
+                        lead.field_3442.full ||
+                        lead.field_3442.raw || 
+                        lead.field_3442.value ||
+                        lead.field_3442.formatted ||
+                        lead.field_3442.field_3442 || 
+                        JSON.stringify(lead.field_3442); // Show structure if nothing else works
+              }
+            }
+            form.phone.value = phone;
+            debugLog("Setting phone to:", phone, 'info');
+          }
           
-          // Logo URL - field_3444 → logoUrl
-          if (form.logoUrl) form.logoUrl.value = lead.field_3444 || '';
+          // Logo URL - field_3444 → logoUrl (handle if it's an object)
+          if (form.logoUrl) {
+            // Check for _raw version first (when using format=raw)
+            if (lead.field_3444_raw) {
+              logoUrl = lead.field_3444_raw;
+              debugLog("Using field_3444_raw for logo URL:", logoUrl, 'info');
+            } else if (lead.field_3444) {
+              if (typeof lead.field_3444 === 'string') {
+                logoUrl = lead.field_3444;
+              } else if (typeof lead.field_3444 === 'object') {
+                debugLog("Logo URL object structure:", lead.field_3444, 'info');
+                debugLog("Logo URL object keys:", Object.keys(lead.field_3444), 'info');
+                logoUrl = lead.field_3444.url || 
+                         lead.field_3444.url_raw ||
+                         lead.field_3444.href ||
+                         lead.field_3444.link ||
+                         lead.field_3444.raw || 
+                         lead.field_3444.value ||
+                         lead.field_3444.formatted ||
+                         lead.field_3444.field_3444 || 
+                         JSON.stringify(lead.field_3444); // Show structure if nothing else works
+              }
+            }
+            form.logoUrl.value = logoUrl;
+            debugLog("Setting logo URL to:", logoUrl, 'info');
+          }
           
-          // Address - field_3441 → address
-          if (form.address) form.address.value = lead.field_3441 || '';
+          // Address - field_3441 → address (handle if it's an object)
+          if (form.address) {
+            // Check for _raw version first (when using format=raw)
+            if (lead.field_3441_raw) {
+              // Raw address might still be an object with components
+              if (typeof lead.field_3441_raw === 'string') {
+                address = lead.field_3441_raw;
+                debugLog("Using field_3441_raw for address (string):", address, 'info');
+              } else if (typeof lead.field_3441_raw === 'object') {
+                debugLog("field_3441_raw is an object:", lead.field_3441_raw, 'info');
+                // Try to build from components
+                const parts = [];
+                if (lead.field_3441_raw.street) parts.push(lead.field_3441_raw.street);
+                if (lead.field_3441_raw.street2) parts.push(lead.field_3441_raw.street2);
+                if (lead.field_3441_raw.city) parts.push(lead.field_3441_raw.city);
+                if (lead.field_3441_raw.state) parts.push(lead.field_3441_raw.state);
+                if (lead.field_3441_raw.zip) parts.push(lead.field_3441_raw.zip);
+                address = parts.join(', ');
+              }
+            } else if (lead.field_3441) {
+              if (typeof lead.field_3441 === 'string') {
+                address = lead.field_3441;
+              } else if (typeof lead.field_3441 === 'object') {
+                // Address might be a complex object with street, city, state, etc.
+                debugLog("Address object structure:", lead.field_3441, 'info');
+                debugLog("Address object keys:", Object.keys(lead.field_3441), 'info');
+                
+                // Try different Knack address formats
+                if (lead.field_3441.street || lead.field_3441.street1 || lead.field_3441.address || lead.field_3441.city) {
+                  // Build address from components
+                  const parts = [];
+                  // Street address (different possible field names)
+                  const street = lead.field_3441.street || lead.field_3441.street1 || lead.field_3441.address || lead.field_3441.line1;
+                  if (street) parts.push(street);
+                  
+                  // Street 2
+                  const street2 = lead.field_3441.street2 || lead.field_3441.line2;
+                  if (street2) parts.push(street2);
+                  
+                  // City
+                  if (lead.field_3441.city) parts.push(lead.field_3441.city);
+                  
+                  // State/Province
+                  const state = lead.field_3441.state || lead.field_3441.province;
+                  if (state) parts.push(state);
+                  
+                  // Zip/Postal code
+                  const zip = lead.field_3441.zip || lead.field_3441.postal_code || lead.field_3441.postalcode;
+                  if (zip) parts.push(zip);
+                  
+                  // Country
+                  if (lead.field_3441.country) parts.push(lead.field_3441.country);
+                  
+                  address = parts.join(', ');
+                } else if (lead.field_3441.formatted) {
+                  // Sometimes Knack provides a pre-formatted address
+                  address = lead.field_3441.formatted;
+                } else {
+                  // Try generic object properties or just stringify it for debugging
+                  address = lead.field_3441.address || 
+                           lead.field_3441.address_raw ||
+                           lead.field_3441.raw || 
+                           lead.field_3441.value ||
+                           lead.field_3441.full ||
+                           JSON.stringify(lead.field_3441); // Last resort to see what's in there
+                }
+              }
+            }
+            form.address.value = address;
+            debugLog("Setting address to:", address, 'info');
+          }
           
           // Pre-populate invoice URL from estimate link if available
           if (form.invoiceUrl && lead.field_3446) {
@@ -6695,14 +6854,18 @@ function bindStepEvents() {
           debugLog("Lead data mapped to form fields", {
             orgName: lead.field_3439,
             contact: `${firstName} ${lastName}`,
-            email: lead.field_3440,
-            phone: lead.field_3442,
-            address: lead.field_3441,
-            logoUrl: lead.field_3444,
+            email: email, // Use the extracted value
+            phone: phone, // Use the extracted value
+            address: address, // Use the extracted value
+            logoUrl: logoUrl, // Use the extracted value
             product: lead.field_3531,
             accounts: lead.field_3532,
-            notes: lead.field_3445
+            notes: lead.field_3445,
+            estimateLink: lead.field_3446
           }, 'info');
+          
+          // Log raw lead data for debugging field structures
+          debugLog("Raw lead data structure:", lead, 'info');
           
           // Store lead ID for conversion tracking
           window.convertedLeadId = leadId;
