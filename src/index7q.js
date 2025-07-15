@@ -392,6 +392,26 @@ function addStyles() {
   
   document.head.appendChild(linkElement);
   debugLog("Dynamically linked external CSS: " + linkElement.href, null, 'info');
+  
+  // Add inline styles for spinner if not in external CSS
+  const spinnerStyle = document.createElement('style');
+  spinnerStyle.id = 'vespa-spinner-styles';
+  spinnerStyle.textContent = `
+    @keyframes vespa-spinner-anim {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .vespa-spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #007bff;
+      border-radius: 50%;
+      animation: vespa-spinner-anim 1s linear infinite;
+      margin: 0 auto;
+    }
+  `;
+  document.head.appendChild(spinnerStyle);
 }
 
 /**
@@ -879,7 +899,10 @@ function initializeUploadInterface(container) {
     updateEmulationStatusBar();
   }
   
-  // Auto-load renewal module for super users
+  // Auto-load renewal module for super users - DISABLED due to conflicts
+  // The renewal module is causing errors when auto-loading
+  // Users can still access it via the menu option
+  /*
   if (isSuperUser) {
     debugLog("Auto-loading renewal module for super user", null, 'info');
     // Load the renewal module asynchronously without blocking
@@ -888,6 +911,7 @@ function initializeUploadInterface(container) {
       // Don't show error to user, just log it
     });
   }
+  */
 }
 
 /**
@@ -6391,11 +6415,15 @@ function bindStepEvents() {
    */
   async function loadLeads() {
     try {
+      debugLog("Loading leads from API", null, 'info');
+      
       const response = await $.ajax({
         url: `${API_BASE_URL}leads/list?converted=false`,
         type: 'GET',
         xhrFields: { withCredentials: true }
       });
+      
+      debugLog("Leads API response:", response);
       
       const loadingDiv = document.getElementById('leads-loading');
       const listDiv = document.getElementById('leads-list');
@@ -6404,39 +6432,88 @@ function bindStepEvents() {
       if (listDiv) {
         listDiv.style.display = 'block';
         
-        if (response.leads && response.leads.length > 0) {
+        if (response.success && response.leads && response.leads.length > 0) {
           let leadsHtml = '';
+          // Store leads data globally for filtering
+          window.leadsData = response.leads;
+          
           response.leads.forEach(lead => {
-            const contactName = `${lead.field_3530?.first || ''} ${lead.field_3530?.last || ''}`.trim();
+            // Handle both raw and processed contact name formats
+            let contactName = '';
+            if (lead.field_3530_raw && typeof lead.field_3530_raw === 'object') {
+              contactName = `${lead.field_3530_raw.first || ''} ${lead.field_3530_raw.last || ''}`.trim();
+            } else if (lead.field_3530 && typeof lead.field_3530 === 'object') {
+              contactName = `${lead.field_3530.first || ''} ${lead.field_3530.last || ''}`.trim();
+            } else {
+              contactName = lead.field_3530 || 'No name';
+            }
+            
             const product = lead.field_3531 || 'Not specified';
             const accounts = lead.field_3532 || 'N/A';
+            const converted = lead.field_3447 === 'Yes';
             
             leadsHtml += `
-              <div class="lead-item" onclick="loadLeadData('${lead.id}')" style="background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 4px; cursor: pointer; border: 1px solid #ddd;">
-                <h4 style="margin: 0 0 5px 0; color: #007bff;">${lead.field_3439}</h4>
-                <p style="margin: 0; color: #666; font-size: 14px;">
-                  <strong>Contact:</strong> ${contactName} | 
-                  <strong>Email:</strong> ${lead.field_3440} | 
-                  <strong>Product:</strong> ${product}
-                  ${product !== 'Training' ? ` | <strong>Accounts:</strong> ${accounts}` : ''}
-                </p>
-                <p style="margin: 5px 0 0 0; color: #999; font-size: 12px;">
-                  Lead Date: ${new Date(lead.field_3443).toLocaleDateString()}
-                </p>
+              <div class="lead-item" data-lead-id="${lead.id}" onclick="selectLead('${lead.id}')" 
+                style="background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 4px; cursor: pointer; border: 1px solid #ddd; transition: all 0.2s;" 
+                onmouseover="this.style.backgroundColor='#e9ecef'; this.style.borderColor='#007bff';" 
+                onmouseout="this.style.backgroundColor='#f8f9fa'; this.style.borderColor='#ddd';">
+                
+                <div style="display: flex; justify-content: space-between; align-items: start;">
+                  <div style="flex: 1;">
+                    <h4 style="margin: 0 0 5px 0; color: #007bff;">${lead.field_3439 || 'Unknown Organization'}</h4>
+                    <p style="margin: 0; color: #666; font-size: 14px;">
+                      <strong>Contact:</strong> ${contactName} | 
+                      <strong>Email:</strong> ${lead.field_3440 || 'No email'} | 
+                      <strong>Product:</strong> ${product}
+                      ${product !== 'Training' ? ` | <strong>Accounts:</strong> ${accounts}` : ''}
+                    </p>
+                    <p style="margin: 5px 0 0 0; color: #999; font-size: 12px;">
+                      Lead Date: ${lead.field_3443 ? new Date(lead.field_3443).toLocaleDateString() : 'Unknown'}
+                    </p>
+                  </div>
+                  <div style="text-align: right;">
+                    ${converted ? 
+                      '<span style="background: #d4edda; color: #155724; padding: 4px 8px; border-radius: 4px; font-size: 12px;">Converted</span>' : 
+                      '<span style="background: #fff3cd; color: #856404; padding: 4px 8px; border-radius: 4px; font-size: 12px;">Open</span>'
+                    }
+                  </div>
+                </div>
+                
+                ${lead.field_3445 ? `<p style="margin: 10px 0 0 0; font-size: 14px; color: #777;"><em>${lead.field_3445}</em></p>` : ''}
               </div>
             `;
           });
           listDiv.innerHTML = leadsHtml;
         } else {
-          listDiv.innerHTML = '<p style="text-align: center; color: #666;">No unconverted leads found.</p>';
+          listDiv.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">No unconverted leads found.</p>';
         }
       }
     } catch (error) {
       debugLog("Error loading leads:", error, 'error');
+      debugLog("Error details:", {
+        status: error.status,
+        statusText: error.statusText,
+        responseText: error.responseText,
+        message: error.message
+      }, 'error');
+      
+      const loadingDiv = document.getElementById('leads-loading');
       const listDiv = document.getElementById('leads-list');
+      
+      if (loadingDiv) loadingDiv.style.display = 'none';
       if (listDiv) {
         listDiv.style.display = 'block';
-        listDiv.innerHTML = '<p style="text-align: center; color: #dc3545;">Error loading leads. Please try again.</p>';
+        
+        let errorMessage = 'Error loading leads. Please try again.';
+        if (error.status === 404) {
+          errorMessage = 'Leads endpoint not found. Please check API configuration.';
+        } else if (error.status === 500) {
+          errorMessage = 'Server error loading leads. Please try again later.';
+        } else if (error.responseJSON && error.responseJSON.message) {
+          errorMessage = error.responseJSON.message;
+        }
+        
+        listDiv.innerHTML = `<p style="text-align: center; color: #dc3545; padding: 40px;">${errorMessage}</p>`;
       }
     }
   }
@@ -6446,6 +6523,8 @@ function bindStepEvents() {
    */
   async function loadLeadData(leadId) {
     try {
+      debugLog("Loading lead data for ID:", leadId);
+      
       // Get the specific lead data
       const response = await $.ajax({
         url: `${API_BASE_URL}leads/${leadId}`,
@@ -6453,8 +6532,20 @@ function bindStepEvents() {
         xhrFields: { withCredentials: true }
       });
       
-      if (response.lead) {
+      debugLog("Lead data response:", response);
+      
+      if (response.success && response.lead) {
         const lead = response.lead;
+        
+        // Close modal first
+        closeLeadsModal();
+        
+        // Make sure we're on the customer creation flow
+        const flowTypeSelect = document.getElementById('flow-type');
+        if (flowTypeSelect) {
+          flowTypeSelect.value = 'new-invoice-email';
+          handleFlowTypeChange();
+        }
         
         // Populate form fields
         const form = document.getElementById('new-customer-form');
@@ -6462,37 +6553,47 @@ function bindStepEvents() {
           // Organization info
           if (form.orgName) form.orgName.value = lead.field_3439 || '';
           
-          // Admin contact info
-          if (form.adminFirstName) form.adminFirstName.value = lead.field_3530?.first || '';
-          if (form.adminLastName) form.adminLastName.value = lead.field_3530?.last || '';
+          // Handle contact name - check both raw and processed formats
+          let firstName = '', lastName = '';
+          if (lead.field_3530_raw && typeof lead.field_3530_raw === 'object') {
+            firstName = lead.field_3530_raw.first || '';
+            lastName = lead.field_3530_raw.last || '';
+          } else if (lead.field_3530 && typeof lead.field_3530 === 'object') {
+            firstName = lead.field_3530.first || '';
+            lastName = lead.field_3530.last || '';
+          }
+          
+          // Admin contact info - combine first and last name into adminName field
+          if (form.adminName) {
+            form.adminName.value = `${firstName} ${lastName}`.trim();
+          }
           if (form.adminEmail) form.adminEmail.value = lead.field_3440 || '';
           if (form.phone) form.phone.value = lead.field_3442 || '';
+          if (form.logoUrl) form.logoUrl.value = lead.field_3444 || '';
           
-          // Notes - append lead info
-          if (form.notes) {
-            const leadInfo = `Converted from lead #${leadId} - ${lead.field_3531 || 'Product not specified'}`;
-            const existingNotes = lead.field_3445 || '';
-            form.notes.value = existingNotes ? `${leadInfo}\n\n${existingNotes}` : leadInfo;
+          // Pre-populate invoice URL from estimate link if available
+          if (form.invoiceUrl && lead.field_3446) {
+            form.invoiceUrl.value = lead.field_3446;
           }
           
           // Store lead ID for conversion tracking
-          if (form.leadId) {
-            form.leadId.value = leadId;
-          } else {
-            // Create hidden input to store lead ID
-            const leadIdInput = document.createElement('input');
-            leadIdInput.type = 'hidden';
-            leadIdInput.name = 'leadId';
-            leadIdInput.value = leadId;
-            form.appendChild(leadIdInput);
-          }
-          
-          // Close modal
-          closeLeadsModal();
+          window.convertedLeadId = leadId;
           
           // Show success message
-          showSuccess(`Lead data loaded successfully for ${lead.field_3439}`);
+          showSuccess(`Lead "${lead.field_3439}" loaded successfully. Please complete the remaining fields.`);
+          
+          // Scroll to top of form
+          window.scrollTo(0, 0);
+          
+          // Trigger calculateTotal after a delay to ensure values are loaded
+          setTimeout(() => {
+            if (typeof calculateTotal === 'function') {
+              calculateTotal();
+            }
+          }, 100);
         }
+      } else {
+        throw new Error('Invalid response format or lead not found');
       }
     } catch (error) {
       debugLog("Error loading lead data:", error, 'error');
@@ -6693,85 +6794,37 @@ function bindStepEvents() {
   /**
    * Show modal to load from existing leads
    */
-  window.showLoadFromLeadsModal = async function() {
-    try {
-      // Show loading modal first
-      showModal('Loading Leads', '<div style="text-align: center; padding: 20px;"><div class="vespa-spinner"></div><p>Loading leads...</p></div>');
-      
-      // Fetch leads from API
-      const response = await $.ajax({
-        url: `${API_BASE_URL}leads/list`,
-        type: 'GET',
-        xhrFields: { withCredentials: true }
-      });
-      
-      let modalContent = `
-        <div class="vespa-leads-modal">
-          <div class="vespa-lead-search" style="margin-bottom: 20px;">
-            <input type="text" id="lead-search-input" placeholder="Search leads by name, email, or organization..." 
-              style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;"
-              onkeyup="filterLeads()">
-          </div>
-          
-          <div id="leads-list" style="max-height: 400px; overflow-y: auto;">
-      `;
-      
-      if (response.success && response.leads && response.leads.length > 0) {
-        response.leads.forEach(lead => {
-          const converted = lead.field_3447 === 'Yes';
-          const contactName = `${lead.field_3530_raw?.first || ''} ${lead.field_3530_raw?.last || ''}`.trim();
-          
-          modalContent += `
-            <div class="lead-item" data-lead-id="${lead.id}" 
-              style="padding: 15px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 10px; cursor: pointer; transition: all 0.2s;"
-              onmouseover="this.style.backgroundColor='#f8f9fa'" 
-              onmouseout="this.style.backgroundColor='white'"
-              onclick="selectLead('${lead.id}')">
-              
-              <div style="display: flex; justify-content: space-between; align-items: start;">
-                <div style="flex: 1;">
-                  <h4 style="margin: 0 0 5px 0; color: #007bff;">${lead.field_3439 || 'Unknown Organization'}</h4>
-                  <p style="margin: 0; color: #666;">
-                    <strong>Contact:</strong> ${contactName}<br>
-                    <strong>Email:</strong> ${lead.field_3440 || 'No email'}<br>
-                    <strong>Date:</strong> ${lead.field_3443 ? new Date(lead.field_3443).toLocaleDateString() : 'Unknown'}
-                  </p>
-                </div>
-                <div style="text-align: right;">
-                  ${converted ? 
-                    '<span style="background: #d4edda; color: #155724; padding: 4px 8px; border-radius: 4px; font-size: 12px;">Converted</span>' : 
-                    '<span style="background: #fff3cd; color: #856404; padding: 4px 8px; border-radius: 4px; font-size: 12px;">Open</span>'
-                  }
-                </div>
-              </div>
-              
-              ${lead.field_3445 ? `<p style="margin: 10px 0 0 0; font-size: 14px; color: #777;"><em>${lead.field_3445}</em></p>` : ''}
-            </div>
-          `;
-        });
-      } else {
-        modalContent += '<p style="text-align: center; color: #666; padding: 40px;">No leads found.</p>';
-      }
-      
-      modalContent += `
-          </div>
-          
-          <div class="vespa-modal-actions" style="margin-top: 20px; text-align: right;">
-            <button class="vespa-button secondary" onclick="closeModal()">Cancel</button>
-          </div>
+  window.showLoadFromLeadsModal = function() {
+    debugLog("Opening Load from Leads modal", null, 'info');
+    
+    // Create modal structure first
+    const modalContent = `
+      <div class="vespa-leads-modal">
+        <div class="vespa-lead-search" style="margin-bottom: 20px;">
+          <input type="text" id="lead-search-input" placeholder="Search leads by name, email, or organization..." 
+            style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;"
+            onkeyup="filterLeads()">
         </div>
-      `;
-      
-      showModal('Select Lead to Convert', modalContent);
-      
-      // Store leads data for filtering
-      window.leadsData = response.leads || [];
-      
-    } catch (error) {
-      debugLog('Error loading leads:', error, 'error');
-      showError('Failed to load leads. Please try again.');
-      closeModal();
-    }
+        
+        <div id="leads-loading" style="text-align: center; padding: 40px;">
+          <div class="vespa-spinner"></div>
+          <p>Loading leads...</p>
+        </div>
+        
+        <div id="leads-list" style="display: none; max-height: 400px; overflow-y: auto;">
+          <!-- Leads will be populated here -->
+        </div>
+        
+        <div class="vespa-modal-actions" style="margin-top: 20px; text-align: right;">
+          <button class="vespa-button secondary" onclick="closeModal()">Cancel</button>
+        </div>
+      </div>
+    `;
+    
+    showModal('Select Lead to Convert', modalContent);
+    
+    // Now load the leads using the existing loadLeads function
+    loadLeads();
   }
   
   /**
@@ -6790,36 +6843,10 @@ function bindStepEvents() {
   /**
    * Select a lead and populate the customer form
    */
-  window.selectLead = async function(leadId) {
-    try {
-      const lead = window.leadsData.find(l => l.id === leadId);
-      if (!lead) return;
-      
-      // Close the modal
-      closeModal();
-      
-      // Populate the customer form with lead data
-      document.getElementById('org-name').value = lead.field_3439 || '';
-      document.getElementById('admin-name').value = `${lead.field_3530_raw?.first || ''} ${lead.field_3530_raw?.last || ''}`.trim();
-      document.getElementById('admin-email').value = lead.field_3440 || '';
-      document.getElementById('phone').value = lead.field_3442 || '';
-      document.getElementById('logo-url').value = lead.field_3444 || '';
-      
-      // Pre-fill estimate URL if available
-      if (lead.field_3446) {
-        document.getElementById('invoice-url').value = lead.field_3446;
-      }
-      
-      // Show success message
-      showSuccess(`Lead "${lead.field_3439}" loaded successfully. Please complete the remaining fields.`);
-      
-      // Mark lead as converted after successful customer creation
-      window.convertedLeadId = leadId;
-      
-    } catch (error) {
-      debugLog('Error selecting lead:', error, 'error');
-      showError('Failed to load lead data.');
-    }
+  window.selectLead = function(leadId) {
+    debugLog("Lead selected:", leadId);
+    // Use the existing loadLeadData function
+    loadLeadData(leadId);
   }
 
   /**
@@ -7858,11 +7885,6 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
 
 
     
-    
-
-    
-    
-
 
 
 
