@@ -5881,7 +5881,7 @@ function bindStepEvents() {
             <select id="flow-type" name="flowType" required onchange="handleFlowTypeChange()"
               style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px;">
               <option value="">-- Select an action --</option>
-              <option value="new-invoice-email" selected>Set up new user - generate invoice AND send welcome email</option>
+              <option value="new-invoice-email" selected="selected">Set up new user - generate invoice AND send welcome email</option>
               <option value="new-lead">Generate new lead and send email proposal</option>
             </select>
           </div>
@@ -6189,6 +6189,15 @@ function bindStepEvents() {
     
     // Initialize total calculation after a small delay to ensure DOM is ready
     setTimeout(() => {
+        // Set default flow type to new-invoice-email
+        const flowTypeSelect = document.getElementById('flow-type');
+        if (flowTypeSelect && !flowTypeSelect.value) {
+            flowTypeSelect.value = 'new-invoice-email';
+        }
+        
+        // Initialize flow type (shows Load from Leads button for default selection)
+        handleFlowTypeChange();
+        
         // Ensure calculateTotal is available
         if (typeof calculateTotal === 'function' || typeof window.calculateTotal === 'function') {
             calculateTotal();
@@ -6201,9 +6210,6 @@ function bindStepEvents() {
         
         // Check initial account type
         handleAccountTypeChange();
-        
-        // Initialize flow type (shows Load from Leads button for default selection)
-        handleFlowTypeChange();
     }, 50);
   }
   
@@ -6447,6 +6453,9 @@ function bindStepEvents() {
           // Log first lead to see field structure
           if (response.leads.length > 0) {
             debugLog("First lead data structure:", response.leads[0], 'info');
+            // Specifically log email field to debug [object Object] issue
+            debugLog("First lead email field (field_3440):", response.leads[0].field_3440, 'info');
+            debugLog("Type of email field:", typeof response.leads[0].field_3440, 'info');
           }
           
           response.leads.forEach(lead => {
@@ -6465,7 +6474,7 @@ function bindStepEvents() {
             const converted = lead.field_3447 === 'Yes';
             
             leadsHtml += `
-              <div class="lead-item" data-lead-id="${lead.id}" onclick="selectLead('${lead.id}')" 
+              <div class="lead-item" data-lead-id="${lead.id}" 
                 style="background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 4px; cursor: pointer; border: 1px solid #ddd; transition: all 0.2s;" 
                 onmouseover="this.style.backgroundColor='#e9ecef'; this.style.borderColor='#007bff';" 
                 onmouseout="this.style.backgroundColor='#f8f9fa'; this.style.borderColor='#ddd';">
@@ -6475,7 +6484,7 @@ function bindStepEvents() {
                     <h4 style="margin: 0 0 5px 0; color: #007bff;">${lead.field_3439 || 'Unknown Organization'}</h4>
                     <p style="margin: 0; color: #666; font-size: 14px;">
                       <strong>Contact:</strong> ${contactName} | 
-                      <strong>Email:</strong> ${lead.field_3440 || 'No email'} | 
+                      <strong>Email:</strong> ${typeof lead.field_3440 === 'object' ? (lead.field_3440.email || lead.field_3440.raw || JSON.stringify(lead.field_3440)) : (lead.field_3440 || 'No email')} | 
                       <strong>Product:</strong> ${product}
                       ${product !== 'Training' ? ` | <strong>Accounts:</strong> ${accounts}` : ''}
                     </p>
@@ -6496,6 +6505,17 @@ function bindStepEvents() {
             `;
           });
           listDiv.innerHTML = leadsHtml;
+          
+          // Add click event listeners to lead items using event delegation
+          listDiv.addEventListener('click', function(e) {
+            const leadItem = e.target.closest('.lead-item');
+            if (leadItem) {
+              const leadId = leadItem.getAttribute('data-lead-id');
+              if (leadId) {
+                window.selectLead(leadId);
+              }
+            }
+          });
         } else {
           listDiv.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">No unconverted leads found.</p>';
         }
@@ -6580,8 +6600,13 @@ function bindStepEvents() {
             form.adminName.value = `${firstName} ${lastName}`.trim();
           }
           
-          // Email - field_3440 → adminEmail
-          if (form.adminEmail) form.adminEmail.value = lead.field_3440 || '';
+          // Email - field_3440 → adminEmail (handle if it's an object)
+          if (form.adminEmail) {
+            const email = typeof lead.field_3440 === 'object' ? 
+              (lead.field_3440.email || lead.field_3440.raw || '') : 
+              (lead.field_3440 || '');
+            form.adminEmail.value = email;
+          }
           
           // Phone - field_3442 → phone
           if (form.phone) form.phone.value = lead.field_3442 || '';
