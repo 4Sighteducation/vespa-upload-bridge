@@ -60,6 +60,9 @@
 
     debugLog('Initializing Account Management module');
     isInitialized = true;
+    
+    // Enable debug mode for troubleshooting
+    window.DEBUG_MODE = true;
 
     // Add module styles
     addModuleStyles();
@@ -117,6 +120,8 @@
    * Load DataTables assets
    */
   function loadDataTablesAssets() {
+    debugLog('Loading DataTables assets...');
+    
     // Add DataTables CSS
     if (!document.getElementById('datatables-css')) {
       const dtCSS = document.createElement('link');
@@ -138,17 +143,21 @@
     // Wait for jQuery to be available before loading DataTables
     const loadDataTablesWhenReady = () => {
       if (typeof $ === 'undefined' || typeof jQuery === 'undefined') {
+        debugLog('jQuery not ready, waiting...');
         // jQuery not ready, check again in 100ms
         setTimeout(loadDataTablesWhenReady, 100);
         return;
       }
       
+      debugLog('jQuery is ready, checking DataTables...');
+      
       // Load DataTables JS
       if (typeof $.fn.DataTable === 'undefined') {
+        debugLog('Loading DataTables core...');
         const script = document.createElement('script');
         script.src = 'https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js';
         script.onload = () => {
-          debugLog('DataTables loaded successfully');
+          debugLog('DataTables core loaded successfully');
           
           // Load DataTables Buttons after DataTables is loaded
           const buttonsScript = document.createElement('script');
@@ -157,27 +166,48 @@
             debugLog('DataTables Buttons loaded');
             
             // Load additional button scripts with proper sequencing
-            const loadScript = (src) => {
-              return new Promise((resolve) => {
+            const loadScript = (src, name) => {
+              return new Promise((resolve, reject) => {
                 const s = document.createElement('script');
                 s.src = src;
-                s.onload = resolve;
+                s.onload = () => {
+                  debugLog(`${name} loaded`);
+                  resolve();
+                };
+                s.onerror = () => {
+                  debugLog(`Failed to load ${name}`);
+                  reject(new Error(`Failed to load ${name}`));
+                };
                 document.head.appendChild(s);
               });
             };
             
             // Load scripts in sequence
             Promise.all([
-              loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'),
-              loadScript('https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js'),
-              loadScript('https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js')
+              loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'JSZip'),
+              loadScript('https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js', 'Buttons HTML5'),
+              loadScript('https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js', 'Buttons Print')
             ]).then(() => {
-              debugLog('All DataTables extensions loaded');
+              debugLog('All DataTables extensions loaded successfully');
+              // Trigger a custom event to indicate DataTables is ready
+              window.dispatchEvent(new Event('datatables-ready'));
+            }).catch(error => {
+              debugLog('Error loading DataTables extensions:', error);
             });
+          };
+          buttonsScript.onerror = () => {
+            debugLog('Failed to load DataTables Buttons');
           };
           document.head.appendChild(buttonsScript);
         };
+        script.onerror = () => {
+          debugLog('Failed to load DataTables core');
+        };
         document.head.appendChild(script);
+      } else {
+        debugLog('DataTables already loaded');
+        // Trigger ready event if DataTables is already loaded
+        window.dispatchEvent(new Event('datatables-ready'));
       }
     };
     
@@ -1194,6 +1224,9 @@
     // Reset select all
     document.getElementById('am-select-all').checked = false;
 
+    // Clear any existing custom search functions
+    $.fn.dataTable.ext.search = [];
+
     // Destroy existing DataTable if it exists
     if (staffDataTable) {
       staffDataTable.destroy();
@@ -1331,31 +1364,36 @@
     // Initialize DataTable when ready
     const initDataTable = () => {
       if (typeof $ === 'undefined' || typeof $.fn === 'undefined' || typeof $.fn.DataTable === 'undefined') {
+        debugLog('DataTables not ready, retrying...');
         // DataTables not ready yet, try again
         setTimeout(initDataTable, 100);
         return;
       }
       
       try {
+        debugLog('Initializing staff DataTable...');
+        
         // Custom search function for role filtering
         $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
           // Only apply to staff table
-          if (settings.nTable.id !== 'staff-datatable') return true;
+          if (!settings.nTable || settings.nTable.id !== 'staff-datatable') return true;
           
           // Get filter values
-          const searchTerm = document.getElementById('am-search').value.toLowerCase();
-          const groupFilter = document.getElementById('am-filter-group').value.toLowerCase();
-          const roleFilter = document.getElementById('am-filter-role').value;
+          const searchTerm = document.getElementById('am-search')?.value?.toLowerCase() || '';
+          const groupFilter = document.getElementById('am-filter-group')?.value?.toLowerCase() || '';
+          const roleFilter = document.getElementById('am-filter-role')?.value || '';
           
-          // Get row data
-          const name = data[1].toLowerCase();
-          const email = data[2].toLowerCase();
-          const group = data[3].toLowerCase();
-          const roles = data[6];
+          // Get row data - strip HTML tags
+          const name = (data[1] || '').toLowerCase();
+          const email = (data[2] || '').toLowerCase();
+          const group = (data[3] || '').toLowerCase();
+          const rolesHtml = data[6] || '';
           
           // Search filter
-          if (searchTerm && !name.includes(searchTerm) && !email.includes(searchTerm)) {
-            return false;
+          if (searchTerm) {
+            if (!name.includes(searchTerm) && !email.includes(searchTerm)) {
+              return false;
+            }
           }
           
           // Group filter
@@ -1366,11 +1404,11 @@
           // Role filter
           if (roleFilter) {
             if (roleFilter === 'No Role') {
-              if (!roles.includes('No roles assigned')) {
+              if (!rolesHtml.includes('No roles assigned')) {
                 return false;
               }
             } else {
-              if (!roles.includes(roleFilter)) {
+              if (!rolesHtml.includes(roleFilter)) {
                 return false;
               }
             }
@@ -1379,76 +1417,78 @@
           return true;
         });
         
-        staffDataTable = $('#staff-datatable').DataTable({
-          pageLength: 50,
-          lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
-          dom: 'Blfrtip',
-          buttons: [
-            {
-              extend: 'copy',
-              exportOptions: {
-                columns: ':not(.no-sort)'
+        // Test if table exists
+        const tableElement = document.getElementById('staff-datatable');
+        if (!tableElement) {
+          debugLog('ERROR: staff-datatable element not found!');
+          return;
+        }
+        debugLog('Table element found:', tableElement);
+        
+        // Initialize DataTable with simplified config first
+        try {
+          staffDataTable = $('#staff-datatable').DataTable({
+            pageLength: 50,
+            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+            dom: 'lfrtip', // Simplified dom - just length, filter, table, info, pagination
+            columnDefs: [
+              { orderable: false, targets: [0, 10] } // Checkbox and Actions columns
+            ],
+            order: [[1, 'asc']], // Sort by name by default
+            initComplete: function() {
+              debugLog('Staff DataTable init complete - table is sortable now');
+              
+              // Bind custom filter events after table is initialized
+              const searchInput = document.getElementById('am-search');
+              const groupInput = document.getElementById('am-filter-group');
+              const roleSelect = document.getElementById('am-filter-role');
+              
+              if (searchInput) {
+                searchInput.removeEventListener('input', handleSearchInput);
+                searchInput.addEventListener('input', handleSearchInput);
+                debugLog('Search input event bound');
               }
-            },
-            {
-              extend: 'csv',
-              exportOptions: {
-                columns: ':not(.no-sort)'
+              
+              if (groupInput) {
+                groupInput.removeEventListener('input', handleGroupInput);
+                groupInput.addEventListener('input', handleGroupInput);
+                debugLog('Group input event bound');
               }
-            },
-            {
-              extend: 'excel',
-              exportOptions: {
-                columns: ':not(.no-sort)'
-              }
-            },
-            {
-              extend: 'print',
-              exportOptions: {
-                columns: ':not(.no-sort)'
+              
+              if (roleSelect) {
+                roleSelect.removeEventListener('change', handleRoleChange);
+                roleSelect.addEventListener('change', handleRoleChange);
+                debugLog('Role select event bound');
               }
             }
-          ],
-          columnDefs: [
-            { orderable: false, targets: 'no-sort' },
-            { width: '30px', targets: 0 },
-            { width: '150px', targets: 1 },
-            { width: '200px', targets: 2 },
-            { width: '60px', targets: 3 },
-            { width: '80px', targets: 4 },
-            { width: '50px', targets: 5 },
-            { width: '200px', targets: 6 },
-            { width: '100px', targets: 7 },
-            { width: '150px', targets: 8 },
-            { width: '50px', targets: 9 },
-            { width: '180px', targets: -1 }
-          ],
-          order: [[1, 'asc']], // Sort by name by default
-          autoWidth: false,
-          scrollX: true,
-          language: {
-            search: "_INPUT_",
-            searchPlaceholder: "Search table...",
-            lengthMenu: "Show _MENU_ entries"
-          }
-        });
+          });
+          
+          debugLog('DataTable instance created:', staffDataTable);
+        } catch (error) {
+          debugLog('ERROR creating DataTable:', error);
+          console.error('Full error:', error);
+        }
         
-        // Bind custom filter events
-        document.getElementById('am-search').addEventListener('input', debounce(() => {
-          staffDataTable.draw();
-        }, 300));
+        // Define event handlers
+        const handleSearchInput = debounce(() => {
+          debugLog('Search input changed:', document.getElementById('am-search').value);
+          if (staffDataTable) staffDataTable.draw();
+        }, 300);
         
-        document.getElementById('am-filter-group').addEventListener('input', debounce(() => {
-          staffDataTable.draw();
-        }, 300));
+        const handleGroupInput = debounce(() => {
+          debugLog('Group input changed:', document.getElementById('am-filter-group').value);
+          if (staffDataTable) staffDataTable.draw();
+        }, 300);
         
-        document.getElementById('am-filter-role').addEventListener('change', () => {
-          staffDataTable.draw();
-        });
+        const handleRoleChange = () => {
+          debugLog('Role filter changed:', document.getElementById('am-filter-role').value);
+          if (staffDataTable) staffDataTable.draw();
+        };
         
         debugLog('Staff DataTable initialized successfully');
       } catch (e) {
         debugLog('Error initializing staff DataTable:', e);
+        console.error('DataTable initialization error:', e);
       }
     };
     
@@ -1563,31 +1603,36 @@
     // Initialize DataTable when ready
     const initDataTable = () => {
       if (typeof $ === 'undefined' || typeof $.fn === 'undefined' || typeof $.fn.DataTable === 'undefined') {
+        debugLog('DataTables not ready for student table, retrying...');
         // DataTables not ready yet, try again
         setTimeout(initDataTable, 100);
         return;
       }
       
       try {
+        debugLog('Initializing student DataTable...');
+        
         // Custom search function for student filtering
         $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
           // Only apply to student table
-          if (settings.nTable.id !== 'student-datatable') return true;
+          if (!settings.nTable || settings.nTable.id !== 'student-datatable') return true;
           
           // Get filter values
-          const searchTerm = document.getElementById('am-search').value.toLowerCase();
-          const yearFilter = document.getElementById('am-filter-year').value;
-          const groupFilter = document.getElementById('am-filter-group').value.toLowerCase();
+          const searchTerm = document.getElementById('am-search')?.value?.toLowerCase() || '';
+          const yearFilter = document.getElementById('am-filter-year')?.value || '';
+          const groupFilter = document.getElementById('am-filter-group')?.value?.toLowerCase() || '';
           
           // Get row data
-          const name = data[1].toLowerCase();
-          const email = data[2].toLowerCase();
-          const group = data[3].toLowerCase();
-          const year = data[4];
+          const name = (data[1] || '').toLowerCase();
+          const email = (data[2] || '').toLowerCase();
+          const group = (data[3] || '').toLowerCase();
+          const year = data[4] || '';
           
           // Search filter
-          if (searchTerm && !name.includes(searchTerm) && !email.includes(searchTerm)) {
-            return false;
+          if (searchTerm) {
+            if (!name.includes(searchTerm) && !email.includes(searchTerm)) {
+              return false;
+            }
           }
           
           // Year filter
@@ -1603,76 +1648,78 @@
           return true;
         });
         
-        studentDataTable = $('#student-datatable').DataTable({
-          pageLength: 50,
-          lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
-          dom: 'Blfrtip',
-          buttons: [
-            {
-              extend: 'copy',
-              exportOptions: {
-                columns: ':not(.no-sort)'
+        // Test if table exists
+        const tableElement = document.getElementById('student-datatable');
+        if (!tableElement) {
+          debugLog('ERROR: student-datatable element not found!');
+          return;
+        }
+        debugLog('Student table element found:', tableElement);
+        
+        // Initialize DataTable with simplified config
+        try {
+          studentDataTable = $('#student-datatable').DataTable({
+            pageLength: 50,
+            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+            dom: 'lfrtip', // Simplified dom
+            columnDefs: [
+              { orderable: false, targets: [0, 10] } // Checkbox and Actions columns
+            ],
+            order: [[1, 'asc']], // Sort by name by default
+            initComplete: function() {
+              debugLog('Student DataTable init complete - table is sortable now');
+              
+              // Bind custom filter events after table is initialized
+              const searchInput = document.getElementById('am-search');
+              const yearSelect = document.getElementById('am-filter-year');
+              const groupInput = document.getElementById('am-filter-group');
+              
+              if (searchInput) {
+                searchInput.removeEventListener('input', handleStudentSearchInput);
+                searchInput.addEventListener('input', handleStudentSearchInput);
+                debugLog('Student search input event bound');
               }
-            },
-            {
-              extend: 'csv',
-              exportOptions: {
-                columns: ':not(.no-sort)'
+              
+              if (yearSelect) {
+                yearSelect.removeEventListener('change', handleYearChange);
+                yearSelect.addEventListener('change', handleYearChange);
+                debugLog('Year select event bound');
               }
-            },
-            {
-              extend: 'excel',
-              exportOptions: {
-                columns: ':not(.no-sort)'
-              }
-            },
-            {
-              extend: 'print',
-              exportOptions: {
-                columns: ':not(.no-sort)'
+              
+              if (groupInput) {
+                groupInput.removeEventListener('input', handleStudentGroupInput);
+                groupInput.addEventListener('input', handleStudentGroupInput);
+                debugLog('Student group input event bound');
               }
             }
-          ],
-          columnDefs: [
-            { orderable: false, targets: 'no-sort' },
-            { width: '30px', targets: 0 },
-            { width: '150px', targets: 1 },
-            { width: '200px', targets: 2 },
-            { width: '60px', targets: 3 },
-            { width: '50px', targets: 4 },
-            { width: '80px', targets: 5 },
-            { width: '50px', targets: 6 },
-            { width: '100px', targets: 7 },
-            { width: '150px', targets: 8 },
-            { width: '50px', targets: 9 },
-            { width: '150px', targets: -1 }
-          ],
-          order: [[1, 'asc']], // Sort by name by default
-          autoWidth: false,
-          scrollX: true,
-          language: {
-            search: "_INPUT_",
-            searchPlaceholder: "Search table...",
-            lengthMenu: "Show _MENU_ entries"
-          }
-        });
+          });
+          
+          debugLog('Student DataTable instance created:', studentDataTable);
+        } catch (error) {
+          debugLog('ERROR creating student DataTable:', error);
+          console.error('Full error:', error);
+        }
         
-        // Bind custom filter events
-        document.getElementById('am-search').addEventListener('input', debounce(() => {
-          studentDataTable.draw();
-        }, 300));
+        // Define event handlers
+        const handleStudentSearchInput = debounce(() => {
+          debugLog('Student search input changed:', document.getElementById('am-search').value);
+          if (studentDataTable) studentDataTable.draw();
+        }, 300);
         
-        document.getElementById('am-filter-year').addEventListener('change', () => {
-          studentDataTable.draw();
-        });
+        const handleYearChange = () => {
+          debugLog('Year filter changed:', document.getElementById('am-filter-year').value);
+          if (studentDataTable) studentDataTable.draw();
+        };
         
-        document.getElementById('am-filter-group').addEventListener('input', debounce(() => {
-          studentDataTable.draw();
-        }, 300));
+        const handleStudentGroupInput = debounce(() => {
+          debugLog('Student group input changed:', document.getElementById('am-filter-group').value);
+          if (studentDataTable) studentDataTable.draw();
+        }, 300);
         
         debugLog('Student DataTable initialized successfully');
       } catch (e) {
         debugLog('Error initializing student DataTable:', e);
+        console.error('DataTable initialization error:', e);
       }
     };
     
