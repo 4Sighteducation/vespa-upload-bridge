@@ -120,81 +120,88 @@
    * Load DataTables assets
    */
   function loadDataTablesAssets() {
-    debugLog('Loading DataTables assets...');
+    debugLog("Loading DataTables assets...");
     
-    // Add DataTables CSS
-    if (!document.getElementById('datatables-css')) {
-      const dtCSS = document.createElement('link');
-      dtCSS.id = 'datatables-css';
-      dtCSS.rel = 'stylesheet';
-      dtCSS.href = 'https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css';
-      document.head.appendChild(dtCSS);
-      debugLog('Added DataTables CSS');
-    }
+    // Add modern DataTables CSS
+    const dtCss = document.createElement('link');
+    dtCss.rel = 'stylesheet';
+    dtCss.href = 'https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css';
+    document.head.appendChild(dtCss);
+    debugLog("Added DataTables CSS");
     
     // Add DataTables Buttons CSS
-    if (!document.getElementById('datatables-buttons-css')) {
-      const dtButtonsCSS = document.createElement('link');
-      dtButtonsCSS.id = 'datatables-buttons-css';
-      dtButtonsCSS.rel = 'stylesheet';
-      dtButtonsCSS.href = 'https://cdn.datatables.net/buttons/2.4.1/css/buttons.dataTables.min.css';
-      document.head.appendChild(dtButtonsCSS);
-      debugLog('Added DataTables Buttons CSS');
+    const buttonsCss = document.createElement('link');
+    buttonsCss.rel = 'stylesheet';
+    buttonsCss.href = 'https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css';
+    document.head.appendChild(buttonsCss);
+    debugLog("Added DataTables Buttons CSS");
+    
+    // Wait a bit for Knack to finish initializing jQuery
+    setTimeout(() => {
+      debugLog("Attempting to load DataTables scripts after delay...");
+      loadDataTablesScripts();
+    }, 1000); // 1 second delay to ensure jQuery is ready
+  }
+  
+  function loadDataTablesScripts() {
+    // In Knack, jQuery is available as $ globally
+    debugLog("Loading DataTables scripts...");
+    debugLog("jQuery available as $:", typeof $ !== 'undefined');
+    debugLog("jQuery available as jQuery:", typeof jQuery !== 'undefined');
+    
+    // Ensure jQuery is available
+    if (typeof $ === 'undefined' && typeof jQuery === 'undefined') {
+      debugLog("jQuery still not available, retrying in 1 second...", null, 'warn');
+      setTimeout(loadDataTablesScripts, 1000);
+      return;
     }
     
-    // Check jQuery version
-    if (typeof $ !== 'undefined' && $.fn && $.fn.jquery) {
-      debugLog('jQuery version:', $.fn.jquery);
+    // Use whichever jQuery reference is available
+    const jq = window.jQuery || window.$;
+    if (!jq) {
+      debugLog("No jQuery reference found!", null, 'error');
+      return;
     }
     
-    // Wait for jQuery to be available before loading DataTables
-    let jqueryCheckCount = 0;
-    const loadDataTablesWhenReady = () => {
-      jqueryCheckCount++;
+    debugLog("jQuery version:", jq.fn ? jq.fn.jquery : "unknown");
+    
+    // Load modern DataTables that works with jQuery 1.8+
+    const dtScript = document.createElement('script');
+    dtScript.src = 'https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js';
+    dtScript.onload = () => {
+      debugLog("DataTables core loaded successfully");
       
-      if (typeof $ === 'undefined' || typeof jQuery === 'undefined') {
-        debugLog(`jQuery not ready, waiting... (attempt ${jqueryCheckCount})`);
-        
-        // Give up after 50 attempts (5 seconds)
-        if (jqueryCheckCount > 50) {
-          debugLog('ERROR: jQuery never became available, giving up on DataTables');
-          return;
-        }
-        
-        // jQuery not ready, check again in 100ms
-        setTimeout(loadDataTablesWhenReady, 100);
-        return;
+      // Check if DataTable is available
+      if (jq && jq.fn && jq.fn.DataTable) {
+        debugLog("DataTable plugin confirmed available on jQuery.fn");
       }
       
-      debugLog('jQuery is ready, checking DataTables...');
-      debugLog('jQuery.fn.DataTable type:', typeof $.fn.DataTable);
-      
-      // Load DataTables JS
-      if (typeof $.fn.DataTable === 'undefined') {
-        debugLog('DataTables not found, loading core...');
-        const script = document.createElement('script');
-        script.src = 'https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js';
-        script.onload = () => {
-          debugLog('DataTables core loaded successfully');
-          debugLog('DataTable is now available:', typeof $.fn.DataTable !== 'undefined');
-          
-          // Skip buttons for now - just get basic DataTables working
-          debugLog('Triggering datatables-ready event');
-          window.dispatchEvent(new Event('datatables-ready'));
-        };
-        script.onerror = (error) => {
-          debugLog('ERROR: Failed to load DataTables core', error);
-        };
-        document.head.appendChild(script);
-      } else {
-        debugLog('DataTables already loaded');
-        // Trigger ready event if DataTables is already loaded
-        window.dispatchEvent(new Event('datatables-ready'));
-      }
+      // Load DataTables Buttons extension
+      const buttonsScript = document.createElement('script');
+      buttonsScript.src = 'https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js';
+      buttonsScript.onload = () => {
+        debugLog("DataTables Buttons loaded");
+        
+        // Load button dependencies in parallel
+        const scripts = [
+          { src: 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', name: 'JSZip' },
+          { src: 'https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js', name: 'HTML5 buttons' },
+          { src: 'https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js', name: 'Print button' }
+        ];
+        
+        scripts.forEach(script => {
+          const s = document.createElement('script');
+          s.src = script.src;
+          s.onload = () => debugLog(`${script.name} loaded`);
+          document.head.appendChild(s);
+        });
+      };
+      document.head.appendChild(buttonsScript);
     };
-    
-    // Start checking for jQuery
-    loadDataTablesWhenReady();
+    dtScript.onerror = (error) => {
+      debugLog("Failed to load DataTables:", error, 'error');
+    };
+    document.head.appendChild(dtScript);
   }
 
   /**
@@ -1364,25 +1371,21 @@
 
     // Wait for DataTables to be ready, then initialize
     const waitForDataTables = () => {
-      debugLog('Waiting for DataTables...');
-      
-      // Check if jQuery exists
-      if (typeof $ === 'undefined') {
-        debugLog('jQuery not available yet, waiting...');
+      // Check if DataTables is available on jQuery
+      if ($ && $.fn && $.fn.DataTable) {
+        debugLog("DataTables is available, initializing table");
+        initDataTable();
+      } else {
+        debugLog("DataTables plugin not available yet, waiting...");
+        dataTableRetryCount++;
+        
+        if (dataTableRetryCount > 30) { // 15 seconds
+          debugLog("DataTables never loaded, showing table without DataTables", 'error');
+          return;
+        }
+        
         setTimeout(waitForDataTables, 500);
-        return;
       }
-      
-      // Check if DataTables exists
-      if (typeof $.fn === 'undefined' || typeof $.fn.DataTable === 'undefined') {
-        debugLog('DataTables plugin not available yet, waiting...');
-        // Listen for our custom event
-        window.addEventListener('datatables-ready', initDataTable, { once: true });
-        return;
-      }
-      
-      // DataTables is ready, initialize
-      initDataTable();
     };
     
     // Initialize DataTable
@@ -1608,27 +1611,26 @@
 
     debugLog('Student table HTML added to DOM');
 
-    // Wait for DataTables to be ready, then initialize
+    // DataTables retry counter
+    let dataTableRetryCount = 0;
+    
+    // Wait for DataTables to be ready
     const waitForDataTables = () => {
-      debugLog('Waiting for DataTables (student)...');
-      
-      // Check if jQuery exists
-      if (typeof $ === 'undefined') {
-        debugLog('jQuery not available yet, waiting...');
+      // Check if DataTables is available on jQuery
+      if ($ && $.fn && $.fn.DataTable) {
+        debugLog("DataTables is available, initializing student table");
+        initDataTable();
+      } else {
+        debugLog("DataTables plugin not available yet, waiting...");
+        dataTableRetryCount++;
+        
+        if (dataTableRetryCount > 30) { // 15 seconds
+          debugLog("DataTables never loaded, showing table without DataTables", 'error');
+          return;
+        }
+        
         setTimeout(waitForDataTables, 500);
-        return;
       }
-      
-      // Check if DataTables exists
-      if (typeof $.fn === 'undefined' || typeof $.fn.DataTable === 'undefined') {
-        debugLog('DataTables plugin not available yet, waiting...');
-        // Listen for our custom event
-        window.addEventListener('datatables-ready', initDataTable, { once: true });
-        return;
-      }
-      
-      // DataTables is ready, initialize
-      initDataTable();
     };
     
     // Initialize DataTable
@@ -2566,5 +2568,20 @@
   // Initialize the module when the script loads
   initialize();
 
-})();
+  // Expose functions to global scope
+  window.VESPAAccountManagement = {
+    show: showAccountManagement,
+    hide: hideAccountManagement,
+    initialize: initialize
+  };
+  
+  // Also expose individual functions that might be called from HTML
+  window.editStaffRoles = editStaffRoles;
+  window.viewLinkedAccounts = viewLinkedAccounts;
+  window.reallocateStudent = reallocateStudent;
+  window.editStudentActivities = editStudentActivities;
+  window.handleStaffAdminToggle = handleStaffAdminToggle;
+  window.toggleRowSelection = toggleRowSelection;
+  window.toggleTableSelectAll = toggleTableSelectAll;
 
+})();
