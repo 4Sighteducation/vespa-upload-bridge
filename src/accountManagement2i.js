@@ -1484,8 +1484,15 @@
     
     const endpoint = type === 'staff' ? 'get-staff' : 'get-students';
     
-    // Build request data - only include customerId if we have one
-    const requestData = customerId ? { customerId } : {};
+    // Build request data - include customerId if we have one, otherwise include userEmail
+    const requestData = {};
+    if (customerId) {
+      requestData.customerId = customerId;
+    } else if (window.userContext && window.userContext.userEmail) {
+      // For regular staff admins, pass email so backend can look up their customer
+      requestData.userEmail = window.userContext.userEmail;
+      debugLog('Passing user email for customer lookup', { email: window.userContext.userEmail });
+    }
     
     console.log(`[VESPA AM] Making API call to ${API_BASE_URL}account/${endpoint} with data:`, requestData);
     
@@ -3324,3 +3331,4 @@
   window.toggleTableSelectAll = toggleTableSelectAll;
 
 })();
+
