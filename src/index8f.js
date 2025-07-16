@@ -8153,7 +8153,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       
       // Load the account management module from CDN
       // Update this to match your actual file version
-      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/accountManagement2e.js';
+      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/accountManagement2f.js';
       
       try {
         await loadScript(scriptUrl);
