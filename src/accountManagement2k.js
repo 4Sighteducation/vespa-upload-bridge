@@ -663,6 +663,22 @@
       .vespa-am-link-button[style*="background: #17a2b8"]:hover {
         background: #0e7490 !important;
       }
+      
+      /* Loading spinner */
+      .vespa-am-spinner {
+        display: inline-block;
+        width: 40px;
+        height: 40px;
+        border: 4px solid rgba(0, 0, 0, 0.1);
+        border-radius: 50%;
+        border-top-color: #007bff;
+        animation: vespa-am-spin 1s ease-in-out infinite;
+        margin: 0 auto;
+      }
+      
+      @keyframes vespa-am-spin {
+        to { transform: rotate(360deg); }
+      }
 
       /* Empty state */
       .vespa-am-empty {
@@ -2702,7 +2718,15 @@
     }
     
     try {
-      showLoadingModal('Moving students up to next year group...');
+      // Show loading modal with progress information
+      showLoadingModal(`
+        <div style="text-align: center;">
+          <div class="vespa-am-spinner"></div>
+          <h3>Moving ${selectedIds.length} student${selectedIds.length > 1 ? 's' : ''} to next year group...</h3>
+          <p style="margin-top: 10px;">This may take a while. Each student needs to be updated across multiple systems.</p>
+          <p style="color: #666; font-size: 14px;">Please do not close this window.</p>
+        </div>
+      `);
       
       const response = await $.ajax({
         url: `${API_BASE_URL}account/move-up-year-group`,
@@ -2711,7 +2735,8 @@
         data: JSON.stringify({
           studentIds: selectedIds
         }),
-        xhrFields: { withCredentials: true }
+        xhrFields: { withCredentials: true },
+        timeout: 300000 // 5 minute timeout for large batches
       });
       
       closeLoadingModal();
@@ -3331,3 +3356,4 @@
   window.toggleTableSelectAll = toggleTableSelectAll;
 
 })();
+
