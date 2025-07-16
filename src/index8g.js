@@ -8129,16 +8129,18 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
         };
       }
       
-      // For regular users, ensure customerId is available
+      // For regular users, customerId might not be available from Knack attributes
+      // But the backend can determine it from the session, so we'll proceed anyway
       if (!window.selectedSchool && (!userContext || !userContext.customerId)) {
-        showError('Unable to determine your organization. Please ensure you are properly logged in.');
-        return;
+        debugLog("CustomerId not found in user context for regular user, proceeding anyway as backend can use session", null, 'warn');
+        // Don't block regular staff admins - the backend knows their customer from session
       }
       
       debugLog("Context passed to Account Management module", {
         selectedSchool: window.selectedSchool,
         userContext: window.userContext,
-        hasCustomerId: !!(userContext && userContext.customerId)
+        hasCustomerId: !!(userContext && userContext.customerId),
+        note: !userContext?.customerId ? 'CustomerId will be determined by backend session' : 'CustomerId available'
       });
       
       // Check if already loaded
@@ -8151,9 +8153,9 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       // Show loading indicator
       showModal('Loading Account Management', '<div style="text-align: center; padding: 20px;"><div class="vespa-spinner"></div><p>Loading account management system...</p></div>');
       
-      // Load the account management module from CDN
-      // Update this to match your actual file version
-      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/accountManagement2f.js';
+              // Load the account management module from CDN
+        // Update this to match your actual file version
+        const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/accountManagement2f.js';
       
       try {
         await loadScript(scriptUrl);
@@ -8198,5 +8200,6 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
 
 
 
+    
     
 
