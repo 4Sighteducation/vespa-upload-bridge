@@ -11,7 +11,7 @@
 
   // Module configuration
   const MODULE_NAME = 'VESPAAccountManagement';
-  const API_BASE_URL = window.API_BASE_URL || 'https://vespa-upload-api-07e11c285370.herokuapp.com/api/';
+  let API_BASE_URL = window.API_BASE_URL || 'https://vespa-upload-api-07e11c285370.herokuapp.com/api/';
 
   // Role mappings - profile IDs to role names
   const ROLE_PROFILES = {
@@ -297,6 +297,24 @@
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
         color: #2c3e50;
       }
+      
+      /* Hide DataTables search box since we have our own */
+      .dataTables_filter {
+        display: none !important;
+      }
+      
+      /* Make sure the length selector stays visible */
+      .dataTables_length {
+        display: block !important;
+        float: left;
+      }
+      
+      /* Clear the wrapper after length selector */
+      .dataTables_wrapper::after {
+        content: "";
+        display: table;
+        clear: both;
+      }
 
       .vespa-am-header {
         display: flex;
@@ -417,6 +435,29 @@
         background: #2563eb;
         border-color: #2563eb;
       }
+      
+      /* Different button colors */
+      .vespa-am-actions .vespa-button.reset-password {
+        background: #f59e0b;
+        color: white;
+        border: 1px solid #f59e0b;
+      }
+      
+      .vespa-am-actions .vespa-button.reset-password:hover {
+        background: #d97706;
+        border-color: #d97706;
+      }
+      
+      .vespa-am-actions .vespa-button.resend-email {
+        background: #10b981;
+        color: white;
+        border: 1px solid #10b981;
+      }
+      
+      .vespa-am-actions .vespa-button.resend-email:hover {
+        background: #059669;
+        border-color: #059669;
+      }
 
       .vespa-am-actions .vespa-button.secondary {
         background: white;
@@ -486,7 +527,7 @@
       /* Table header */
       table.dataTable thead th {
         background: #f8fafc !important;
-        padding: 10px 12px !important;
+        padding: 10px 20px 10px 12px !important;
         font-size: 12px !important;
         font-weight: 600 !important;
         color: #64748b !important;
@@ -497,12 +538,28 @@
         position: relative !important;
         white-space: nowrap !important;
       }
+      
+      /* No sorting on checkbox column */
+      table.dataTable thead th.no-sort {
+        cursor: default !important;
+        padding-right: 12px !important;
+      }
+      
+      table.dataTable thead th.no-sort:after {
+        display: none !important;
+      }
 
       table.dataTable thead th:hover {
         background: #f1f5f9 !important;
       }
 
-      /* Sorting indicators */
+      /* Sorting indicators with better visibility */
+      table.dataTable thead .sorting,
+      table.dataTable thead .sorting_asc,
+      table.dataTable thead .sorting_desc {
+        padding-right: 25px !important;
+      }
+      
       table.dataTable thead .sorting:after,
       table.dataTable thead .sorting_asc:after,
       table.dataTable thead .sorting_desc:after {
@@ -510,22 +567,26 @@
         right: 8px !important;
         top: 50% !important;
         transform: translateY(-50%) !important;
-        font-size: 10px !important;
-        opacity: 0.5 !important;
+        font-size: 14px !important;
+        opacity: 0.6 !important;
+        color: #64748b !important;
       }
 
       table.dataTable thead .sorting:after {
         content: "⇅" !important;
+        color: #94a3b8 !important;
       }
 
       table.dataTable thead .sorting_asc:after {
-        content: "↑" !important;
+        content: "▲" !important;
         opacity: 1 !important;
+        color: #3b82f6 !important;
       }
 
       table.dataTable thead .sorting_desc:after {
-        content: "↓" !important;
+        content: "▼" !important;
         opacity: 1 !important;
+        color: #3b82f6 !important;
       }
 
       /* Table body */
@@ -983,6 +1044,55 @@
       #staff-admin-warning strong {
         color: #92400e;
       }
+      
+      /* Inline editing styles */
+      .vespa-editable {
+        cursor: pointer;
+        position: relative;
+        padding: 2px 4px;
+        border-radius: 3px;
+        transition: background-color 0.2s;
+      }
+      
+      .vespa-editable:hover {
+        background-color: #f0f7ff;
+        outline: 1px dashed #3b82f6;
+      }
+      
+      .vespa-editable.editing {
+        padding: 0;
+      }
+      
+      .vespa-editable input {
+        width: 100%;
+        padding: 6px 8px;
+        border: 2px solid #3b82f6;
+        border-radius: 3px;
+        font-size: 13px;
+        font-family: inherit;
+        background: white;
+      }
+      
+      .vespa-editable input:focus {
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      }
+      
+      .vespa-edit-indicator {
+        position: absolute;
+        right: -20px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 11px;
+        color: #3b82f6;
+        opacity: 0;
+        transition: opacity 0.2s;
+        pointer-events: none;
+      }
+      
+      .vespa-editable:hover .vespa-edit-indicator {
+        opacity: 1;
+      }
 
       /* Content area styles */
       #vespa-am-content {
@@ -1178,7 +1288,9 @@
         </div>
         <div class="vespa-am-filter-group">
           <label>Group</label>
-          <input type="text" id="am-filter-group" placeholder="e.g., 12A">
+          <select id="am-filter-group">
+            <option value="">All Groups</option>
+          </select>
         </div>
         <div class="vespa-am-filter-group" id="role-filter-group" style="display: none;">
           <label>User Role</label>
@@ -1200,10 +1312,10 @@
           <input type="checkbox" id="am-select-all">
           Select All
         </button>
-        <button class="vespa-button primary" onclick="window.VESPAAccountManagement.resetPasswords()">
+        <button class="vespa-button primary reset-password" onclick="window.VESPAAccountManagement.resetPasswords()">
           🔑 Reset Password(s)
         </button>
-        <button class="vespa-button primary" onclick="window.VESPAAccountManagement.resendWelcomeEmails()">
+        <button class="vespa-button primary resend-email" onclick="window.VESPAAccountManagement.resendWelcomeEmails()">
           ✉️ Resend Welcome Email(s)
         </button>
         <button class="vespa-button secondary" onclick="window.VESPAAccountManagement.deleteAccounts()" 
@@ -1268,6 +1380,12 @@
     document.getElementById('am-filter-year').value = '';
     document.getElementById('am-filter-group').value = '';
     document.getElementById('am-filter-role').value = '';
+    
+    // Clear group dropdown options (will be repopulated when data loads)
+    const groupSelect = document.getElementById('am-filter-group');
+    if (groupSelect) {
+      groupSelect.innerHTML = '<option value="">All Groups</option>';
+    }
 
     // Reset select all
     document.getElementById('am-select-all').checked = false;
@@ -1368,6 +1486,9 @@
       studentData = accounts;
     }
     
+    // Populate group dropdown with unique groups
+    populateGroupDropdown(accounts);
+    
     // Create the table container based on type
     debugLog(`Creating ${type}-table-container in content area`);
     contentArea.innerHTML = `<div id="${type}-table-container"></div>`;
@@ -1379,6 +1500,39 @@
     } else {
       displayStudentTable(accounts);
     }
+  }
+  
+  /**
+   * Populate group dropdown with unique groups from data
+   */
+  function populateGroupDropdown(accounts) {
+    const groupSelect = document.getElementById('am-filter-group');
+    if (!groupSelect) return;
+    
+    // Get unique groups
+    const groups = new Set();
+    accounts.forEach(account => {
+      const group = account.field_708;
+      if (group && group !== 'N/A') {
+        groups.add(group);
+      }
+    });
+    
+    // Sort groups
+    const sortedGroups = Array.from(groups).sort();
+    
+    // Clear existing options except the first one
+    groupSelect.innerHTML = '<option value="">All Groups</option>';
+    
+    // Add group options
+    sortedGroups.forEach(group => {
+      const option = document.createElement('option');
+      option.value = group;
+      option.textContent = group;
+      groupSelect.appendChild(option);
+    });
+    
+    debugLog(`Populated group dropdown with ${sortedGroups.length} groups`);
   }
 
   /**
@@ -1473,10 +1627,20 @@
           ordering: true,
           info: true,
           pageLength: 50,
-          order: [[1, 'asc']]
+          order: [[1, 'asc']],
+          columnDefs: [
+            { orderable: false, targets: 0 } // Disable sorting on checkbox column
+          ],
+          drawCallback: function() {
+            // Make cells editable after table is drawn/redrawn
+            makeStaffCellsEditable();
+          }
         });
         
         debugLog('Basic DataTable initialized successfully');
+        
+        // Make initial cells editable
+        makeStaffCellsEditable();
         
         // Now add our custom filters
         setupCustomFilters();
@@ -1504,13 +1668,13 @@
         
         // Get filter values
         const searchTerm = document.getElementById('am-search')?.value?.toLowerCase() || '';
-        const groupFilter = document.getElementById('am-filter-group')?.value?.toLowerCase() || '';
+        const groupFilter = document.getElementById('am-filter-group')?.value || '';
         const roleFilter = document.getElementById('am-filter-role')?.value || '';
         
         // Get row data
         const name = (data[1] || '').toLowerCase();
         const email = (data[2] || '').toLowerCase();
-        const group = (data[3] || '').toLowerCase();
+        const group = (data[3] || '');
         const rolesHtml = data[6] || '';
         
         // Apply filters
@@ -1518,7 +1682,7 @@
           return false;
         }
         
-        if (groupFilter && !group.includes(groupFilter)) {
+        if (groupFilter && group !== groupFilter) {
           return false;
         }
         
@@ -1539,7 +1703,7 @@
       
       // Bind filter events
       const searchInput = document.getElementById('am-search');
-      const groupInput = document.getElementById('am-filter-group');
+      const groupSelect = document.getElementById('am-filter-group');
       const roleSelect = document.getElementById('am-filter-role');
       
       if (searchInput) {
@@ -1550,11 +1714,11 @@
         debugLog('Search filter bound');
       }
       
-      if (groupInput) {
-        groupInput.addEventListener('input', debounce(() => {
-          debugLog('Group filter changed:', groupInput.value);
+      if (groupSelect) {
+        groupSelect.addEventListener('change', () => {
+          debugLog('Group filter changed:', groupSelect.value);
           if (staffDataTable) staffDataTable.draw();
-        }, 300));
+        });
         debugLog('Group filter bound');
       }
       
@@ -1718,10 +1882,20 @@
           ordering: true,
           info: true,
           pageLength: 50,
-          order: [[1, 'asc']]
+          order: [[1, 'asc']],
+          columnDefs: [
+            { orderable: false, targets: 0 } // Disable sorting on checkbox column
+          ],
+          drawCallback: function() {
+            // Make cells editable after table is drawn/redrawn
+            makeStudentCellsEditable();
+          }
         });
         
         debugLog('Basic student DataTable initialized successfully');
+        
+        // Make initial cells editable
+        makeStudentCellsEditable();
         
         // Now add our custom filters
         setupStudentFilters();
@@ -1750,12 +1924,12 @@
         // Get filter values
         const searchTerm = document.getElementById('am-search')?.value?.toLowerCase() || '';
         const yearFilter = document.getElementById('am-filter-year')?.value || '';
-        const groupFilter = document.getElementById('am-filter-group')?.value?.toLowerCase() || '';
+        const groupFilter = document.getElementById('am-filter-group')?.value || '';
         
         // Get row data
         const name = (data[1] || '').toLowerCase();
         const email = (data[2] || '').toLowerCase();
-        const group = (data[3] || '').toLowerCase();
+        const group = (data[3] || '');
         const year = data[4] || '';
         
         // Apply filters
@@ -1767,7 +1941,7 @@
           return false;
         }
         
-        if (groupFilter && !group.includes(groupFilter)) {
+        if (groupFilter && group !== groupFilter) {
           return false;
         }
         
@@ -1777,7 +1951,7 @@
       // Bind filter events
       const searchInput = document.getElementById('am-search');
       const yearSelect = document.getElementById('am-filter-year');
-      const groupInput = document.getElementById('am-filter-group');
+      const groupSelect = document.getElementById('am-filter-group');
       
       if (searchInput) {
         searchInput.addEventListener('input', debounce(() => {
@@ -1795,11 +1969,11 @@
         debugLog('Year filter bound');
       }
       
-      if (groupInput) {
-        groupInput.addEventListener('input', debounce(() => {
-          debugLog('Student group filter changed:', groupInput.value);
+      if (groupSelect) {
+        groupSelect.addEventListener('change', () => {
+          debugLog('Student group filter changed:', groupSelect.value);
           if (studentDataTable) studentDataTable.draw();
-        }, 300));
+        });
         debugLog('Student group filter bound');
       }
     };
@@ -2467,13 +2641,36 @@
    * Format date helper
    */
   function formatDate(dateObj) {
-    if (typeof dateObj === 'string') {
-      return new Date(dateObj).toLocaleDateString();
-    } else if (dateObj && dateObj.date_formatted) {
-      return dateObj.date_formatted;
-    } else if (dateObj && dateObj.timestamp) {
-      return dateObj.timestamp;
+    try {
+      let dateValue = null;
+      
+      if (typeof dateObj === 'string') {
+        dateValue = dateObj;
+      } else if (dateObj && dateObj.date_formatted) {
+        return dateObj.date_formatted;
+      } else if (dateObj && dateObj.date) {
+        dateValue = dateObj.date;
+      } else if (dateObj && dateObj.timestamp) {
+        dateValue = dateObj.timestamp;
+      }
+      
+      if (dateValue) {
+        // Try parsing the date
+        const date = new Date(dateValue);
+        
+        // Check if date is valid
+        if (!isNaN(date.getTime())) {
+          // Format to UK date format (DD/MM/YYYY)
+          const day = date.getDate().toString().padStart(2, '0');
+          const month = (date.getMonth() + 1).toString().padStart(2, '0');
+          const year = date.getFullYear();
+          return `${day}/${month}/${year}`;
+        }
+      }
+    } catch (error) {
+      debugLog('Error formatting date:', error);
     }
+    
     return 'N/A';
   }
 
@@ -2556,6 +2753,191 @@
   }
 
   /**
+   * Make a cell editable
+   */
+  function makeEditable(cell, accountId, fieldName, accountType) {
+    const originalValue = cell.textContent.trim();
+    cell.classList.add('vespa-editable');
+    
+    // Add edit indicator
+    const indicator = document.createElement('span');
+    indicator.className = 'vespa-edit-indicator';
+    indicator.textContent = '✏️';
+    cell.appendChild(indicator);
+    
+    cell.addEventListener('click', function(e) {
+      if (cell.classList.contains('editing')) return;
+      
+      cell.classList.add('editing');
+      const input = document.createElement('input');
+      input.type = fieldName === 'email' ? 'email' : 'text';
+      input.value = originalValue;
+      
+      // Clear cell and add input
+      cell.innerHTML = '';
+      cell.appendChild(input);
+      input.focus();
+      input.select();
+      
+      // Save on Enter, cancel on Escape
+      input.addEventListener('keydown', async function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          await saveInlineEdit(cell, input, accountId, fieldName, accountType, originalValue);
+        } else if (e.key === 'Escape') {
+          cancelInlineEdit(cell, originalValue);
+        }
+      });
+      
+      // Save on blur
+      input.addEventListener('blur', async function() {
+        // Small delay to handle button clicks
+        setTimeout(async () => {
+          if (cell.classList.contains('editing')) {
+            await saveInlineEdit(cell, input, accountId, fieldName, accountType, originalValue);
+          }
+        }, 200);
+      });
+    });
+  }
+
+  /**
+   * Save inline edit
+   */
+  async function saveInlineEdit(cell, input, accountId, fieldName, accountType, originalValue) {
+    const newValue = input.value.trim();
+    
+    if (newValue === originalValue) {
+      cancelInlineEdit(cell, originalValue);
+      return;
+    }
+    
+    // Validate email if it's an email field
+    if (fieldName === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newValue)) {
+      showError('Please enter a valid email address');
+      input.focus();
+      return;
+    }
+    
+    try {
+      // Show loading state
+      cell.innerHTML = '<span style="color: #3b82f6;">Saving...</span>';
+      
+      const response = await $.ajax({
+        url: `${API_BASE_URL}account/update-field`,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+          accountId: accountId,
+          accountType: accountType,
+          fieldName: fieldName,
+          value: newValue
+        }),
+        xhrFields: { withCredentials: true }
+      });
+      
+      if (response.success) {
+        cell.classList.remove('editing');
+        cell.textContent = newValue;
+        
+        // Re-add edit indicator
+        const indicator = document.createElement('span');
+        indicator.className = 'vespa-edit-indicator';
+        indicator.textContent = '✏️';
+        cell.appendChild(indicator);
+        
+        showSuccess(`${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)} updated successfully`);
+      } else {
+        throw new Error(response.message || 'Failed to update');
+      }
+    } catch (error) {
+      debugLog('Error saving inline edit:', error);
+      showError(`Failed to update ${fieldName}: ${error.message}`);
+      cancelInlineEdit(cell, originalValue);
+    }
+  }
+
+  /**
+   * Cancel inline edit
+   */
+  function cancelInlineEdit(cell, originalValue) {
+    cell.classList.remove('editing');
+    cell.textContent = originalValue;
+    
+    // Re-add edit indicator
+    const indicator = document.createElement('span');
+    indicator.className = 'vespa-edit-indicator';
+    indicator.textContent = '✏️';
+    cell.appendChild(indicator);
+  }
+
+  /**
+   * Make staff table cells editable
+   */
+  function makeStaffCellsEditable() {
+    const table = document.getElementById('staff-datatable');
+    if (!table) return;
+    
+    // Get all rows
+    const rows = table.querySelectorAll('tbody tr');
+    rows.forEach(row => {
+      const accountId = row.dataset.accountId;
+      if (!accountId) return;
+      
+      // Make name cell editable (column 1)
+      const nameCell = row.cells[1];
+      if (nameCell && !nameCell.classList.contains('vespa-editable')) {
+        makeEditable(nameCell, accountId, 'name', 'staff');
+      }
+      
+      // Make email cell editable (column 2)
+      const emailCell = row.cells[2];
+      if (emailCell && !emailCell.classList.contains('vespa-editable')) {
+        makeEditable(emailCell, accountId, 'email', 'staff');
+      }
+      
+      // Make group cell editable (column 3)
+      const groupCell = row.cells[3];
+      if (groupCell && !groupCell.classList.contains('vespa-editable')) {
+        makeEditable(groupCell, accountId, 'group', 'staff');
+      }
+    });
+  }
+
+  /**
+   * Make student table cells editable
+   */
+  function makeStudentCellsEditable() {
+    const table = document.getElementById('student-datatable');
+    if (!table) return;
+    
+    // Get all rows
+    const rows = table.querySelectorAll('tbody tr');
+    rows.forEach(row => {
+      const accountId = row.dataset.accountId;
+      if (!accountId) return;
+      
+      // Make name cell editable (column 1)
+      const nameCell = row.cells[1];
+      if (nameCell && !nameCell.classList.contains('vespa-editable')) {
+        makeEditable(nameCell, accountId, 'name', 'student');
+      }
+      
+      // Make email cell editable (column 2)
+      const emailCell = row.cells[2];
+      if (emailCell && !emailCell.classList.contains('vespa-editable')) {
+        makeEditable(emailCell, accountId, 'email', 'student');
+      }
+      
+      // Make group cell editable (column 3)
+      const groupCell = row.cells[3];
+      if (groupCell && !groupCell.classList.contains('vespa-editable')) {
+        makeEditable(groupCell, accountId, 'group', 'student');
+      }
+    });
+  }
+
+  /**
    * Handle toggling the Staff Admin checkbox to show/hide warning
    */
   function handleStaffAdminToggle(checkbox) {
@@ -2631,12 +3013,80 @@
     }
   }
 
-  // Initialize the module when the script loads
-  initialize();
+  /**
+   * Wait for configuration to be available before initializing
+   */
+  function waitForConfiguration() {
+    let attempts = 0;
+    const maxAttempts = 20;
+    
+    const checkConfig = setInterval(() => {
+      attempts++;
+      
+      // Check for user context (for regular users)
+      if (window.userContext && window.userContext.customerId) {
+        clearInterval(checkConfig);
+        debugLog('Configuration found via userContext', window.userContext);
+        proceedWithInitialization();
+        return;
+      }
+      
+      // Also check if userContext exists but customerId is still loading
+      if (window.userContext && window.userContext.userId && !window.userContext.customerId) {
+        debugLog(`Waiting for customerId... (attempt ${attempts}/${maxAttempts})`);
+      }
+      
+      // Check for selected school (for super users)
+      if (window.selectedSchool && window.selectedSchool.id) {
+        clearInterval(checkConfig);
+        debugLog('Configuration found via selectedSchool', window.selectedSchool);
+        proceedWithInitialization();
+        return;
+      }
+      
+      // Check if API URL is at least available
+      if (window.API_BASE_URL && !API_BASE_URL) {
+        API_BASE_URL = window.API_BASE_URL;
+        debugLog('API URL updated from window', API_BASE_URL);
+      }
+      
+      if (attempts >= maxAttempts) {
+        clearInterval(checkConfig);
+        debugLog('Configuration timeout - no customer context available', {
+          userContext: window.userContext,
+          selectedSchool: window.selectedSchool
+        });
+        showError('Unable to load account management. Please ensure you are logged in and try again.');
+      }
+    }, 250);
+  }
 
-  // Expose functions to global scope
+  /**
+   * Proceed with initialization once configuration is available
+   */
+  function proceedWithInitialization() {
+    initialize();
+    
+    // If the show method was called before initialization, show now
+    if (window.VESPAAccountManagement && window.VESPAAccountManagement._pendingShow) {
+      showAccountManagement();
+      delete window.VESPAAccountManagement._pendingShow;
+    }
+  }
+
+  // Start waiting for configuration when the script loads
+  waitForConfiguration();
+
+  // Expose functions to global scope immediately
   window.VESPAAccountManagement = {
-    show: showAccountManagement,
+    show: function() {
+      if (isInitialized) {
+        showAccountManagement();
+      } else {
+        // Mark that we want to show once initialized
+        window.VESPAAccountManagement._pendingShow = true;
+      }
+    },
     hide: hideAccountManagement,
     initialize: initialize
   };
