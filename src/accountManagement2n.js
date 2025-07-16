@@ -95,6 +95,12 @@
       editStudentActivities: editStudentActivities,
       saveActivities: saveActivities,
       reallocateStudent: reallocateStudent,
+      showReallocateModal: showReallocateModal,
+      performReallocation: performReallocation,
+      
+      // Filter functions
+      toggleAllFilters: toggleAllFilters,
+      filterLinkedStudents: filterLinkedStudents,
       
       // Modal functions
       showModal: showModal,
@@ -638,22 +644,24 @@
 
       /* Action buttons */
       .vespa-am-link-button {
-        padding: 4px 8px;
+        padding: 6px 12px;
         background: #64748b;
         color: white;
         border: none;
-        border-radius: 3px;
+        border-radius: 4px;
         cursor: pointer;
-        font-size: 11px;
+        font-size: 12px;
         font-weight: 500;
-        margin: 1px;
+        margin: 2px 4px 2px 0;
         transition: all 0.2s;
         white-space: nowrap;
+        display: inline-block;
       }
 
       .vespa-am-link-button:hover {
         background: #475569;
         transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
       }
 
       .vespa-am-link-button[style*="background: #17a2b8"] {
@@ -1160,6 +1168,101 @@
         text-align: center;
         color: #64748b;
         font-size: 16px;
+      }
+
+      /* Actions column styling */
+      .vespa-am-table td:last-child {
+        white-space: nowrap;
+        min-width: 250px;
+      }
+
+      /* Linked students modal styles */
+      .vespa-linked-students-container {
+        max-height: 600px;
+        overflow-y: auto;
+      }
+
+      .vespa-role-filter {
+        margin-bottom: 20px;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 6px;
+      }
+
+      .vespa-role-toggle {
+        display: inline-block;
+        margin-right: 15px;
+        margin-bottom: 10px;
+      }
+
+      .vespa-role-toggle input[type="checkbox"] {
+        margin-right: 6px;
+        cursor: pointer;
+      }
+
+      .vespa-role-toggle label {
+        cursor: pointer;
+        font-weight: 500;
+      }
+
+      .vespa-student-link-item {
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        padding: 15px;
+        margin-bottom: 10px;
+        background: white;
+        transition: all 0.2s;
+      }
+
+      .vespa-student-link-item:hover {
+        border-color: #9ca3af;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      }
+
+      .vespa-student-roles {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #6b7280;
+      }
+
+      .vespa-student-roles span {
+        display: inline-block;
+        padding: 2px 8px;
+        background: #f3f4f6;
+        border-radius: 3px;
+        margin-right: 6px;
+        margin-top: 4px;
+      }
+
+      .vespa-reallocation-controls {
+        margin-top: 10px;
+        text-align: right;
+      }
+
+      .vespa-reallocation-modal {
+        padding: 20px;
+      }
+
+      .vespa-reallocation-role {
+        margin-bottom: 20px;
+        padding: 15px;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        background: #f9fafb;
+      }
+
+      .vespa-reallocation-role label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+      }
+
+      .vespa-reallocation-role select {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 4px;
+        font-size: 14px;
       }
     `;
 
@@ -2353,38 +2456,52 @@
     
     const currentRoles = Array.isArray(staff.field_73) ? staff.field_73 : (staff.field_73 ? [staff.field_73] : []);
     
+    // Convert current roles to profile IDs for proper checking
+    const currentProfileIds = currentRoles.map(role => {
+      // If it's already a profile ID, use it
+      if (role.startsWith('profile_')) return role;
+      // Otherwise, convert role name to profile ID
+      return PROFILE_IDS[role] || role;
+    });
+    
     const modalContent = `
       <div style="padding: 20px;">
         <h4>Edit Roles for ${staff.field_69}</h4>
-        <p>Select the roles for this staff member:</p>
+        
+        <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; margin-bottom: 20px; border-radius: 4px;">
+          <strong>⚠️ Important:</strong> Changing roles will <strong>REPLACE</strong> the current roles, not add to them. 
+          The currently selected roles below are the user's existing roles.
+        </div>
+        
+        <p><strong>Current roles are pre-selected below. Uncheck to remove, check to keep or add.</strong></p>
         
         <div style="margin: 20px 0;">
           <label style="display: block; margin: 10px 0;">
-            <input type="checkbox" id="role-profile_5" value="profile_5" ${currentRoles.includes('profile_5') ? 'checked' : ''} 
+            <input type="checkbox" id="role-profile_5" value="profile_5" ${currentProfileIds.includes('profile_5') ? 'checked' : ''} 
               onchange="window.VESPAAccountManagement.handleStaffAdminToggle(this)">
             Staff Admin
           </label>
-          <div id="staff-admin-warning" style="display: none; background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; margin: 0 0 10px 25px; border-radius: 4px; font-size: 13px;">
-            <strong>⚠️ Important:</strong> Adding Staff Admin role will automatically connect this user to all student and staff records in the system for administrative access.
+          <div id="staff-admin-warning" style="display: ${currentProfileIds.includes('profile_5') ? 'block' : 'none'}; background: #e3f2fd; border: 1px solid #90caf9; padding: 10px; margin: 0 0 10px 25px; border-radius: 4px; font-size: 13px;">
+            <strong>ℹ️ Note:</strong> Staff Admin role provides automatic access to all student and staff records in the system.
           </div>
           <label style="display: block; margin: 10px 0;">
-            <input type="checkbox" id="role-profile_7" value="profile_7" ${currentRoles.includes('profile_7') ? 'checked' : ''}>
+            <input type="checkbox" id="role-profile_7" value="profile_7" ${currentProfileIds.includes('profile_7') ? 'checked' : ''}>
             Tutor
           </label>
           <label style="display: block; margin: 10px 0;">
-            <input type="checkbox" id="role-profile_18" value="profile_18" ${currentRoles.includes('profile_18') ? 'checked' : ''}>
+            <input type="checkbox" id="role-profile_18" value="profile_18" ${currentProfileIds.includes('profile_18') ? 'checked' : ''}>
             Head of Year
           </label>
           <label style="display: block; margin: 10px 0;">
-            <input type="checkbox" id="role-profile_25" value="profile_25" ${currentRoles.includes('profile_25') ? 'checked' : ''}>
+            <input type="checkbox" id="role-profile_25" value="profile_25" ${currentProfileIds.includes('profile_25') ? 'checked' : ''}>
             Head of Department
           </label>
           <label style="display: block; margin: 10px 0;">
-            <input type="checkbox" id="role-profile_78" value="profile_78" ${currentRoles.includes('profile_78') ? 'checked' : ''}>
+            <input type="checkbox" id="role-profile_78" value="profile_78" ${currentProfileIds.includes('profile_78') ? 'checked' : ''}>
             Subject Teacher
           </label>
           <label style="display: block; margin: 10px 0;">
-            <input type="checkbox" id="role-profile_8" value="profile_8" ${currentRoles.includes('profile_8') ? 'checked' : ''}>
+            <input type="checkbox" id="role-profile_8" value="profile_8" ${currentProfileIds.includes('profile_8') ? 'checked' : ''}>
             General Staff
           </label>
         </div>
@@ -2479,28 +2596,332 @@
    * Show modal with linked students for a staff member
    */
   function showLinkedStudentsModal(staffId, students) {
+    const staff = staffData.find(s => s.id === staffId);
+    const staffName = staff ? staff.field_69 : 'Unknown Staff';
+    
+    // Store students globally for filtering
+    window.linkedStudentsData = students;
+    window.currentStaffId = staffId;
+    
     const modalContent = `
-      <div style="padding: 20px;">
-        <p>Students linked to this staff member:</p>
-        <div class="vespa-linked-students-list">
-          ${students.length === 0 ? '<p>No students linked to this staff member.</p>' : ''}
-          ${students.map(student => `
-            <div class="vespa-student-link-item">
-              <div><strong>${student.field_90 || 'Unknown'}</strong> (${student.field_3129 || 'No ULN'})</div>
-              <div>Year ${student.field_548 || 'N/A'}, Group: ${student.field_565 || 'N/A'}</div>
-              <div>Created: ${student.field_1265 ? new Date(student.field_1265).toLocaleDateString() : 'N/A'}</div>
-              <div class="vespa-reallocation-controls">
-                <button class="vespa-button secondary" onclick="window.VESPAAccountManagement.reallocateStudent('${student.id}', '${staffId}')">
-                  Reallocate Student
-                </button>
+      <div class="vespa-linked-students-container">
+        <div style="padding: 20px;">
+          <div style="margin-bottom: 20px;">
+            <h4>Students Linked to ${staffName}</h4>
+            <p style="color: #6b7280; margin-top: 5px;">
+              Note: Only tutor roles can be changed currently. Staff admins automatically have oversight of ALL student and staff accounts. 
+              To add new staff admin go to the Account Generation Section.
+            </p>
+          </div>
+          
+          <div class="vespa-role-filter">
+            <strong>Filter by Connection Type:</strong>
+            <div style="margin-top: 10px;">
+              <div class="vespa-role-toggle">
+                <label>
+                  <input type="checkbox" id="filter-all" checked onchange="window.VESPAAccountManagement.toggleAllFilters(this)">
+                  Show All
+                </label>
+              </div>
+              <div class="vespa-role-toggle">
+                <label>
+                  <input type="checkbox" id="filter-staff-admin" checked onchange="window.VESPAAccountManagement.filterLinkedStudents()">
+                  Staff Admin
+                </label>
+              </div>
+              <div class="vespa-role-toggle">
+                <label>
+                  <input type="checkbox" id="filter-tutor" checked onchange="window.VESPAAccountManagement.filterLinkedStudents()">
+                  Tutor
+                </label>
+              </div>
+              <div class="vespa-role-toggle">
+                <label>
+                  <input type="checkbox" id="filter-head-of-year" checked onchange="window.VESPAAccountManagement.filterLinkedStudents()">
+                  Head of Year
+                </label>
+              </div>
+              <div class="vespa-role-toggle">
+                <label>
+                  <input type="checkbox" id="filter-subject-teacher" checked onchange="window.VESPAAccountManagement.filterLinkedStudents()">
+                  Subject Teacher
+                </label>
               </div>
             </div>
-          `).join('')}
+          </div>
+          
+          <div id="linked-students-list">
+            ${renderLinkedStudentsList(students)}
+          </div>
         </div>
       </div>
     `;
 
-    showModal('Linked Students', modalContent);
+    showModal('Linked Students', modalContent, { width: '800px' });
+  }
+  
+  /**
+   * Render the linked students list
+   */
+  function renderLinkedStudentsList(students) {
+    if (students.length === 0) {
+      return '<p style="text-align: center; color: #6b7280; padding: 40px;">No students linked to this staff member.</p>';
+    }
+    
+    return `
+      <div class="vespa-linked-students-list">
+        ${students.map(student => {
+          const roles = [];
+          if (student.connections.isStaffAdmin) roles.push('Staff Admin');
+          if (student.connections.isTutor) roles.push('Tutor');
+          if (student.connections.isHeadOfYear) roles.push('Head of Year');
+          if (student.connections.isSubjectTeacher) roles.push('Subject Teacher');
+          
+          return `
+            <div class="vespa-student-link-item" data-student-id="${student.id}"
+              data-staff-admin="${student.connections.isStaffAdmin}"
+              data-tutor="${student.connections.isTutor}"
+              data-head-of-year="${student.connections.isHeadOfYear}"
+              data-subject-teacher="${student.connections.isSubjectTeacher}">
+              <div style="display: flex; justify-content: space-between; align-items: start;">
+                <div style="flex: 1;">
+                  <div style="font-weight: 600; font-size: 16px; color: #111827;">
+                    ${student.field_90 || 'Unknown Student'}
+                  </div>
+                  <div style="color: #6b7280; margin-top: 4px;">
+                    <span style="margin-right: 15px;">ULN: ${student.field_3129 || 'N/A'}</span>
+                    <span style="margin-right: 15px;">Year ${student.field_548 || 'N/A'}</span>
+                    <span style="margin-right: 15px;">Group: ${student.field_565 || 'N/A'}</span>
+                  </div>
+                  <div style="color: #9ca3af; font-size: 13px; margin-top: 4px;">
+                    Created: ${student.field_1265 ? formatDate(student.field_1265) : 'N/A'}
+                  </div>
+                  <div class="vespa-student-roles">
+                    ${roles.map(role => `<span>${role}</span>`).join('')}
+                  </div>
+                </div>
+                <div class="vespa-reallocation-controls">
+                  <button class="vespa-button secondary" style="font-size: 13px;" 
+                    onclick="window.VESPAAccountManagement.showReallocateModal('${student.id}', '${window.currentStaffId}', ${JSON.stringify(student.connections).replace(/"/g, '&quot;')})">
+                    Reallocate
+                  </button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+  
+  /**
+   * Toggle all filters
+   */
+  function toggleAllFilters(checkbox) {
+    const filters = ['filter-staff-admin', 'filter-tutor', 'filter-head-of-year', 'filter-subject-teacher'];
+    filters.forEach(filterId => {
+      document.getElementById(filterId).checked = checkbox.checked;
+    });
+    filterLinkedStudents();
+  }
+  
+  /**
+   * Filter linked students based on selected roles
+   */
+  function filterLinkedStudents() {
+    const showStaffAdmin = document.getElementById('filter-staff-admin').checked;
+    const showTutor = document.getElementById('filter-tutor').checked;
+    const showHeadOfYear = document.getElementById('filter-head-of-year').checked;
+    const showSubjectTeacher = document.getElementById('filter-subject-teacher').checked;
+    
+    // Update "Show All" checkbox state
+    const allChecked = showStaffAdmin && showTutor && showHeadOfYear && showSubjectTeacher;
+    document.getElementById('filter-all').checked = allChecked;
+    
+    // Filter students
+    const filteredStudents = window.linkedStudentsData.filter(student => {
+      return (showStaffAdmin && student.connections.isStaffAdmin) ||
+             (showTutor && student.connections.isTutor) ||
+             (showHeadOfYear && student.connections.isHeadOfYear) ||
+             (showSubjectTeacher && student.connections.isSubjectTeacher);
+    });
+    
+    // Update the list
+    document.getElementById('linked-students-list').innerHTML = renderLinkedStudentsList(filteredStudents);
+  }
+
+  /**
+   * Show reallocation modal for a student
+   */
+  async function showReallocateModal(studentId, currentStaffId, connections) {
+    try {
+      // Get current staff member
+      const currentStaff = staffData.find(s => s.id === currentStaffId);
+      const currentStaffEmail = currentStaff ? currentStaff.field_70 : '';
+      
+      // Get all staff members for dropdown
+      const allStaff = staffData.filter(s => s.field_70 !== currentStaffEmail);
+      
+      // Get student info
+      const student = window.linkedStudentsData.find(s => s.id === studentId);
+      if (!student) {
+        showError('Student not found');
+        return;
+      }
+      
+      const modalContent = `
+        <div class="vespa-reallocation-modal">
+          <h4>Reallocate Student: ${student.field_90}</h4>
+          <p style="color: #6b7280; margin-bottom: 20px;">
+            Select which roles you want to reallocate and choose the new staff member for each role.
+          </p>
+          
+          <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; margin-bottom: 20px; border-radius: 4px;">
+            <strong>⚠️ Important:</strong> This will remove the student's connection to ${currentStaff ? currentStaff.field_69 : 'the current staff member'} 
+            for the selected roles and assign them to the new staff member.
+          </div>
+          
+          ${connections.isTutor ? `
+            <div class="vespa-reallocation-role">
+              <label>
+                <input type="checkbox" id="reallocate-tutor" checked> 
+                Reallocate as Tutor
+              </label>
+              <select id="new-tutor" style="margin-top: 8px;">
+                <option value="">Select new tutor...</option>
+                ${allStaff.map(staff => `
+                  <option value="${staff.field_70}">${staff.field_69} (${staff.field_70})</option>
+                `).join('')}
+              </select>
+            </div>
+          ` : ''}
+          
+          ${connections.isHeadOfYear ? `
+            <div class="vespa-reallocation-role">
+              <label>
+                <input type="checkbox" id="reallocate-hoy" checked> 
+                Reallocate as Head of Year
+              </label>
+              <select id="new-hoy" style="margin-top: 8px;">
+                <option value="">Select new Head of Year...</option>
+                ${allStaff.map(staff => `
+                  <option value="${staff.field_70}">${staff.field_69} (${staff.field_70})</option>
+                `).join('')}
+              </select>
+            </div>
+          ` : ''}
+          
+          ${connections.isSubjectTeacher ? `
+            <div class="vespa-reallocation-role">
+              <label>
+                <input type="checkbox" id="reallocate-teacher" checked> 
+                Reallocate as Subject Teacher
+              </label>
+              <select id="new-teacher" style="margin-top: 8px;">
+                <option value="">Select new Subject Teacher...</option>
+                ${allStaff.map(staff => `
+                  <option value="${staff.field_70}">${staff.field_69} (${staff.field_70})</option>
+                `).join('')}
+              </select>
+            </div>
+          ` : ''}
+          
+          ${!connections.isTutor && !connections.isHeadOfYear && !connections.isSubjectTeacher ? `
+            <p style="color: #6b7280; padding: 20px; text-align: center;">
+              This student has no reallocatable roles with this staff member. 
+              Staff Admin connections cannot be reallocated here.
+            </p>
+          ` : ''}
+          
+          <div style="text-align: right; margin-top: 20px;">
+            <button class="vespa-button secondary" onclick="window.closeModal()">Cancel</button>
+            ${connections.isTutor || connections.isHeadOfYear || connections.isSubjectTeacher ? `
+              <button class="vespa-button primary" onclick="window.VESPAAccountManagement.performReallocation('${studentId}', '${currentStaffEmail}')" 
+                style="margin-left: 10px;">
+                Confirm Reallocation
+              </button>
+            ` : ''}
+          </div>
+        </div>
+      `;
+      
+      showModal('Reallocate Student', modalContent, { width: '600px' });
+    } catch (error) {
+      debugLog('Error showing reallocate modal:', error);
+      showError('Failed to load reallocation options');
+    }
+  }
+  
+  /**
+   * Perform student reallocation
+   */
+  async function performReallocation(studentId, currentStaffEmail) {
+    try {
+      const reallocations = {};
+      
+      // Check which roles to reallocate
+      if (document.getElementById('reallocate-tutor')?.checked) {
+        const newTutor = document.getElementById('new-tutor').value;
+        if (!newTutor) {
+          showError('Please select a new tutor');
+          return;
+        }
+        reallocations.tutor = { from: currentStaffEmail, to: newTutor };
+      }
+      
+      if (document.getElementById('reallocate-hoy')?.checked) {
+        const newHoy = document.getElementById('new-hoy').value;
+        if (!newHoy) {
+          showError('Please select a new Head of Year');
+          return;
+        }
+        reallocations.headOfYear = { from: currentStaffEmail, to: newHoy };
+      }
+      
+      if (document.getElementById('reallocate-teacher')?.checked) {
+        const newTeacher = document.getElementById('new-teacher').value;
+        if (!newTeacher) {
+          showError('Please select a new Subject Teacher');
+          return;
+        }
+        reallocations.subjectTeacher = { from: currentStaffEmail, to: newTeacher };
+      }
+      
+      if (Object.keys(reallocations).length === 0) {
+        showError('No roles selected for reallocation');
+        return;
+      }
+      
+      // Close the modal and show loading
+      closeModal();
+      showLoadingModal('Reallocating student connections...');
+      
+      // Make API call
+      const response = await $.ajax({
+        url: `${API_BASE_URL}account/reallocate-student`,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+          studentId,
+          reallocations
+        }),
+        xhrFields: { withCredentials: true }
+      });
+      
+      if (response.success) {
+        closeModal();
+        showSuccess('Student successfully reallocated');
+        
+        // Refresh the linked students list
+        await viewLinkedAccounts(window.currentStaffId, 'staff');
+      } else {
+        throw new Error(response.message || 'Failed to reallocate student');
+      }
+    } catch (error) {
+      closeModal();
+      debugLog('Error reallocating student:', error);
+      showError(`Failed to reallocate: ${error.message}`);
+    }
   }
 
   /**
