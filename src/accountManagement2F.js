@@ -1263,6 +1263,11 @@
     // Load initial data
     debugLog('Loading initial staff data');
     console.log('[VESPA AM] About to load initial staff data');
+    
+    // Ensure student-only actions are hidden initially (since we start with staff view)
+    const studentOnlyActions = document.querySelectorAll('.student-only-action');
+    studentOnlyActions.forEach(btn => btn.style.display = 'none');
+    
     loadAccountData('staff');
   }
 
@@ -1349,6 +1354,10 @@
         <button class="vespa-button primary resend-email" onclick="window.VESPAAccountManagement.resendWelcomeEmails()">
           ✉️ Resend Welcome Email(s)
         </button>
+        <button class="vespa-button secondary student-only-action" onclick="window.VESPAAccountManagement.moveUpYearGroup()" 
+          style="display: none;">
+          🎓 Move Up Yr Gp
+        </button>
         <button class="vespa-button secondary" onclick="window.VESPAAccountManagement.deleteAccounts()" 
           style="background: #dc3545; color: white;">
           🗑️ Delete Selected
@@ -1398,12 +1407,19 @@
     const roleFilter = document.getElementById('role-filter-group');
     const yearFilter = document.getElementById('year-filter-group');
     
+    // Update student-only actions visibility
+    const studentOnlyActions = document.querySelectorAll('.student-only-action');
+    
     if (view === 'staff') {
       roleFilter.style.display = 'block';
       yearFilter.style.display = 'none';
+      // Hide student-only actions
+      studentOnlyActions.forEach(btn => btn.style.display = 'none');
     } else {
       roleFilter.style.display = 'none';
       yearFilter.style.display = 'block';
+      // Show student-only actions
+      studentOnlyActions.forEach(btn => btn.style.display = 'inline-block');
     }
 
     // Clear filters
@@ -2659,6 +2675,65 @@
   }
 
   /**
+   * Move up selected students by one year group
+   */
+  async function moveUpYearGroup() {
+    const selectedIds = getSelectedAccountIds();
+    
+    if (selectedIds.length === 0) {
+      showError('Please select at least one student to move up');
+      return;
+    }
+    
+    // Confirm action
+    const confirmMessage = selectedIds.length === 1 
+      ? 'Are you sure you want to move this student up by one year group?' 
+      : `Are you sure you want to move ${selectedIds.length} students up by one year group?`;
+      
+    if (!confirm(confirmMessage + '\n\nThis will update their year group across all related records.')) {
+      return;
+    }
+    
+    try {
+      showLoadingModal('Moving students up to next year group...');
+      
+      const response = await $.ajax({
+        url: `${API_BASE_URL}account/move-up-year-group`,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+          studentIds: selectedIds
+        }),
+        xhrFields: { withCredentials: true }
+      });
+      
+      closeLoadingModal();
+      
+      if (response.success) {
+        showSuccessModal(response.message, () => {
+          refreshData();
+        });
+      } else {
+        showError(response.message || 'Failed to move up year groups');
+      }
+      
+      if (response.errors && response.errors.length > 0) {
+        console.error('Errors during year group update:', response.errors);
+        // Show first few errors
+        const errorSample = response.errors.slice(0, 3)
+          .map(err => `Student ${err.studentId}: ${err.error}`)
+          .join('\n');
+        showError(`Some students had errors:\n${errorSample}${response.errors.length > 3 ? '\n... and more' : ''}`);
+      }
+      
+    } catch (error) {
+      closeLoadingModal();
+      debugLog('Error moving up year groups:', error);
+      showError(`Failed to move up year groups: ${error.message || 'Unknown error'}`);
+    }
+  }
+
+  /**
    * Refresh current data
    */
   function refreshData() {
@@ -3206,6 +3281,7 @@
     },
     hide: hideAccountManagement,
     initialize: initialize,
+    moveUpYearGroup: moveUpYearGroup,
     // Add debug method
     debug: function() {
       console.log('[VESPA AM] Debug info:', {
@@ -3225,6 +3301,7 @@
   window.viewLinkedAccounts = viewLinkedAccounts;
   window.reallocateStudent = reallocateStudent;
   window.editStudentActivities = editStudentActivities;
+  window.moveUpYearGroup = moveUpYearGroup;
   window.handleStaffAdminToggle = handleStaffAdminToggle;
   window.toggleRowSelection = toggleRowSelection;
   window.toggleTableSelectAll = toggleTableSelectAll;
