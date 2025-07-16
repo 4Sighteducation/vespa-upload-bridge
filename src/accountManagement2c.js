@@ -983,6 +983,58 @@
       #staff-admin-warning strong {
         color: #92400e;
       }
+
+      /* Content area styles */
+      #vespa-am-content {
+        min-height: 400px;
+        position: relative;
+      }
+
+      /* Table container styles */
+      #staff-table-container,
+      #student-table-container {
+        width: 100%;
+        overflow: visible;
+      }
+
+      /* Loading state */
+      .vespa-am-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 60px 20px;
+        text-align: center;
+      }
+
+      .vespa-am-loading .vespa-spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #1e40af;
+        border-radius: 50%;
+        animation: vespa-am-spin 1s linear infinite;
+        margin-bottom: 16px;
+      }
+
+      @keyframes vespa-am-spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+
+      .vespa-am-loading p {
+        color: #64748b;
+        font-size: 14px;
+        margin: 0;
+      }
+
+      /* Empty state */
+      .vespa-am-empty {
+        padding: 60px 20px;
+        text-align: center;
+        color: #64748b;
+        font-size: 16px;
+      }
     `;
 
     const styleSheet = document.createElement('style');
@@ -1315,6 +1367,10 @@
     } else {
       studentData = accounts;
     }
+    
+    // Create the table container based on type
+    debugLog(`Creating ${type}-table-container in content area`);
+    contentArea.innerHTML = `<div id="${type}-table-container"></div>`;
     
     // Build table based on type
     debugLog(`Calling display${type.charAt(0).toUpperCase() + type.slice(1)}Table`);
@@ -2595,4 +2651,3 @@
   window.toggleTableSelectAll = toggleTableSelectAll;
 
 })();
-
