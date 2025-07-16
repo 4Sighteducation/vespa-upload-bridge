@@ -149,6 +149,12 @@
     debugLog("jQuery available as $:", typeof $ !== 'undefined');
     debugLog("jQuery available as jQuery:", typeof jQuery !== 'undefined');
     
+    // Ensure jQuery is available globally for DataTables
+    if (typeof $ !== 'undefined' && typeof jQuery === 'undefined') {
+      window.jQuery = $;
+      debugLog("Assigned $ to window.jQuery for DataTables compatibility");
+    }
+    
     // Ensure jQuery is available
     if (typeof $ === 'undefined' && typeof jQuery === 'undefined') {
       debugLog("jQuery still not available, retrying in 1 second...", null, 'warn');
@@ -165,16 +171,11 @@
     
     debugLog("jQuery version:", jq.fn ? jq.fn.jquery : "unknown");
     
-    // Load modern DataTables that works with jQuery 1.8+
+    // Load DataTables core
     const dtScript = document.createElement('script');
     dtScript.src = 'https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js';
     dtScript.onload = () => {
       debugLog("DataTables core loaded successfully");
-      
-      // Check if DataTable is available
-      if (jq && jq.fn && jq.fn.DataTable) {
-        debugLog("DataTable plugin confirmed available on jQuery.fn");
-      }
       
       // Load DataTables Buttons extension
       const buttonsScript = document.createElement('script');
@@ -182,24 +183,30 @@
       buttonsScript.onload = () => {
         debugLog("DataTables Buttons loaded");
         
-        // Load button dependencies in parallel
-        const scripts = [
-          { src: 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', name: 'JSZip' },
-          { src: 'https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js', name: 'HTML5 buttons' },
-          { src: 'https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js', name: 'Print button' }
-        ];
+        // Load export buttons
+        const printScript = document.createElement('script');
+        printScript.src = 'https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js';
+        printScript.onload = () => {
+          debugLog("Print button loaded");
+        };
+        document.head.appendChild(printScript);
         
-        scripts.forEach(script => {
-          const s = document.createElement('script');
-          s.src = script.src;
-          s.onload = () => debugLog(`${script.name} loaded`);
-          document.head.appendChild(s);
-        });
+        const html5Script = document.createElement('script');
+        html5Script.src = 'https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js';
+        html5Script.onload = () => {
+          debugLog("HTML5 buttons loaded");
+        };
+        document.head.appendChild(html5Script);
+        
+        // Load JSZip for Excel export
+        const jszipScript = document.createElement('script');
+        jszipScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+        jszipScript.onload = () => {
+          debugLog("JSZip loaded");
+        };
+        document.head.appendChild(jszipScript);
       };
       document.head.appendChild(buttonsScript);
-    };
-    dtScript.onerror = (error) => {
-      debugLog("Failed to load DataTables:", error, 'error');
     };
     document.head.appendChild(dtScript);
   }
@@ -1321,17 +1328,17 @@
   /**
    * Display staff table
    */
-  function displayStaffTable(data) {
-    debugLog(`displayStaffTable called with ${data.length} records`);
-    const content = document.getElementById('vespa-am-content');
+  function displayStaffTable(accounts) {
+    debugLog("displayStaffTable called with " + accounts.length + " records");
     
-    if (!content) {
-      debugLog('ERROR: vespa-am-content element not found!');
+    const tableContainer = document.getElementById('staff-table-container');
+    if (!tableContainer) {
+      debugLog("staff-table-container not found in DOM", null, 'error');
       return;
     }
     
-    if (data.length === 0) {
-      content.innerHTML = `
+    if (accounts.length === 0) {
+      tableContainer.innerHTML = `
         <div class="vespa-am-empty">
           <p>No staff accounts found</p>
         </div>
@@ -1339,7 +1346,7 @@
       return;
     }
 
-    content.innerHTML = `
+    tableContainer.innerHTML = `
       <div class="vespa-am-table-container">
         <table id="staff-datatable" class="vespa-am-table display compact">
           <thead>
@@ -1361,13 +1368,16 @@
             </tr>
           </thead>
           <tbody>
-            ${data.map(staff => createStaffRow(staff)).join('')}
+            ${accounts.map(staff => createStaffRow(staff)).join('')}
           </tbody>
         </table>
       </div>
     `;
 
     debugLog('Table HTML added to DOM');
+
+    // DataTables retry counter
+    let dataTableRetryCount = 0;
 
     // Wait for DataTables to be ready, then initialize
     const waitForDataTables = () => {
@@ -2585,3 +2595,4 @@
   window.toggleTableSelectAll = toggleTableSelectAll;
 
 })();
+
