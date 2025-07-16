@@ -3253,13 +3253,30 @@
     console.log('[VESPA AM] proceedWithInitialization called');
     initialize();
     
+    // Check for pending show flag
+    console.log('[VESPA AM] Checking for _pendingShow flag...', {
+      hasVESPAAccountManagement: !!window.VESPAAccountManagement,
+      pendingShow: window.VESPAAccountManagement ? window.VESPAAccountManagement._pendingShow : 'N/A',
+      isInitialized: isInitialized
+    });
+    
     // If the show method was called before initialization, show now
     if (window.VESPAAccountManagement && window.VESPAAccountManagement._pendingShow) {
       console.log('[VESPA AM] _pendingShow flag found, calling showAccountManagement()');
-      showAccountManagement();
-      delete window.VESPAAccountManagement._pendingShow;
+      // Small delay to ensure everything is ready
+      setTimeout(() => {
+        showAccountManagement();
+        delete window.VESPAAccountManagement._pendingShow;
+      }, 100);
     } else {
-      console.log('[VESPA AM] No _pendingShow flag, not showing interface');
+      console.log('[VESPA AM] No _pendingShow flag, not showing interface automatically');
+      // Try to show anyway if we're in a regular user context (not super user emulation)
+      if (!window.selectedSchool && window.userContext && window.userContext.userId) {
+        console.log('[VESPA AM] Regular user detected, showing interface anyway');
+        setTimeout(() => {
+          showAccountManagement();
+        }, 100);
+      }
     }
   }
 
