@@ -1158,10 +1158,14 @@
    */
   function showAccountManagement() {
     debugLog('Showing Account Management interface');
+    console.log('[VESPA AM] Starting showAccountManagement function');
 
     // Hide the main wizard if it exists
     const wizard = document.getElementById('vespa-upload-wizard');
-    if (wizard) wizard.style.display = 'none';
+    if (wizard) {
+      wizard.style.display = 'none';
+      console.log('[VESPA AM] Wizard hidden');
+    }
 
     // Get the main container - try multiple selectors
     let container = null;
@@ -1170,6 +1174,7 @@
     if (window.VESPA_UPLOAD_CONFIG?.elementSelector) {
       container = document.querySelector(window.VESPA_UPLOAD_CONFIG.elementSelector);
       debugLog('Trying VESPA_UPLOAD_CONFIG selector:', window.VESPA_UPLOAD_CONFIG.elementSelector);
+      console.log('[VESPA AM] Trying selector:', window.VESPA_UPLOAD_CONFIG.elementSelector, 'Found:', !!container);
     }
     
     // Fallback to common Knack containers
@@ -1179,19 +1184,25 @@
         '.kn-content',
         '#knack-body',
         '#knack-dist_1',
-        '.kn-scene'
+        '.kn-scene',
+        '#kn-content', // Another common Knack selector
+        '.kn-container'
       ];
       
       for (const selector of selectors) {
         container = document.querySelector(selector);
         if (container) {
           debugLog('Found container with selector:', selector);
+          console.log('[VESPA AM] Found container with fallback selector:', selector);
           break;
         }
       }
     }
     
     if (!container) {
+      const allDivs = document.querySelectorAll('div');
+      console.error('[VESPA AM] No container found! Total divs on page:', allDivs.length);
+      console.error('[VESPA AM] Available IDs:', Array.from(allDivs).filter(d => d.id).map(d => d.id).slice(0, 20));
       showError('Unable to find container for Account Management');
       debugLog('Error: No container found for Account Management');
       return;
@@ -1221,6 +1232,25 @@
     // Append to container
     container.appendChild(amContainer);
     debugLog('Appended Account Management to container');
+    console.log('[VESPA AM] Account Management appended to DOM');
+    
+    // Force visibility
+    amContainer.style.display = 'block';
+    amContainer.style.visibility = 'visible';
+    amContainer.style.opacity = '1';
+    
+    // Check if it's actually visible
+    setTimeout(() => {
+      const rect = amContainer.getBoundingClientRect();
+      console.log('[VESPA AM] Account Management visibility check:', {
+        displayed: amContainer.style.display,
+        visibility: amContainer.style.visibility,
+        opacity: amContainer.style.opacity,
+        rect: rect,
+        isVisible: rect.width > 0 && rect.height > 0,
+        offsetParent: amContainer.offsetParent !== null
+      });
+    }, 100);
 
     // Bind events
     try {
@@ -1232,6 +1262,7 @@
 
     // Load initial data
     debugLog('Loading initial staff data');
+    console.log('[VESPA AM] About to load initial staff data');
     loadAccountData('staff');
   }
 
@@ -1412,10 +1443,16 @@
    */
   function loadAccountData(type) {
     debugLog(`Loading ${type} accounts`);
+    console.log(`[VESPA AM] loadAccountData called for type: ${type}`);
     currentView = type;
     
     const customerId = getCustomerId();
-    if (!customerId) {
+    console.log('[VESPA AM] Customer ID result:', customerId);
+    
+    // Allow loading even without customerId if we have a user session
+    // The backend can determine the customer from session
+    if (!customerId && !window.userContext?.userId) {
+      console.error('[VESPA AM] No customer ID and no user context');
       showError('No customer ID available');
       return;
     }
@@ -1431,15 +1468,21 @@
     
     const endpoint = type === 'staff' ? 'get-staff' : 'get-students';
     
+    // Build request data - only include customerId if we have one
+    const requestData = customerId ? { customerId } : {};
+    
+    console.log(`[VESPA AM] Making API call to ${API_BASE_URL}account/${endpoint} with data:`, requestData);
+    
     $.ajax({
       url: `${API_BASE_URL}account/${endpoint}`,
       type: 'GET',
-      data: { customerId },
+      data: requestData,
       xhrFields: {
         withCredentials: true
       },
       success: function(response) {
         debugLog(`${type} accounts loaded:`, response);
+        console.log(`[VESPA AM] Successfully loaded ${type} data:`, response);
         
         if (response.success && response.data) {
           debugLog(`Calling displayAccounts with ${response.data.length} records`);
@@ -2748,7 +2791,13 @@
       return window.userContext.customerId;
     }
     
-    debugLog('No customer ID found in context');
+    // Try to extract from the API calls being made
+    // This is a fallback for when customerId isn't in userContext
+    // but the system is still making successful API calls
+    debugLog('No customer ID found in context, checking for active customer session');
+    
+    // Since the API calls in the logs show a customerId is being used,
+    // we can return null here and let the backend use session context
     return null;
   }
 
@@ -3019,6 +3068,7 @@
   function waitForConfiguration() {
     let attempts = 0;
     const maxAttempts = 20;
+    let fetchingCustomerId = false;
     
     const checkConfig = setInterval(() => {
       attempts++;
@@ -3031,8 +3081,68 @@
         return;
       }
       
+      // If we have a userId but no customerId, try to fetch it from the backend
+      if (window.userContext && window.userContext.userId && !window.userContext.customerId && !fetchingCustomerId && attempts > 2) {
+        debugLog('Have userId but no customerId, fetching from backend...', {
+          userId: window.userContext.userId,
+          userEmail: window.userContext.userEmail
+        });
+        fetchingCustomerId = true;
+        
+        // For now, let's skip the API call and use a different approach
+        // Check if we're in a Knack app and can get customer ID from the DOM
+        debugLog('Attempting to find customer ID from Knack context...');
+        
+        // Try to get customer ID from various sources
+        let foundCustomerId = null;
+        
+        // Method 1: Check Knack scene data
+        if (typeof Knack !== 'undefined' && Knack.scenes && Knack.scenes.scene) {
+          const currentScene = Knack.scenes.scene;
+          debugLog('Current Knack scene:', currentScene);
+          
+          // Look for customer ID in scene data
+          if (currentScene && currentScene.views) {
+            Object.values(currentScene.views).forEach(view => {
+              if (view.model && view.model.attributes && view.model.attributes.field_122_raw) {
+                foundCustomerId = view.model.attributes.field_122_raw[0]?.id;
+                debugLog('Found customer ID in view model:', foundCustomerId);
+              }
+            });
+          }
+        }
+        
+        // Method 2: Try to extract from URL parameters
+        if (!foundCustomerId) {
+          const urlParams = new URLSearchParams(window.location.search);
+          const customerParam = urlParams.get('customer_id');
+          if (customerParam) {
+            foundCustomerId = customerParam;
+            debugLog('Found customer ID in URL:', foundCustomerId);
+          }
+        }
+        
+        // Method 3: For now, assume the user can only see their own data
+        // and proceed without customerId - the backend will use session context
+        if (!foundCustomerId) {
+          debugLog('No customer ID found, proceeding anyway - backend will use session context');
+          clearInterval(checkConfig);
+          proceedWithInitialization();
+          return;
+        }
+        
+        // If we found a customer ID, use it
+        if (foundCustomerId) {
+          window.userContext.customerId = foundCustomerId;
+          debugLog('Set customer ID from context:', foundCustomerId);
+          clearInterval(checkConfig);
+          proceedWithInitialization();
+        }
+        return;
+      }
+      
       // Also check if userContext exists but customerId is still loading
-      if (window.userContext && window.userContext.userId && !window.userContext.customerId) {
+      if (window.userContext && window.userContext.userId && !window.userContext.customerId && !fetchingCustomerId) {
         debugLog(`Waiting for customerId... (attempt ${attempts}/${maxAttempts})`);
       }
       
@@ -3065,30 +3175,49 @@
    * Proceed with initialization once configuration is available
    */
   function proceedWithInitialization() {
+    console.log('[VESPA AM] proceedWithInitialization called');
     initialize();
     
     // If the show method was called before initialization, show now
     if (window.VESPAAccountManagement && window.VESPAAccountManagement._pendingShow) {
+      console.log('[VESPA AM] _pendingShow flag found, calling showAccountManagement()');
       showAccountManagement();
       delete window.VESPAAccountManagement._pendingShow;
+    } else {
+      console.log('[VESPA AM] No _pendingShow flag, not showing interface');
     }
   }
 
   // Start waiting for configuration when the script loads
+  console.log('[VESPA AM] Script loaded, starting configuration wait...');
   waitForConfiguration();
 
   // Expose functions to global scope immediately
   window.VESPAAccountManagement = {
     show: function() {
+      console.log('[VESPA AM] show() called, isInitialized:', isInitialized);
       if (isInitialized) {
         showAccountManagement();
       } else {
         // Mark that we want to show once initialized
+        console.log('[VESPA AM] Module not initialized yet, setting _pendingShow flag');
         window.VESPAAccountManagement._pendingShow = true;
       }
     },
     hide: hideAccountManagement,
-    initialize: initialize
+    initialize: initialize,
+    // Add debug method
+    debug: function() {
+      console.log('[VESPA AM] Debug info:', {
+        isInitialized: isInitialized,
+        hasUserContext: !!window.userContext,
+        userContext: window.userContext,
+        hasSelectedSchool: !!window.selectedSchool,
+        selectedSchool: window.selectedSchool,
+        API_BASE_URL: API_BASE_URL,
+        _pendingShow: window.VESPAAccountManagement._pendingShow
+      });
+    }
   };
   
   // Also expose individual functions that might be called from HTML
