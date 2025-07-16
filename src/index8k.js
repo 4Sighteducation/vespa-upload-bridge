@@ -4238,9 +4238,9 @@ function bindStepEvents() {
   window.showLoadFromLeadsModal = showLoadFromLeadsModal;
   window.closeLeadsModal = closeLeadsModal;
   window.loadLeadData = loadLeadData;
-  window.selectLead = selectLead;
-  window.filterLeads = filterLeads;
-  window.resetLeadForm = resetLeadForm;
+  // window.selectLead = selectLead; // Commented out - selectLead is defined later as window.selectLead
+  // window.filterLeads = filterLeads; // Commented out - filterLeads is defined later as window.filterLeads
+  // window.resetLeadForm = resetLeadForm; // Commented out - resetLeadForm is defined later as window.resetLeadForm
   
   // KS5 Workflow functions
   window.showKS5WorkflowInterface = showKS5WorkflowInterface;
@@ -5391,8 +5391,6 @@ function bindStepEvents() {
       showError(`Failed to regenerate link: ${error.message}`);
     }
   }
-  
-  // These functions are already defined as window.functionName above, so no need to reassign
 
   /**
    * Show the Academic Data Management interface
@@ -8155,9 +8153,9 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       // Show loading indicator
       showModal('Loading Account Management', '<div style="text-align: center; padding: 20px;"><div class="vespa-spinner"></div><p>Loading account management system...</p></div>');
       
-              // Load the account management module from CDN
-        // Update this to match your actual file version
-        const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/accountManagement2j.js';
+      // Load the account management module from CDN
+      // Update this to match your actual file version
+      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/accountManagement2k.js';
       
       try {
         await loadScript(scriptUrl);
@@ -8211,6 +8209,5 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
 
 
 
-    
     
 
