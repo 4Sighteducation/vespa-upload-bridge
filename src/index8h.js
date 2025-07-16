@@ -4228,10 +4228,10 @@ function bindStepEvents() {
   
   // Customer Management and Lead functions
   window.handleFlowTypeChange = handleFlowTypeChange;
-  window.handleAccountTypeChange = handleAccountTypeChange;
-  window.handleCycleModeChange = handleCycleModeChange;
-  window.calculateTotal = calculateTotal;
-  window.checkEmailAvailability = checkEmailAvailability;
+  // handleAccountTypeChange is defined directly on window later
+  // handleCycleModeChange is defined directly on window later
+  // calculateTotal is defined directly on window later
+  // checkEmailAvailability is defined directly on window later
   window.loadCustomDataTable = loadCustomDataTable;
   window.showLeadForm = showLeadForm;
   window.handleProductChange = handleProductChange;
@@ -6203,24 +6203,26 @@ function bindStepEvents() {
         handleFlowTypeChange();
         
         // Ensure calculateTotal is available
-        if (typeof calculateTotal === 'function' || typeof window.calculateTotal === 'function') {
-            calculateTotal();
+        if (typeof window.calculateTotal === 'function') {
+            window.calculateTotal();
             // Also call it again after another small delay in case values aren't loaded yet
-            setTimeout(calculateTotal, 100);
-            setTimeout(calculateTotal, 500); // One more time to be sure
+            setTimeout(() => window.calculateTotal(), 100);
+            setTimeout(() => window.calculateTotal(), 500); // One more time to be sure
         } else {
             debugLog("calculateTotal function not found during initialization", null, 'error');
         }
         
         // Check initial account type
-        handleAccountTypeChange();
+        if (typeof window.handleAccountTypeChange === 'function') {
+            window.handleAccountTypeChange();
+        }
     }, 50);
   }
   
   /**
    * Handle account type change
    */
-  window.handleAccountTypeChange = handleAccountTypeChange;
+  // handleAccountTypeChange is defined directly on window below
   
   /**
    * Check email availability (placeholder function)
@@ -8155,7 +8157,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       
               // Load the account management module from CDN
         // Update this to match your actual file version
-        const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/accountManagement2f.js';
+        const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/accountManagement2h.js';
       
       try {
         await loadScript(scriptUrl);
@@ -8181,7 +8183,16 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
         if (wizard) wizard.style.display = 'none';
         
         // Show the account management interface
-        window.VESPAAccountManagement.show();
+        // Add a small delay to ensure the module is fully ready
+        setTimeout(() => {
+          debugLog("Calling VESPAAccountManagement.show() after delay", null, 'info');
+          window.VESPAAccountManagement.show();
+          
+          // Debug the state
+          if (window.VESPAAccountManagement.debug) {
+            window.VESPAAccountManagement.debug();
+          }
+        }, 300);
       } else {
         throw new Error('Account Management module failed to initialize');
       }
