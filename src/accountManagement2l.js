@@ -2717,6 +2717,12 @@
       return;
     }
     
+    // Use async processing for large batches
+    if (selectedIds.length > 20) {
+      moveUpYearGroupAsync(selectedIds);
+      return;
+    }
+    
     try {
       // Show loading modal with progress information
       showLoadingModal(`
@@ -2742,20 +2748,49 @@
       closeLoadingModal();
       
       if (response.success) {
-        showSuccessModal(response.message, () => {
-          refreshData();
-        });
+        // Check if there were any errors
+        if (response.errors && response.errors.length > 0) {
+          // Create a detailed message with errors
+          let modalContent = `
+            <div style="text-align: left;">
+              <h3 style="color: #28a745; margin-bottom: 15px;">✓ ${response.message}</h3>
+              <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; padding: 15px; margin-top: 15px;">
+                <h4 style="color: #856404; margin-bottom: 10px;">⚠️ The following students could not be updated:</h4>
+                <div style="max-height: 200px; overflow-y: auto;">
+          `;
+          
+          // Add each error with student details
+          for (const error of response.errors) {
+            modalContent += `
+              <div style="padding: 8px 0; border-bottom: 1px solid #ddd;">
+                <strong>Name:</strong> ${error.studentName || 'Unknown'}<br>
+                <strong>Email:</strong> ${error.studentEmail || 'Unknown'}<br>
+                <strong>ID:</strong> ${error.studentId}<br>
+                <strong>Reason:</strong> <span style="color: #dc3545;">${error.error}</span>
+              </div>
+            `;
+          }
+          
+          modalContent += `
+                </div>
+                <p style="margin-top: 10px; color: #666; font-size: 14px;">
+                  Please check these students manually and update their year groups if needed.
+                </p>
+              </div>
+            </div>
+          `;
+          
+          showModal('Update Complete', modalContent, () => {
+            refreshData();
+          });
+        } else {
+          // All successful
+          showSuccessModal(response.message, () => {
+            refreshData();
+          });
+        }
       } else {
         showError(response.message || 'Failed to move up year groups');
-      }
-      
-      if (response.errors && response.errors.length > 0) {
-        console.error('Errors during year group update:', response.errors);
-        // Show first few errors
-        const errorSample = response.errors.slice(0, 3)
-          .map(err => `Student ${err.studentId}: ${err.error}`)
-          .join('\n');
-        showError(`Some students had errors:\n${errorSample}${response.errors.length > 3 ? '\n... and more' : ''}`);
       }
       
     } catch (error) {
@@ -2763,6 +2798,158 @@
       debugLog('Error moving up year groups:', error);
       showError(`Failed to move up year groups: ${error.message || 'Unknown error'}`);
     }
+  }
+
+  /**
+   * Move up year group using background processing (for large batches)
+   */
+  async function moveUpYearGroupAsync(studentIds) {
+    try {
+      // Start the background job
+      const response = await $.ajax({
+        url: `${API_BASE_URL}account/move-up-year-group-async`,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+          studentIds: studentIds
+        }),
+        xhrFields: { withCredentials: true }
+      });
+      
+      if (response.success) {
+        // Show progress modal
+        showProgressModal(response.jobId, studentIds.length);
+      } else {
+        showError(response.message || 'Failed to start year group update');
+      }
+      
+    } catch (error) {
+      debugLog('Error starting async year group update:', error);
+      showError(`Failed to start year group update: ${error.message || 'Unknown error'}`);
+    }
+  }
+  
+  /**
+   * Show progress modal for background job
+   */
+  function showProgressModal(jobId, totalStudents) {
+    const modalContent = `
+      <div style="text-align: center;">
+        <div class="vespa-am-spinner"></div>
+        <h3>Processing Year Group Updates</h3>
+        <p style="margin: 20px 0;">
+          <strong>Total Students:</strong> ${totalStudents}<br>
+          <strong>Status:</strong> <span id="job-status">Starting...</span>
+        </p>
+        <div style="margin: 20px 0;">
+          <div style="background: #e0e0e0; border-radius: 10px; height: 30px; overflow: hidden;">
+            <div id="progress-bar" style="background: #007bff; height: 100%; width: 0%; transition: width 0.3s ease;">
+              <span id="progress-text" style="color: white; line-height: 30px; font-weight: bold;">0%</span>
+            </div>
+          </div>
+        </div>
+        <p id="job-details" style="color: #666; font-size: 14px;">
+          Processing in the background. You can close this window if needed.
+        </p>
+        <button class="vespa-button secondary" onclick="window.VESPAAccountManagement.cancelJobCheck()">
+          Close
+        </button>
+      </div>
+    `;
+    
+    showModal('Year Group Update Progress', modalContent);
+    
+    // Start checking job status
+    const checkInterval = setInterval(async () => {
+      try {
+        const status = await $.ajax({
+          url: `${API_BASE_URL}account/year-group-job-status/${jobId}`,
+          type: 'GET',
+          xhrFields: { withCredentials: true }
+        });
+        
+        // Update progress
+        $('#progress-bar').css('width', status.percentComplete + '%');
+        $('#progress-text').text(status.percentComplete + '%');
+        $('#job-status').text(`Processed ${status.processedStudents} of ${status.totalStudents} students`);
+        
+        if (status.status === 'completed') {
+          clearInterval(checkInterval);
+          window.currentJobInterval = null;
+          
+          closeModal();
+          
+          // Show results
+          if (status.errors && status.errors.length > 0) {
+            // Show detailed error modal
+            let resultContent = `
+              <div style="text-align: left;">
+                <h3 style="color: #28a745; margin-bottom: 15px;">✓ ${status.message}</h3>
+                <p><strong>Duration:</strong> ${status.duration}</p>
+                <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; padding: 15px; margin-top: 15px;">
+                  <h4 style="color: #856404; margin-bottom: 10px;">⚠️ The following students could not be updated:</h4>
+                  <div style="max-height: 200px; overflow-y: auto;">
+            `;
+            
+            for (const error of status.errors) {
+              resultContent += `
+                <div style="padding: 8px 0; border-bottom: 1px solid #ddd;">
+                  <strong>Name:</strong> ${error.studentName || 'Unknown'}<br>
+                  <strong>Email:</strong> ${error.studentEmail || 'Unknown'}<br>
+                  <strong>ID:</strong> ${error.studentId}<br>
+                  <strong>Reason:</strong> <span style="color: #dc3545;">${error.error}</span>
+                </div>
+              `;
+            }
+            
+            resultContent += `
+                  </div>
+                  <p style="margin-top: 10px; color: #666; font-size: 14px;">
+                    Please check these students manually and update their year groups if needed.
+                  </p>
+                </div>
+              </div>
+            `;
+            
+            showModal('Update Complete', resultContent, () => {
+              refreshData();
+            });
+          } else {
+            showSuccessModal(status.message + `\n\nCompleted in ${status.duration}`, () => {
+              refreshData();
+            });
+          }
+          
+        } else if (status.status === 'failed') {
+          clearInterval(checkInterval);
+          window.currentJobInterval = null;
+          closeModal();
+          showError(`Job failed: ${status.error || 'Unknown error'}`);
+        }
+        
+      } catch (error) {
+        if (error.status === 404) {
+          clearInterval(checkInterval);
+          window.currentJobInterval = null;
+          closeModal();
+          showError('Job not found. It may have expired.');
+        }
+      }
+    }, 2000); // Check every 2 seconds
+    
+    // Store interval reference for cancellation
+    window.currentJobInterval = checkInterval;
+  }
+  
+  /**
+   * Cancel job status checking
+   */
+  function cancelJobCheck() {
+    if (window.currentJobInterval) {
+      clearInterval(window.currentJobInterval);
+      window.currentJobInterval = null;
+    }
+    closeModal();
   }
 
   /**
@@ -3331,6 +3518,24 @@
     hide: hideAccountManagement,
     initialize: initialize,
     moveUpYearGroup: moveUpYearGroup,
+    cancelJobCheck: cancelJobCheck,
+    toggleRowSelection: toggleRowSelection,
+    toggleTableSelectAll: toggleTableSelectAll,
+    toggleSelectAll: toggleSelectAll,
+    viewLinkedAccounts: viewLinkedAccounts,
+    editStaffRoles: editStaffRoles,
+    syncStaffAdminConnections: syncStaffAdminConnections,
+    resendWelcomeEmails: resendWelcomeEmails,
+    resetPasswords: resetPasswords,
+    deleteAccounts: deleteAccounts,
+    confirmDelete: confirmDelete,
+    editStudentActivities: editStudentActivities,
+    closeModal: closeModal,
+    saveStaffRoles: saveStaffRoles,
+    reallocateStudent: reallocateStudent,
+    updateLinkedStaff: updateLinkedStaff,
+    saveActivities: saveActivities,
+    closeSuccessModal: closeSuccessModal,
     // Add debug method
     debug: function() {
       console.log('[VESPA AM] Debug info:', {
@@ -3356,4 +3561,3 @@
   window.toggleTableSelectAll = toggleTableSelectAll;
 
 })();
-
