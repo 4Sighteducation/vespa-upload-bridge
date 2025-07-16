@@ -1354,7 +1354,7 @@
         <button class="vespa-button primary resend-email" onclick="window.VESPAAccountManagement.resendWelcomeEmails()">
           ✉️ Resend Welcome Email(s)
         </button>
-        <button class="vespa-button secondary student-only-action" onclick="window.VESPAAccountManagement.moveUpYearGroup()" 
+        <button class="vespa-button secondary student-only-action" onclick="window.moveUpYearGroup()" 
           style="display: none;">
           🎓 Move Up Yr Gp
         </button>
@@ -3331,4 +3331,3 @@
   window.toggleTableSelectAll = toggleTableSelectAll;
 
 })();
-
