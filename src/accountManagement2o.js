@@ -101,6 +101,7 @@
       // Filter functions
       toggleAllFilters: toggleAllFilters,
       filterLinkedStudents: filterLinkedStudents,
+      changeViewMode: changeViewMode,
       
       // Modal functions
       showModal: showModal,
@@ -1205,22 +1206,7 @@
         font-weight: 500;
       }
 
-      .vespa-student-link-item {
-        border: 1px solid #e5e7eb;
-        border-radius: 6px;
-        padding: 15px;
-        margin-bottom: 10px;
-        background: white;
-        transition: all 0.2s;
-      }
-
-      .vespa-student-link-item:hover {
-        border-color: #9ca3af;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-      }
-
       .vespa-student-roles {
-        margin-top: 8px;
         font-size: 12px;
         color: #6b7280;
       }
@@ -1230,8 +1216,37 @@
         padding: 2px 8px;
         background: #f3f4f6;
         border-radius: 3px;
-        margin-right: 6px;
-        margin-top: 4px;
+        margin-right: 4px;
+        margin-bottom: 2px;
+      }
+      
+      .vespa-student-roles span.primary-role {
+        background: #dbeafe;
+        color: #1e40af;
+        font-weight: 600;
+      }
+      
+      /* Linked students table styles */
+      .vespa-linked-students-container table {
+        border-collapse: collapse;
+      }
+      
+      .vespa-linked-students-container th {
+        background: #f9fafb;
+        padding: 12px 8px;
+        font-weight: 600;
+        font-size: 13px;
+        border-bottom: 2px solid #e5e7eb;
+      }
+      
+      .vespa-linked-students-container td {
+        padding: 10px 8px;
+        border-bottom: 1px solid #f3f4f6;
+        font-size: 14px;
+      }
+      
+      .vespa-linked-students-container tr:hover {
+        background: #f9fafb;
       }
 
       .vespa-reallocation-controls {
@@ -2567,9 +2582,24 @@
    */
   async function viewLinkedAccounts(accountId, accountType) {
     try {
+      // Get user email and customer ID from somewhere
+      const userEmail = window.userEmail || localStorage.getItem('userEmail');
+      const customerId = window.customerId || localStorage.getItem('customerId');
+      
+      const queryParams = new URLSearchParams();
+      if (accountType === 'staff') {
+        queryParams.append('staffId', accountId);
+      } else {
+        queryParams.append('studentId', accountId);
+      }
+      
+      // Add context parameters if available
+      if (userEmail) queryParams.append('userEmail', userEmail);
+      if (customerId) queryParams.append('customerId', customerId);
+      
       const endpoint = accountType === 'staff' 
-        ? `account/get-linked-students?staffId=${accountId}`
-        : `account/get-linked-staff?studentId=${accountId}`;
+        ? `account/get-linked-students?${queryParams.toString()}`
+        : `account/get-linked-staff?${queryParams.toString()}`;
 
       const response = await $.ajax({
         url: `${API_BASE_URL}${endpoint}`,
@@ -2602,6 +2632,15 @@
     // Store students globally for filtering
     window.linkedStudentsData = students;
     window.currentStaffId = staffId;
+    window.currentViewMode = 'all';
+    
+    // Calculate counts for each role
+    const counts = {
+      staffAdmin: students.filter(s => s.connections.isStaffAdmin).length,
+      tutor: students.filter(s => s.connections.isTutor).length,
+      headOfYear: students.filter(s => s.connections.isHeadOfYear).length,
+      subjectTeacher: students.filter(s => s.connections.isSubjectTeacher).length
+    };
     
     const modalContent = `
       <div class="vespa-linked-students-container">
@@ -2626,25 +2665,38 @@
               <div class="vespa-role-toggle">
                 <label>
                   <input type="checkbox" id="filter-staff-admin" checked onchange="window.VESPAAccountManagement.filterLinkedStudents()">
-                  Staff Admin
+                  Staff Admin <span id="count-staff-admin" style="color: #6b7280; font-size: 12px;">(0)</span>
                 </label>
               </div>
               <div class="vespa-role-toggle">
                 <label>
                   <input type="checkbox" id="filter-tutor" checked onchange="window.VESPAAccountManagement.filterLinkedStudents()">
-                  Tutor
+                  Tutor <span id="count-tutor" style="color: #6b7280; font-size: 12px;">(0)</span>
                 </label>
               </div>
               <div class="vespa-role-toggle">
                 <label>
                   <input type="checkbox" id="filter-head-of-year" checked onchange="window.VESPAAccountManagement.filterLinkedStudents()">
-                  Head of Year
+                  Head of Year <span id="count-head-of-year" style="color: #6b7280; font-size: 12px;">(0)</span>
                 </label>
               </div>
               <div class="vespa-role-toggle">
                 <label>
                   <input type="checkbox" id="filter-subject-teacher" checked onchange="window.VESPAAccountManagement.filterLinkedStudents()">
-                  Subject Teacher
+                  Subject Teacher <span id="count-subject-teacher" style="color: #6b7280; font-size: 12px;">(0)</span>
+                </label>
+              </div>
+            </div>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e5e7eb;">
+              <strong>View Mode:</strong>
+              <div style="margin-top: 10px;">
+                <label style="margin-right: 20px;">
+                  <input type="radio" name="view-mode" value="all" checked onchange="window.VESPAAccountManagement.changeViewMode(this.value)">
+                  All Students
+                </label>
+                <label>
+                  <input type="radio" name="view-mode" value="grouped" onchange="window.VESPAAccountManagement.changeViewMode(this.value)">
+                  Group by Role
                 </label>
               </div>
             </div>
@@ -2658,6 +2710,12 @@
     `;
 
     showModal('Linked Students', modalContent, { width: '800px' });
+    
+    // Update counts in the UI
+    document.getElementById('count-staff-admin').textContent = `(${counts.staffAdmin})`;
+    document.getElementById('count-tutor').textContent = `(${counts.tutor})`;
+    document.getElementById('count-head-of-year').textContent = `(${counts.headOfYear})`;
+    document.getElementById('count-subject-teacher').textContent = `(${counts.subjectTeacher})`;
   }
   
   /**
@@ -2668,50 +2726,130 @@
       return '<p style="text-align: center; color: #6b7280; padding: 40px;">No students linked to this staff member.</p>';
     }
     
-    return `
-      <div class="vespa-linked-students-list">
-        ${students.map(student => {
-          const roles = [];
-          if (student.connections.isStaffAdmin) roles.push('Staff Admin');
-          if (student.connections.isTutor) roles.push('Tutor');
-          if (student.connections.isHeadOfYear) roles.push('Head of Year');
-          if (student.connections.isSubjectTeacher) roles.push('Subject Teacher');
-          
-          return `
-            <div class="vespa-student-link-item" data-student-id="${student.id}"
-              data-staff-admin="${student.connections.isStaffAdmin}"
-              data-tutor="${student.connections.isTutor}"
-              data-head-of-year="${student.connections.isHeadOfYear}"
-              data-subject-teacher="${student.connections.isSubjectTeacher}">
-              <div style="display: flex; justify-content: space-between; align-items: start;">
-                <div style="flex: 1;">
-                  <div style="font-weight: 600; font-size: 16px; color: #111827;">
-                    ${student.field_90 || 'Unknown Student'}
-                  </div>
-                  <div style="color: #6b7280; margin-top: 4px;">
-                    <span style="margin-right: 15px;">ULN: ${student.field_3129 || 'N/A'}</span>
-                    <span style="margin-right: 15px;">Year ${student.field_548 || 'N/A'}</span>
-                    <span style="margin-right: 15px;">Group: ${student.field_565 || 'N/A'}</span>
-                  </div>
-                  <div style="color: #9ca3af; font-size: 13px; margin-top: 4px;">
-                    Created: ${student.field_1265 ? formatDate(student.field_1265) : 'N/A'}
-                  </div>
-                  <div class="vespa-student-roles">
-                    ${roles.map(role => `<span>${role}</span>`).join('')}
-                  </div>
-                </div>
-                <div class="vespa-reallocation-controls">
-                  <button class="vespa-button secondary" style="font-size: 13px;" 
-                    onclick="window.VESPAAccountManagement.showReallocateModal('${student.id}', '${window.currentStaffId}', ${JSON.stringify(student.connections).replace(/"/g, '&quot;')})">
-                    Reallocate
-                  </button>
-                </div>
+    const viewMode = window.currentViewMode || 'all';
+    
+    if (viewMode === 'grouped') {
+      // Group students by role
+      const groups = {
+        'Staff Admin': students.filter(s => s.connections.isStaffAdmin),
+        'Tutor': students.filter(s => s.connections.isTutor),
+        'Head of Year': students.filter(s => s.connections.isHeadOfYear),
+        'Subject Teacher': students.filter(s => s.connections.isSubjectTeacher)
+      };
+      
+      return `
+        <div style="overflow-x: auto;">
+          ${Object.entries(groups).map(([roleName, roleStudents]) => {
+            if (roleStudents.length === 0) return '';
+            
+            return `
+              <div style="margin-bottom: 30px;">
+                <h5 style="margin-bottom: 10px; color: #374151; font-size: 16px; font-weight: 600;">
+                  ${roleName} (${roleStudents.length} students)
+                </h5>
+                <table class="vespa-am-table" style="width: 100%;">
+                  <thead>
+                    <tr>
+                      <th style="text-align: left;">Student Name</th>
+                      <th style="text-align: left;">ULN</th>
+                      <th style="text-align: left;">Year Group</th>
+                      <th style="text-align: left;">Group</th>
+                      <th style="text-align: left;">Date Created</th>
+                      <th style="text-align: left;">Other Connections</th>
+                      <th style="text-align: center;">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${roleStudents.map(student => {
+                      // Show other connections besides the current role
+                      const otherRoles = [];
+                      if (roleName !== 'Staff Admin' && student.connections.isStaffAdmin) otherRoles.push('Staff Admin');
+                      if (roleName !== 'Tutor' && student.connections.isTutor) otherRoles.push('Tutor');
+                      if (roleName !== 'Head of Year' && student.connections.isHeadOfYear) otherRoles.push('Head of Year');
+                      if (roleName !== 'Subject Teacher' && student.connections.isSubjectTeacher) otherRoles.push('Subject Teacher');
+                      
+                      return `
+                        <tr>
+                          <td>${student.field_90 || 'Unknown Student'}</td>
+                          <td>${student.field_3129 || 'N/A'}</td>
+                          <td>${student.field_548 || 'N/A'}</td>
+                          <td>${student.field_565 || 'N/A'}</td>
+                          <td>${student.field_1265 ? formatDate(student.field_1265) : 'N/A'}</td>
+                          <td>
+                            <div class="vespa-student-roles">
+                              ${otherRoles.length > 0 ? otherRoles.map(role => `<span style="opacity: 0.7;">${role}</span>`).join('') : '<span style="color: #9ca3af;">None</span>'}
+                            </div>
+                          </td>
+                          <td style="text-align: center;">
+                            <button class="vespa-am-link-button" 
+                              onclick="window.VESPAAccountManagement.showReallocateModal('${student.id}', '${window.currentStaffId}', ${JSON.stringify(student.connections).replace(/"/g, '&quot;')})">
+                              Reallocate
+                            </button>
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
               </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    `;
+            `;
+          }).join('')}
+        </div>
+      `;
+    } else {
+      // Default "all students" view
+      return `
+        <div style="overflow-x: auto;">
+          <table class="vespa-am-table" style="width: 100%; margin-top: 10px;">
+            <thead>
+              <tr>
+                <th style="text-align: left;">Student Name</th>
+                <th style="text-align: left;">ULN</th>
+                <th style="text-align: left;">Year Group</th>
+                <th style="text-align: left;">Group</th>
+                <th style="text-align: left;">Date Created</th>
+                <th style="text-align: left;">Connection Types</th>
+                <th style="text-align: center;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${students.map(student => {
+                const roles = [];
+                if (student.connections.isStaffAdmin) roles.push('Staff Admin');
+                if (student.connections.isTutor) roles.push('Tutor');
+                if (student.connections.isHeadOfYear) roles.push('Head of Year');
+                if (student.connections.isSubjectTeacher) roles.push('Subject Teacher');
+                
+                return `
+                  <tr data-student-id="${student.id}"
+                    data-staff-admin="${student.connections.isStaffAdmin}"
+                    data-tutor="${student.connections.isTutor}"
+                    data-head-of-year="${student.connections.isHeadOfYear}"
+                    data-subject-teacher="${student.connections.isSubjectTeacher}">
+                    <td>${student.field_90 || 'Unknown Student'}</td>
+                    <td>${student.field_3129 || 'N/A'}</td>
+                    <td>${student.field_548 || 'N/A'}</td>
+                    <td>${student.field_565 || 'N/A'}</td>
+                    <td>${student.field_1265 ? formatDate(student.field_1265) : 'N/A'}</td>
+                    <td>
+                      <div class="vespa-student-roles">
+                        ${roles.map(role => `<span>${role}</span>`).join('')}
+                      </div>
+                    </td>
+                    <td style="text-align: center;">
+                      <button class="vespa-am-link-button" 
+                        onclick="window.VESPAAccountManagement.showReallocateModal('${student.id}', '${window.currentStaffId}', ${JSON.stringify(student.connections).replace(/"/g, '&quot;')})">
+                        Reallocate
+                      </button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
   }
   
   /**
@@ -2748,6 +2886,14 @@
     
     // Update the list
     document.getElementById('linked-students-list').innerHTML = renderLinkedStudentsList(filteredStudents);
+  }
+  
+  /**
+   * Change view mode between all students and grouped by role
+   */
+  function changeViewMode(mode) {
+    window.currentViewMode = mode;
+    filterLinkedStudents(); // Re-render with current filters
   }
 
   /**
@@ -3982,3 +4128,4 @@
   window.toggleTableSelectAll = toggleTableSelectAll;
 
 })();
+
