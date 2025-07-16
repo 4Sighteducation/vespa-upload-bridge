@@ -620,6 +620,10 @@ function initializeUploadBridge() {
     return null;
   };
   
+  // Make fetchUserContextWithRetry available globally for modules
+  window.fetchUserContext = fetchUserContext;
+  window.fetchUserContextWithRetry = fetchUserContextWithRetry;
+  
   fetchUserContextWithRetry().then(context => {
     userContext = context;
     debugLog("User context set:", userContext);
@@ -4210,9 +4214,7 @@ function bindStepEvents() {
   window.showEmulationSettingsModal = showEmulationSettingsModal;
   window.showSelfRegistrationModal = showSelfRegistrationModal;
   window.generateRegistrationLink = generateRegistrationLink;
-  window.viewQRCode = viewQRCode;
-  window.downloadQRFromView = downloadQRFromView;
-  window.regenerateQRLink = regenerateQRLink;
+  // Note: viewQRCode, downloadQRFromView, and regenerateQRLink are assigned to window after their definitions
   
   // Academic Data Management functions
   window.showAcademicDataInterface = showAcademicDataInterface;
@@ -5389,6 +5391,8 @@ function bindStepEvents() {
       showError(`Failed to regenerate link: ${error.message}`);
     }
   }
+  
+  // These functions are already defined as window.functionName above, so no need to reassign
 
   /**
    * Show the Academic Data Management interface
@@ -8097,6 +8101,17 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
     try {
       debugLog("Loading account management module", null, 'info');
       
+      // Ensure userContext is available for regular users
+      if (!userContext || !userContext.userId) {
+        debugLog("User context not ready, fetching...", null, 'info');
+        userContext = await fetchUserContext();
+        
+        if (!userContext || !userContext.userId) {
+          showError('Unable to load user information. Please refresh the page and try again.');
+          return;
+        }
+      }
+      
       // Set the API URL for the module to use
       window.API_BASE_URL = API_BASE_URL;
       window.DEBUG_MODE = DEBUG_MODE;
@@ -8114,9 +8129,16 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
         };
       }
       
+      // For regular users, ensure customerId is available
+      if (!window.selectedSchool && (!userContext || !userContext.customerId)) {
+        showError('Unable to determine your organization. Please ensure you are properly logged in.');
+        return;
+      }
+      
       debugLog("Context passed to Account Management module", {
         selectedSchool: window.selectedSchool,
-        userContext: window.userContext
+        userContext: window.userContext,
+        hasCustomerId: !!(userContext && userContext.customerId)
       });
       
       // Check if already loaded
@@ -8130,7 +8152,8 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       showModal('Loading Account Management', '<div style="text-align: center; padding: 20px;"><div class="vespa-spinner"></div><p>Loading account management system...</p></div>');
       
       // Load the account management module from CDN
-      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/accountManagement2c.js';
+      // Update this to match your actual file version
+      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/accountManagement2d.js';
       
       try {
         await loadScript(scriptUrl);
