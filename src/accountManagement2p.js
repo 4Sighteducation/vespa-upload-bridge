@@ -1741,6 +1741,20 @@
   function displayStaffTable(accounts) {
     debugLog("displayStaffTable called with " + accounts.length + " records");
     
+    // Debug: Log first 3 staff records to see role data format
+    if (accounts.length > 0) {
+      debugLog("Sample staff records for role debugging:", {
+        first3: accounts.slice(0, 3).map(staff => ({
+          id: staff.id,
+          name: staff.field_69,
+          field_73: staff.field_73,
+          field_73_raw: staff.field_73_raw,
+          field_73_type: typeof staff.field_73,
+          field_73_isArray: Array.isArray(staff.field_73)
+        }))
+      });
+    }
+    
     const tableContainer = document.getElementById('staff-table-container');
     if (!tableContainer) {
       debugLog("staff-table-container not found in DOM", null, 'error');
@@ -2469,15 +2483,41 @@
     const staff = staffData.find(s => s.id === staffId);
     if (!staff) return;
     
-    const currentRoles = Array.isArray(staff.field_73) ? staff.field_73 : (staff.field_73 ? [staff.field_73] : []);
+    // Debug logging to see what we're working with
+    debugLog('Edit roles for staff:', {
+      staffId: staffId,
+      field_73: staff.field_73,
+      field_73_raw: staff.field_73_raw,
+      staff: staff
+    });
+    
+    // Try to get roles from field_73_raw first, then field_73
+    let currentRoles = [];
+    if (staff.field_73_raw) {
+      currentRoles = Array.isArray(staff.field_73_raw) ? staff.field_73_raw : [staff.field_73_raw];
+    } else if (staff.field_73) {
+      // Handle case where field_73 might be a comma-separated string
+      if (typeof staff.field_73 === 'string' && staff.field_73.includes(',')) {
+        currentRoles = staff.field_73.split(',').map(r => r.trim());
+      } else {
+        currentRoles = Array.isArray(staff.field_73) ? staff.field_73 : [staff.field_73];
+      }
+    }
+    
+    // Filter out any empty values and nulls
+    currentRoles = currentRoles.filter(role => role && role !== '' && role !== null);
+    
+    debugLog('Current roles after processing:', currentRoles);
     
     // Convert current roles to profile IDs for proper checking
     const currentProfileIds = currentRoles.map(role => {
       // If it's already a profile ID, use it
-      if (role.startsWith('profile_')) return role;
+      if (typeof role === 'string' && role.startsWith('profile_')) return role;
       // Otherwise, convert role name to profile ID
       return PROFILE_IDS[role] || role;
     });
+    
+    debugLog('Current profile IDs:', currentProfileIds);
     
     const modalContent = `
       <div style="padding: 20px;">
@@ -4128,4 +4168,3 @@
   window.toggleTableSelectAll = toggleTableSelectAll;
 
 })();
-
