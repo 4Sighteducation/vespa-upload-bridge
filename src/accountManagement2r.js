@@ -129,6 +129,22 @@
     };
 
     debugLog('Account Management module initialized');
+    
+    // Update the global API with all functions now that we're initialized
+    Object.assign(window.VESPAAccountManagement, window[MODULE_NAME]);
+    debugLog('Updated global API with all functions');
+    
+    // Also expose individual functions that might be called from HTML onclick handlers
+    window.editStaffRoles = editStaffRoles;
+    window.viewLinkedAccounts = viewLinkedAccounts;
+    window.reallocateStudent = reallocateStudent;
+    window.editStudentActivities = editStudentActivities;
+    window.moveUpYearGroup = moveUpYearGroup;
+    window.handleStaffAdminToggle = handleStaffAdminToggle;
+    window.toggleRowSelection = toggleRowSelection;
+    window.toggleTableSelectAll = toggleTableSelectAll;
+    window.syncStaffAdminConnections = syncStaffAdminConnections;
+    debugLog('Exposed individual functions to window');
   }
 
   /**
@@ -1604,6 +1620,9 @@
     console.log(`[VESPA AM] loadAccountData called for type: ${type}`);
     currentView = type;
     
+    // Reset debug counter for staff role logging
+    window.staffDebugCount = 0;
+    
     const customerId = getCustomerId();
     console.log('[VESPA AM] Customer ID result:', customerId);
     
@@ -1981,10 +2000,27 @@
     // Extract name properly
     const name = staff.field_69?.full || staff.field_69 || 'N/A';
     
+    // Escape email for use in JavaScript onclick handlers
+    const escapedEmail = email.replace(/'/g, "\\'").replace(/"/g, '\\"');
+    
     // Check if staff has roles that can have student connections
+    // Only show View Links for Tutor, Head of Year, or Subject Teacher
     const hasConnectionRoles = rolesArray.includes('profile_7') || // Tutor
                               rolesArray.includes('profile_18') || // Head of Year  
                               rolesArray.includes('profile_78'); // Subject Teacher
+    
+    // Debug log for first few staff
+    if (window.DEBUG_MODE && window.staffDebugCount < 3) {
+      window.staffDebugCount = (window.staffDebugCount || 0) + 1;
+      debugLog(`Staff ${name} roles:`, { 
+        email, 
+        rolesArray, 
+        roleNames, 
+        hasConnectionRoles,
+        field_73: staff.field_73,
+        field_73_raw: staff.field_73_raw
+      });
+    }
     
     return `
       <tr data-account-id="${staff.id}">
@@ -2016,7 +2052,7 @@
           </button>
           ${roleNames.includes('Staff Admin') ? `
             <button class="vespa-am-link-button" style="background: #17a2b8;" 
-              onclick="window.VESPAAccountManagement.syncStaffAdminConnections('${staff.id}', '${email}')">
+              onclick="window.VESPAAccountManagement.syncStaffAdminConnections('${staff.id}', '${escapedEmail}')">
               Sync Connections
             </button>
           ` : ''}
@@ -4245,15 +4281,7 @@
     }
   };
   
-  // Also expose individual functions that might be called from HTML
-  window.editStaffRoles = editStaffRoles;
-  window.viewLinkedAccounts = viewLinkedAccounts;
-  window.reallocateStudent = reallocateStudent;
-  window.editStudentActivities = editStudentActivities;
-  window.moveUpYearGroup = moveUpYearGroup;
-  window.handleStaffAdminToggle = handleStaffAdminToggle;
-  window.toggleRowSelection = toggleRowSelection;
-  window.toggleTableSelectAll = toggleTableSelectAll;
+  // Note: Individual functions will be exposed after initialization
 
 })();
 
