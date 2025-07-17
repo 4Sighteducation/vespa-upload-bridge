@@ -1998,8 +1998,17 @@
       ? roleNames.map(role => `<span class="vespa-am-role-badge">${role}</span>`).join(' ')
       : '<span style="color: #999;">No roles assigned</span>';
     
-    // Extract email properly
-    const email = staff.field_70?.email || staff.field_70 || 'N/A';
+    // Extract email properly - handle both object and string formats
+    let email = 'N/A';
+    if (staff.field_70) {
+      if (typeof staff.field_70 === 'object' && staff.field_70.email) {
+        email = staff.field_70.email;
+      } else if (typeof staff.field_70 === 'string') {
+        // Extract email from potential HTML or plain text
+        const emailMatch = staff.field_70.match(/[\w.-]+@[\w.-]+\.\w+/);
+        email = emailMatch ? emailMatch[0] : staff.field_70;
+      }
+    }
     
     // Extract name properly
     const name = staff.field_69?.full || staff.field_69 || 'N/A';
@@ -2009,9 +2018,11 @@
     
     // Check if staff has roles that can have student connections
     // Only show View Links for Tutor, Head of Year, or Subject Teacher
-    const hasConnectionRoles = rolesArray.includes('profile_7') || // Tutor
-                              rolesArray.includes('profile_18') || // Head of Year  
-                              rolesArray.includes('profile_78'); // Subject Teacher
+    // Explicitly exclude Staff Admin (profile_5) and General Staff (profile_8)
+    const hasConnectionRoles = (rolesArray.includes('profile_7') || // Tutor
+                               rolesArray.includes('profile_18') || // Head of Year  
+                               rolesArray.includes('profile_78')) && // Subject Teacher
+                               !rolesArray.includes('profile_5'); // NOT Staff Admin
     
     // Debug log for first few staff
     if (window.DEBUG_MODE && window.staffDebugCount < 3) {
@@ -2056,7 +2067,7 @@
           </button>
           ${roleNames.includes('Staff Admin') ? `
             <button class="vespa-am-link-button" style="background: #17a2b8;" 
-              onclick="window.VESPAAccountManagement.syncStaffAdminConnections('${staff.id}', \`${escapedEmail}\`)">
+              onclick="window.VESPAAccountManagement.syncStaffAdminConnections('${staff.id}', '${escapedEmail}')">
               Sync Connections
             </button>
           ` : ''}
@@ -4473,4 +4484,3 @@
   // Note: Individual functions will be exposed after initialization
 
 })();
-
