@@ -2761,9 +2761,10 @@
     }
     
     try {
+      const customerId = getCustomerId();
       const endpoint = accountType === 'staff' 
-        ? `account/get-linked-students?staffId=${accountId}`
-        : `account/get-linked-staff?studentId=${accountId}`;
+        ? `account/get-linked-students?staffId=${accountId}&customerId=${customerId}`
+        : `account/get-linked-staff?studentId=${accountId}&customerId=${customerId}`;
 
       debugLog(`Making API call to: ${API_BASE_URL}${endpoint}`);
 
@@ -2775,18 +2776,31 @@
 
       if (response.success) {
         if (accountType === 'staff') {
+          // Check if response has a message (no connectable roles)
+          if (response.message && response.data.length === 0) {
+            showModal('No Student Management', `
+              <div class="vespa-am-modal-content">
+                <p>${response.message}</p>
+                <div class="vespa-am-modal-actions">
+                  <button onclick="closeModal()" class="vespa-am-btn vespa-am-btn-secondary">Close</button>
+                </div>
+              </div>
+            `);
+            return;
+          }
+          
           // Check if staff has multiple eligible roles
           const { roles } = response;
-          const eligibleRoleCount = (roles.isTutor ? 1 : 0) + 
-                                  (roles.isHeadOfYear ? 1 : 0) + 
-                                  (roles.isSubjectTeacher ? 1 : 0);
+          const roleCount = Object.keys(roles).length;
           
-          if (eligibleRoleCount > 1) {
+          if (roleCount > 1) {
             // Show role selection modal first
             showRoleSelectionModal(accountId, response);
-          } else {
+          } else if (roleCount === 1) {
             // Show students directly
             showLinkedStudentsModal(accountId, response);
+          } else {
+            showError('No students found for this staff member.');
           }
         } else {
           showLinkedStaffModal(accountId, response.staff || {});
@@ -2813,46 +2827,51 @@
    * Show role selection modal when staff has multiple eligible roles
    */
   function showRoleSelectionModal(staffId, data) {
-    const { staffName, roles } = data;
+    const { staffEmail, roles } = data;
     
     let roleOptions = '';
-    if (roles.isTutor) {
+    
+    // Handle new format where roles is an object with profile IDs as keys
+    if (roles['profile_7']) {
+      const tutorData = roles['profile_7'];
       roleOptions += `
         <div class="vespa-upload-option" style="margin-bottom: 10px;">
-          <input type="radio" name="role-selection" id="select-tutor" value="tutor">
+          <input type="radio" name="role-selection" id="select-tutor" value="profile_7">
           <label for="select-tutor" style="cursor: pointer; padding: 10px;">
             <span class="vespa-option-icon">👥</span>
             <div>
-              <div class="vespa-option-title">Tutor Connections</div>
-              <div class="vespa-option-description">View and manage students connected as their tutor</div>
+              <div class="vespa-option-title">${tutorData.roleName} Connections</div>
+              <div class="vespa-option-description">View and manage ${tutorData.students.length} connected students</div>
             </div>
           </label>
         </div>`;
     }
     
-    if (roles.isHeadOfYear) {
+    if (roles['profile_18']) {
+      const hoyData = roles['profile_18'];
       roleOptions += `
         <div class="vespa-upload-option" style="margin-bottom: 10px;">
-          <input type="radio" name="role-selection" id="select-hoy" value="headOfYear">
+          <input type="radio" name="role-selection" id="select-hoy" value="profile_18">
           <label for="select-hoy" style="cursor: pointer; padding: 10px;">
             <span class="vespa-option-icon">🎓</span>
             <div>
-              <div class="vespa-option-title">Head of Year Connections</div>
-              <div class="vespa-option-description">View and manage students in year groups you oversee</div>
+              <div class="vespa-option-title">${hoyData.roleName} Connections</div>
+              <div class="vespa-option-description">View and manage ${hoyData.students.length} students in your year groups</div>
             </div>
           </label>
         </div>`;
     }
     
-    if (roles.isSubjectTeacher) {
+    if (roles['profile_78']) {
+      const teacherData = roles['profile_78'];
       roleOptions += `
         <div class="vespa-upload-option" style="margin-bottom: 10px;">
-          <input type="radio" name="role-selection" id="select-teacher" value="subjectTeacher">
+          <input type="radio" name="role-selection" id="select-teacher" value="profile_78">
           <label for="select-teacher" style="cursor: pointer; padding: 10px;">
             <span class="vespa-option-icon">📚</span>
             <div>
-              <div class="vespa-option-title">Subject Teacher Connections</div>
-              <div class="vespa-option-description">View and manage students you teach</div>
+              <div class="vespa-option-title">${teacherData.roleName} Connections</div>
+              <div class="vespa-option-description">View and manage ${teacherData.students.length} students you teach</div>
             </div>
           </label>
         </div>`;
@@ -2873,7 +2892,7 @@
     const modalContent = `
       <div style="padding: 20px;">
         <h4 style="font-size: 20px; font-weight: 600; color: #1a202c; margin-bottom: 10px;">
-          Select Role for ${staffName}
+          Select Role View
         </h4>
         <p style="color: #6b7280; margin-bottom: 20px;">
           This staff member has multiple roles. Please select which connections you'd like to view:
@@ -2922,12 +2941,8 @@
     // Filter the students based on selected role
     const filteredData = {
       ...data,
-      students: data.students.filter(student => {
-        if (roleValue === 'tutor') return student.connections.isTutor;
-        if (roleValue === 'headOfYear') return student.connections.isHeadOfYear;
-        if (roleValue === 'subjectTeacher') return student.connections.isSubjectTeacher;
-        return false;
-      })
+      data: roleValue === 'all' ? data.data : data.roles[roleValue].students,
+      selectedRole: roleValue
     };
     
     closeModal();
@@ -2938,14 +2953,15 @@
    * Show modal with linked students for a staff member
    */
   function showLinkedStudentsModal(staffId, data) {
-    const { students, staffName, staffEmail, roles, message, staffRoleRecords } = data;
+    const students = data.data || [];
+    const { staffEmail, roles, message, selectedRole } = data;
     
-    // Check if staff has no eligible roles or is Staff Admin
+    // Check if staff has no eligible roles
     if (message && students.length === 0) {
       showModal('Student Connections', `
         <div style="padding: 40px; text-align: center;">
           <div style="font-size: 48px; color: #94a3b8; margin-bottom: 20px;">ℹ️</div>
-          <p style="color: #374151; font-size: 18px; font-weight: 600; margin-bottom: 10px;">${staffName}</p>
+          <p style="color: #374151; font-size: 18px; font-weight: 600; margin-bottom: 10px;">Staff Member</p>
           <p style="color: #6b7280; font-size: 16px; line-height: 1.6;">${message}</p>
           <div style="margin-top: 30px;">
             <button class="vespa-button secondary" onclick="window.VESPAAccountManagement.closeModal()">Close</button>
@@ -2960,42 +2976,43 @@
     window.currentStaffId = staffId;
     window.currentStaffEmail = staffEmail;
     window.currentStaffRoles = roles;
-    window.currentStaffRoleRecords = staffRoleRecords;
     window.currentViewMode = 'all';
+    window.selectedRole = selectedRole || 'all';
     
     // Calculate counts for each role
-    const counts = {
-      tutor: students.filter(s => s.connections.isTutor).length,
-      headOfYear: students.filter(s => s.connections.isHeadOfYear).length,
-      subjectTeacher: students.filter(s => s.connections.isSubjectTeacher).length
-    };
+    const counts = {};
+    if (roles) {
+      for (const [roleId, roleData] of Object.entries(roles)) {
+        counts[roleId] = roleData.students ? roleData.students.length : 0;
+      }
+    }
     
     // Build role filters based on staff's actual roles
     let roleFilters = '';
-    if (roles.isTutor) {
+    if (roles && roles['profile_7']) {
       roleFilters += `
         <div class="vespa-role-toggle">
           <label>
-            <input type="checkbox" id="filter-tutor" checked onchange="window.VESPAAccountManagement.filterLinkedStudents()">
-            Tutor <span id="count-tutor" style="color: #6b7280; font-size: 12px;">(${counts.tutor})</span>
+            <input type="checkbox" id="filter-profile_7" checked onchange="window.VESPAAccountManagement.filterLinkedStudents()">
+            ${roles['profile_7'].roleName} <span id="count-profile_7" style="color: #6b7280; font-size: 12px;">(${counts['profile_7']})</span>
           </label>
         </div>`;
     }
-    if (roles.isHeadOfYear) {
+    if (roles && roles['profile_18']) {
       roleFilters += `
         <div class="vespa-role-toggle">
           <label>
-            <input type="checkbox" id="filter-head-of-year" checked onchange="window.VESPAAccountManagement.filterLinkedStudents()">
-            Head of Year <span id="count-head-of-year" style="color: #6b7280; font-size: 12px;">(${counts.headOfYear})</span>
+            <input type="checkbox" id="filter-profile_18" checked onchange="window.VESPAAccountManagement.filterLinkedStudents()">
+            ${roles['profile_18'].roleName} <span id="count-profile_18" style="color: #6b7280; font-size: 12px;">(${counts['profile_18']})</span>
           </label>
         </div>`;
     }
-    if (roles.isSubjectTeacher) {
+    if (roles && roles['profile_78']) {
       roleFilters += `
         <div class="vespa-role-toggle">
           <label>
-            <input type="checkbox" id="filter-subject-teacher" checked onchange="window.VESPAAccountManagement.filterLinkedStudents()">
-            Subject Teacher <span id="count-subject-teacher" style="color: #6b7280; font-size: 12px;">(${counts.subjectTeacher})</span>
+            <input type="checkbox" id="filter-profile_78" checked onchange="window.VESPAAccountManagement.filterLinkedStudents()">
+            ${roles['profile_78'].roleName} <span id="count-profile_78" style="color: #6b7280; font-size: 12px;">(${counts['profile_78']})</span>
           </label>
         </div>`;
     }
@@ -3004,7 +3021,7 @@
       <div class="vespa-linked-students-container">
         <div style="padding: 20px;">
           <div style="margin-bottom: 20px;">
-            <h4 style="font-size: 20px; font-weight: 600; color: #1a202c;">Students Linked to ${staffName}</h4>
+            <h4 style="font-size: 20px; font-weight: 600; color: #1a202c;">Linked Students${selectedRole && selectedRole !== 'all' && roles[selectedRole] ? ` - ${roles[selectedRole].roleName}` : ''}</h4>
             <p style="color: #6b7280; margin-top: 5px;">
               Manage student connections for this staff member. You can reallocate students to other staff members with the same role.
             </p>
@@ -3191,9 +3208,12 @@
    * Toggle all filters
    */
   function toggleAllFilters(checkbox) {
-    const filters = ['filter-staff-admin', 'filter-tutor', 'filter-head-of-year', 'filter-subject-teacher'];
+    const filters = ['filter-profile_7', 'filter-profile_18', 'filter-profile_78'];
     filters.forEach(filterId => {
-      document.getElementById(filterId).checked = checkbox.checked;
+      const element = document.getElementById(filterId);
+      if (element) {
+        element.checked = checkbox.checked;
+      }
     });
     filterLinkedStudents();
   }
@@ -3202,27 +3222,49 @@
    * Filter linked students based on selected roles
    */
   function filterLinkedStudents() {
-    const showTutor = document.getElementById('filter-tutor')?.checked || false;
-    const showHeadOfYear = document.getElementById('filter-head-of-year')?.checked || false;
-    const showSubjectTeacher = document.getElementById('filter-subject-teacher')?.checked || false;
+    const showProfile7 = document.getElementById('filter-profile_7')?.checked || false;
+    const showProfile18 = document.getElementById('filter-profile_18')?.checked || false;
+    const showProfile78 = document.getElementById('filter-profile_78')?.checked || false;
     
     // Update "Show All" checkbox state
     const allCheckboxes = [];
-    if (document.getElementById('filter-tutor')) allCheckboxes.push(showTutor);
-    if (document.getElementById('filter-head-of-year')) allCheckboxes.push(showHeadOfYear);
-    if (document.getElementById('filter-subject-teacher')) allCheckboxes.push(showSubjectTeacher);
+    if (document.getElementById('filter-profile_7')) allCheckboxes.push(showProfile7);
+    if (document.getElementById('filter-profile_18')) allCheckboxes.push(showProfile18);
+    if (document.getElementById('filter-profile_78')) allCheckboxes.push(showProfile78);
     
     const allChecked = allCheckboxes.length > 0 && allCheckboxes.every(checked => checked);
     if (document.getElementById('filter-all')) {
       document.getElementById('filter-all').checked = allChecked;
     }
     
-    // Filter students
-    const filteredStudents = window.linkedStudentsData.filter(student => {
-      return (showTutor && student.connections.isTutor) ||
-             (showHeadOfYear && student.connections.isHeadOfYear) ||
-             (showSubjectTeacher && student.connections.isSubjectTeacher);
-    });
+    // Filter students based on view mode
+    let filteredStudents = [];
+    
+    if (window.currentViewMode === 'grouped') {
+      // In grouped mode, filter based on selected roles
+      const roles = window.currentStaffRoles || {};
+      
+      if (showProfile7 && roles['profile_7']) {
+        filteredStudents = filteredStudents.concat(roles['profile_7'].students || []);
+      }
+      if (showProfile18 && roles['profile_18']) {
+        filteredStudents = filteredStudents.concat(roles['profile_18'].students || []);
+      }
+      if (showProfile78 && roles['profile_78']) {
+        filteredStudents = filteredStudents.concat(roles['profile_78'].students || []);
+      }
+      
+      // Remove duplicates
+      const studentIds = new Set();
+      filteredStudents = filteredStudents.filter(student => {
+        if (studentIds.has(student.id)) return false;
+        studentIds.add(student.id);
+        return true;
+      });
+    } else {
+      // In 'all' mode, show all students (no role-based filtering in the simple view)
+      filteredStudents = window.linkedStudentsData;
+    }
     
     // Update the list
     document.getElementById('linked-students-list').innerHTML = renderLinkedStudentsList(filteredStudents);
