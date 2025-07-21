@@ -97,6 +97,7 @@
         showReallocateModal: showReallocateModal,
         handleReallocateClick: handleReallocateClick,
         handleReallocateClickGrouped: handleReallocateClickGrouped,
+        handlePerformReallocation: handlePerformReallocation,
         performReallocation: performReallocation,
         showRoleSelectionModal: showRoleSelectionModal,
         proceedWithRoleSelection: proceedWithRoleSelection,
@@ -2983,15 +2984,22 @@
       
       // Store role record IDs for reallocation
       window.currentStaffRoleRecords = {};
+      debugLog('Setting up role records from roles:', roles);
+      
       if (roles['profile_7'] && roles['profile_7'].roleRecord) {
         window.currentStaffRoleRecords.tutorId = roles['profile_7'].roleRecord.id;
+        debugLog('Set tutorId:', roles['profile_7'].roleRecord.id);
       }
       if (roles['profile_18'] && roles['profile_18'].roleRecord) {
         window.currentStaffRoleRecords.hoyId = roles['profile_18'].roleRecord.id;
+        debugLog('Set hoyId:', roles['profile_18'].roleRecord.id);
       }
       if (roles['profile_78'] && roles['profile_78'].roleRecord) {
         window.currentStaffRoleRecords.teacherId = roles['profile_78'].roleRecord.id;
+        debugLog('Set teacherId:', roles['profile_78'].roleRecord.id);
       }
+      
+      debugLog('Final currentStaffRoleRecords:', window.currentStaffRoleRecords);
       
       // Calculate counts for each role
       const counts = {};
@@ -3355,6 +3363,38 @@
     }
     
     /**
+     * Handle perform reallocation button click
+     */
+    function handlePerformReallocation(button) {
+      const studentId = button.getAttribute('data-student-id');
+      const rolesJson = button.getAttribute('data-roles');
+      
+      try {
+        const roles = JSON.parse(rolesJson);
+        performReallocation(studentId, roles);
+      } catch (error) {
+        debugLog('Error parsing roles data:', error);
+        showError('Error processing reallocation data');
+      }
+    }
+    
+    /**
+     * Handle perform reallocation button click
+     */
+    function handlePerformReallocation(button) {
+      const studentId = button.getAttribute('data-student-id');
+      const rolesJson = button.getAttribute('data-roles');
+      
+      try {
+        const roles = JSON.parse(rolesJson);
+        performReallocation(studentId, roles);
+      } catch (error) {
+        debugLog('Error parsing roles data:', error);
+        showError('Error processing reallocation data');
+      }
+    }
+    
+    /**
      * Show reallocation modal for a student
      */
     async function showReallocateModal(studentId, roleOrConnections) {
@@ -3471,7 +3511,10 @@
             
             <div style="text-align: right; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
               <button class="vespa-button secondary" onclick="window.VESPAAccountManagement.closeModal()">Cancel</button>
-              <button class="vespa-button primary" onclick="window.VESPAAccountManagement.performReallocation('${studentId}', ${JSON.stringify(rolesToReallocate)})" 
+              <button class="vespa-button primary" 
+                data-student-id="${studentId}"
+                data-roles='${JSON.stringify(rolesToReallocate)}'
+                onclick="window.VESPAAccountManagement.handlePerformReallocation(this)" 
                 style="margin-left: 10px;">
                 Confirm Reallocation
               </button>
@@ -3492,6 +3535,7 @@
      */
     async function performReallocation(studentId, roles) {
       debugLog('performReallocation called with:', { studentId, roles });
+      console.log('[VESPA AM] performReallocation called with:', { studentId, roles });
       
       try {
         const reallocations = {};
@@ -3525,14 +3569,20 @@
           const selectedIds = selectedOptions.map(opt => opt.value);
           
           // Get the current staff record ID for this role
-          const fromId = window.currentStaffRoleRecords[`${role}Id`];
+          const roleKey = role === 'tutor' ? 'tutorId' : 
+                         role === 'headOfYear' ? 'hoyId' : 
+                         'teacherId';
+          const fromId = window.currentStaffRoleRecords?.[roleKey];
+          
+          debugLog(`Looking for ${roleKey} in:`, window.currentStaffRoleRecords);
           
           if (!fromId) {
-            debugLog(`Warning: No current staff ID found for role ${role}`);
+            debugLog(`Warning: No current staff ID found for role ${role} (key: ${roleKey})`);
+            debugLog('Available role records:', window.currentStaffRoleRecords);
           }
           
           reallocations[role] = {
-            from: fromId,
+            from: fromId || '',
             to: selectedIds.length === 1 ? selectedIds[0] : selectedIds,
             mode: mode
           };
@@ -3540,22 +3590,39 @@
           debugLog(`Reallocation for ${role}:`, reallocations[role]);
         }
         
+        debugLog('Final reallocations object:', reallocations);
+        
         // Close the modal and show loading
         closeModal();
         showLoadingModal('Reallocating student connections...');
+        
+        // Prepare the request data
+        const requestData = {
+          studentId,
+          reallocations,
+          mode: 'custom' // We're sending mode per role
+        };
+        
+        debugLog('Sending reallocation request:', requestData);
         
         // Make API call
         const response = await $.ajax({
           url: `${API_BASE_URL}account/reallocate-student`,
           type: 'POST',
           contentType: 'application/json',
-          data: JSON.stringify({
-            studentId,
-            reallocations,
-            mode: 'custom' // We're sending mode per role
-          }),
-          xhrFields: { withCredentials: true }
+          data: JSON.stringify(requestData),
+          xhrFields: { withCredentials: true },
+          error: function(xhr, status, error) {
+            debugLog('AJAX error:', { 
+              status: xhr.status, 
+              statusText: xhr.statusText,
+              responseText: xhr.responseText,
+              error: error 
+            });
+          }
         });
+        
+        debugLog('Reallocation response:', response);
         
         if (response.success) {
           closeLoadingModal();
@@ -3569,7 +3636,8 @@
       } catch (error) {
         closeLoadingModal();
         debugLog('Error reallocating student:', error);
-        showError(`Failed to reallocate: ${error.message}`);
+        console.error('Full error object:', error);
+        showError(`Failed to reallocate: ${error.message || error.statusText || 'Unknown error'}`);
       }
     }
   
