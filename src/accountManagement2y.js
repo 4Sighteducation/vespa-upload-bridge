@@ -74,6 +74,7 @@
     window[MODULE_NAME] = {
       // Main functions
       // Note: show is handled by the initialization-aware wrapper
+      show: showAccountManagement,  // Add this line to expose the show function
       hide: hideAccountManagement,
       refresh: refreshData,
       
@@ -131,6 +132,9 @@
     };
 
     debugLog('Account Management module initialized');
+    
+    // Assign the showAccountManagementRef for the minimal API
+    showAccountManagementRef = showAccountManagement;
     
     // Update the global API with all functions now that we're initialized
     Object.assign(window.VESPAAccountManagement, window[MODULE_NAME]);
@@ -4598,3 +4602,4 @@
   // Note: Individual functions will be exposed after initialization
 
 })();
+
