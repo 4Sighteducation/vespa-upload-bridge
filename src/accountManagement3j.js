@@ -95,6 +95,8 @@
         editStudentActivities: editStudentActivities,
         saveActivities: saveActivities,
         showReallocateModal: showReallocateModal,
+        handleReallocateClick: handleReallocateClick,
+        handleReallocateClickGrouped: handleReallocateClickGrouped,
         performReallocation: performReallocation,
         showRoleSelectionModal: showRoleSelectionModal,
         proceedWithRoleSelection: proceedWithRoleSelection,
@@ -3159,7 +3161,9 @@
                             </td>
                             <td style="text-align: center;">
                               <button class="vespa-am-link-button" 
-                                onclick="window.VESPAAccountManagement.showReallocateModal('${student.id}', '${roleKey}')">
+                                data-student-id="${student.id}"
+                                data-role="${roleKey}"
+                                onclick="window.VESPAAccountManagement.handleReallocateClickGrouped(this)">
                                 Reallocate
                               </button>
                             </td>
@@ -3234,7 +3238,9 @@
                       </td>
                       <td style="text-align: center;">
                         <button class="vespa-am-link-button" 
-                          onclick="window.VESPAAccountManagement.showReallocateModal('${student.id}', '${JSON.stringify(connections).replace(/'/g, "\\'")}')">
+                          data-student-id="${student.id}"
+                          data-connections='${JSON.stringify(connections)}'
+                          onclick="window.VESPAAccountManagement.handleReallocateClick(this)">
                           Reallocate
                         </button>
                       </td>
@@ -3322,6 +3328,32 @@
       filterLinkedStudents(); // Re-render with current filters
     }
   
+    /**
+     * Handle reallocate button click
+     */
+    function handleReallocateClick(button) {
+      const studentId = button.getAttribute('data-student-id');
+      const connectionsJson = button.getAttribute('data-connections');
+      
+      try {
+        const connections = JSON.parse(connectionsJson);
+        showReallocateModal(studentId, connections);
+      } catch (error) {
+        debugLog('Error parsing connections data:', error);
+        showError('Error processing student data');
+      }
+    }
+    
+    /**
+     * Handle reallocate button click from grouped view
+     */
+    function handleReallocateClickGrouped(button) {
+      const studentId = button.getAttribute('data-student-id');
+      const role = button.getAttribute('data-role');
+      
+      showReallocateModal(studentId, role);
+    }
+    
     /**
      * Show reallocation modal for a student
      */
