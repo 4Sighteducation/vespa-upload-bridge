@@ -8155,7 +8155,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       
       // Load the account management module from CDN
       // Update this to match your actual file version
-      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/accountManagement3e.js';
+      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/accountManagement3f.js';
       
       try {
         await loadScript(scriptUrl);
@@ -8166,34 +8166,52 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
         await loadScript('/accountManagement.js');
       }
       
-      // Wait a bit for initialization
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Wait for module to initialize - check periodically
+      let initCheckCount = 0;
+      const maxInitChecks = 30; // 30 * 200ms = 6 seconds max wait
       
-      // Close loading modal
-      closeModal();
-      
-      // Check if module loaded successfully
-      if (window.VESPAAccountManagement && window.VESPAAccountManagement.show) {
-        debugLog("Account Management module loaded successfully", null, 'success');
-        
-        // Hide the wizard
-        const wizard = document.getElementById('vespa-upload-wizard');
-        if (wizard) wizard.style.display = 'none';
-        
-        // Show the account management interface
-        // Add a small delay to ensure the module is fully ready
-        setTimeout(() => {
-          debugLog("Calling VESPAAccountManagement.show() after delay", null, 'info');
-          window.VESPAAccountManagement.show();
+      const checkInit = async () => {
+        while (initCheckCount < maxInitChecks) {
+          initCheckCount++;
           
-          // Debug the state
-          if (window.VESPAAccountManagement.debug) {
-            window.VESPAAccountManagement.debug();
+          // Check if basic structure exists (module sets this immediately)
+          if (window.VESPAAccountManagement && window.VESPAAccountManagement.show) {
+            debugLog(`Account Management module structure detected after ${initCheckCount} checks`, null, 'info');
+            
+            // The module is at least partially loaded, we can proceed
+            // The module's show() method will handle waiting for full initialization
+            closeModal();
+            
+            debugLog("Account Management module loaded successfully", null, 'success');
+            
+            // Hide the wizard
+            const wizard = document.getElementById('vespa-upload-wizard');
+            if (wizard) wizard.style.display = 'none';
+            
+            // Show the account management interface
+            // The module's show() method handles initialization state internally
+            setTimeout(() => {
+              debugLog("Calling VESPAAccountManagement.show()", null, 'info');
+              window.VESPAAccountManagement.show();
+              
+              // Debug the state
+              if (window.VESPAAccountManagement.debug) {
+                window.VESPAAccountManagement.debug();
+              }
+            }, 100);
+            
+            return; // Success - exit the function
           }
-        }, 300);
-      } else {
-        throw new Error('Account Management module failed to initialize');
-      }
+          
+          // Wait before next check
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        
+        // If we get here, initialization timed out
+        throw new Error('Account Management module failed to initialize after 6 seconds');
+      };
+      
+      await checkInit();
       
     } catch (error) {
       debugLog('Error loading account management module:', error, 'error');
