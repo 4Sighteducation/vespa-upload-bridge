@@ -73,7 +73,7 @@
     // Make public API available - only include functions that actually exist
     window[MODULE_NAME] = {
       // Main functions
-      show: showAccountManagement,
+      // Note: show is handled by the initialization-aware wrapper
       hide: hideAccountManagement,
       refresh: refreshData,
       
@@ -1321,6 +1321,9 @@
   function showAccountManagement() {
     debugLog('Showing Account Management interface');
     console.log('[VESPA AM] Starting showAccountManagement function');
+    
+    // Store reference for minimal API
+    showAccountManagementRef = showAccountManagement;
 
     // Hide the main wizard if it exists
     const wizard = document.getElementById('vespa-upload-wizard');
@@ -4534,17 +4537,14 @@
         delete window.VESPAAccountManagement._pendingShow;
       }, 100);
     } else {
-      console.log('[VESPA AM] No _pendingShow flag, not showing interface automatically');
-      // Try to show anyway if we're in a regular user context (not super user emulation)
-      if (!window.selectedSchool && window.userContext && window.userContext.userId) {
-        console.log('[VESPA AM] Regular user detected, showing interface anyway');
-        setTimeout(() => {
-          showAccountManagement();
-        }, 100);
-      }
+      console.log('[VESPA AM] No _pendingShow flag, module initialized and ready for manual show() calls');
+      // Don't auto-show - wait for parent to call show()
     }
   }
 
+  // Store reference to showAccountManagement for use in minimal API
+  let showAccountManagementRef = null;
+  
   // Start waiting for configuration when the script loads
   console.log('[VESPA AM] Script loaded, starting configuration wait...');
   console.log('[VESPA AM] Initial state:', {
@@ -4561,7 +4561,16 @@
     show: function() {
       console.log('[VESPA AM] show() called, isInitialized:', isInitialized);
       if (isInitialized) {
-        showAccountManagement();
+        // Use the updated show method from the full API if available
+        if (window[MODULE_NAME] && window[MODULE_NAME].show && window[MODULE_NAME].show !== arguments.callee) {
+          console.log('[VESPA AM] Using full API show method');
+          window[MODULE_NAME].show();
+        } else if (showAccountManagementRef) {
+          console.log('[VESPA AM] Calling showAccountManagement directly');
+          showAccountManagementRef();
+        } else {
+          console.error('[VESPA AM] showAccountManagement not available!');
+        }
       } else {
         // Mark that we want to show once initialized
         console.log('[VESPA AM] Module not initialized yet, setting _pendingShow flag');
@@ -4577,7 +4586,9 @@
         hasSelectedSchool: !!window.selectedSchool,
         selectedSchool: window.selectedSchool,
         API_BASE_URL: API_BASE_URL,
-        _pendingShow: window.VESPAAccountManagement._pendingShow
+        _pendingShow: window.VESPAAccountManagement._pendingShow,
+        hasShowAccountManagementRef: !!showAccountManagementRef,
+        hasFullAPI: !!(window[MODULE_NAME] && window[MODULE_NAME].show)
       });
     }
   };
@@ -4587,4 +4598,3 @@
   // Note: Individual functions will be exposed after initialization
 
 })();
-
