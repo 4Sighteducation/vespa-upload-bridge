@@ -2979,6 +2979,18 @@
       window.currentViewMode = 'all';
       window.selectedRole = selectedRole || 'all';
       
+      // Store role record IDs for reallocation
+      window.currentStaffRoleRecords = {};
+      if (roles['profile_7'] && roles['profile_7'].roleRecord) {
+        window.currentStaffRoleRecords.tutorId = roles['profile_7'].roleRecord.id;
+      }
+      if (roles['profile_18'] && roles['profile_18'].roleRecord) {
+        window.currentStaffRoleRecords.hoyId = roles['profile_18'].roleRecord.id;
+      }
+      if (roles['profile_78'] && roles['profile_78'].roleRecord) {
+        window.currentStaffRoleRecords.teacherId = roles['profile_78'].roleRecord.id;
+      }
+      
       // Calculate counts for each role
       const counts = {};
       if (roles) {
@@ -3135,7 +3147,7 @@
                         
                         return `
                           <tr>
-                            <td>${student.field_90 || 'Unknown Student'}</td>
+                            <td>${student.field_90?.full || student.field_90 || 'Unknown Student'}</td>
                             <td>${student.field_3129 || 'N/A'}</td>
                             <td>${student.field_548 || 'N/A'}</td>
                             <td>${student.field_565 || 'N/A'}</td>
@@ -3210,7 +3222,7 @@
                       data-tutor="${connections.isTutor || false}"
                       data-head-of-year="${connections.isHeadOfYear || false}"
                       data-subject-teacher="${connections.isSubjectTeacher || false}">
-                      <td>${student.field_90 || 'Unknown Student'}</td>
+                      <td>${student.field_90?.full || student.field_90 || 'Unknown Student'}</td>
                       <td>${student.field_3129 || 'N/A'}</td>
                       <td>${student.field_548 || 'N/A'}</td>
                       <td>${student.field_565 || 'N/A'}</td>
@@ -3222,7 +3234,7 @@
                       </td>
                       <td style="text-align: center;">
                         <button class="vespa-am-link-button" 
-                          onclick="window.VESPAAccountManagement.showReallocateModal('${student.id}', ${JSON.stringify(JSON.stringify(connections))})">
+                          onclick="window.VESPAAccountManagement.showReallocateModal('${student.id}', '${JSON.stringify(connections).replace(/'/g, "\\'")}')">
                           Reallocate
                         </button>
                       </td>
@@ -3418,7 +3430,7 @@
         
         const modalContent = `
           <div class="vespa-reallocation-modal" style="padding: 20px;">
-            <h4>Reallocate Student: ${student.field_90}</h4>
+            <h4>Reallocate Student: ${student.field_90?.full || student.field_90 || 'Unknown Student'}</h4>
             <p style="color: #6b7280; margin-bottom: 20px;">
               Select new staff members for this student's connections.
             </p>
@@ -3507,7 +3519,8 @@
           contentType: 'application/json',
           data: JSON.stringify({
             studentId,
-            reallocations
+            reallocations,
+            mode: 'custom' // We're sending mode per role
           }),
           xhrFields: { withCredentials: true }
         });
