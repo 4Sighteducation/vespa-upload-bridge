@@ -8155,7 +8155,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       
       // Load the account management module from CDN
       // Update this to match your actual file version
-      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/accountManagement2y.js';
+      const scriptUrl = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/accountManagement3a.js';
       
       try {
         await loadScript(scriptUrl);
@@ -8188,17 +8188,19 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
             const wizard = document.getElementById('vespa-upload-wizard');
             if (wizard) wizard.style.display = 'none';
             
-            // Show the account management interface
-            // The module's show() method handles initialization state internally
-            setTimeout(() => {
-              debugLog("Calling VESPAAccountManagement.show()", null, 'info');
+                        // Call show() immediately without setTimeout
+            debugLog("Calling VESPAAccountManagement.show() immediately", null, 'info');
+            try {
               window.VESPAAccountManagement.show();
-              
-              // Debug the state
-              if (window.VESPAAccountManagement.debug) {
-                window.VESPAAccountManagement.debug();
-              }
-            }, 100);
+              debugLog("show() call completed", null, 'success');
+            } catch (error) {
+              debugLog("Error calling show():", error, 'error');
+            }
+            
+            // Debug the state
+            if (window.VESPAAccountManagement.debug) {
+              window.VESPAAccountManagement.debug();
+            }
             
             return; // Success - exit the function
           }
@@ -8226,6 +8228,8 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
   }
 
 
+
+    
 
     
     
