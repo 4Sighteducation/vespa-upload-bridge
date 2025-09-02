@@ -15,9 +15,25 @@ const CHECK_INTERVAL = 500; // Check every 500ms
 const MAX_CHECKS = 20; // Give up after 10 seconds (20 checks)
 const SUPER_USER_ROLE_ID = 'object_21';
 
-// State management
+// State management with persistence
+let VESPA_STATE = {
+  currentStep: 1,
+  uploadType: null, // 'staff' or 'student'
+  uploadMethod: null, // 'csv' or 'manual'
+  uploadSubType: null, // 'student-onboard', 'student-questionnaire', etc.
+  selectedSchool: null,
+  selectedFile: null,
+  parsedData: null,
+  validationResults: null,
+  emulationMode: false,
+  emulationCustomerId: null,
+  emulationAdminDetails: null,
+  initialized: false
+};
+
+// Legacy variables for backward compatibility
 let currentStep = 1;
-let uploadType = null; // 'staff' or 'student'
+let uploadType = null;
 let validationResults = null;
 let processingResults = null;
 let selectedSchool = null; // For super user mode
@@ -142,6 +158,116 @@ window.showChangeEmulationModal = function() {
   
   // Scroll to top
   window.scrollTo(0, 0);
+}
+
+// ========== STATE MANAGEMENT FUNCTIONS ==========
+
+/**
+ * Save the current VESPA state to sessionStorage
+ */
+function saveVespaState() {
+  try {
+    // Update VESPA_STATE with current values
+    VESPA_STATE.currentStep = currentStep;
+    VESPA_STATE.uploadType = uploadType;
+    VESPA_STATE.uploadMethod = document.querySelector('input[name="upload-method"]:checked')?.value || VESPA_STATE.uploadMethod;
+    VESPA_STATE.uploadSubType = document.querySelector('input[name="upload-type"]:checked')?.value || VESPA_STATE.uploadSubType;
+    VESPA_STATE.selectedSchool = selectedSchool;
+    VESPA_STATE.selectedFile = selectedFile;
+    VESPA_STATE.validationResults = validationResults;
+    VESPA_STATE.parsedData = window.parsedCsvData || VESPA_STATE.parsedData;
+    
+    // Save emulation state
+    const emulationState = getEmulationState();
+    if (emulationState) {
+      VESPA_STATE.emulationMode = true;
+      VESPA_STATE.emulationCustomerId = emulationState.school?.id;
+      VESPA_STATE.emulationAdminDetails = emulationState.admins;
+    }
+    
+    // Save to sessionStorage
+    sessionStorage.setItem('vespaUploadState', JSON.stringify(VESPA_STATE));
+    if (DEBUG_MODE) console.log('[VESPA Upload] State saved to sessionStorage', VESPA_STATE);
+  } catch (error) {
+    console.error('[VESPA Upload] Error saving state:', error);
+  }
+}
+
+/**
+ * Restore VESPA state from sessionStorage
+ */
+function restoreVespaState() {
+  try {
+    const savedState = sessionStorage.getItem('vespaUploadState');
+    if (savedState) {
+      const parsedState = JSON.parse(savedState);
+      VESPA_STATE = { ...VESPA_STATE, ...parsedState };
+      
+      // Restore legacy variables
+      currentStep = VESPA_STATE.currentStep || 1;
+      uploadType = VESPA_STATE.uploadType;
+      selectedSchool = VESPA_STATE.selectedSchool;
+      selectedFile = VESPA_STATE.selectedFile;
+      validationResults = VESPA_STATE.validationResults;
+      
+      // Restore parsed CSV data
+      if (VESPA_STATE.parsedData) {
+        window.parsedCsvData = VESPA_STATE.parsedData;
+      }
+      
+      // Restore emulation state if it exists
+      if (VESPA_STATE.emulationMode && VESPA_STATE.emulationCustomerId) {
+        setEmulationState({
+          school: {
+            id: VESPA_STATE.emulationCustomerId,
+            name: VESPA_STATE.selectedSchool?.name || 'Unknown School'
+          },
+          admins: VESPA_STATE.emulationAdminDetails || []
+        });
+      }
+      
+      if (DEBUG_MODE) console.log('[VESPA Upload] State restored from sessionStorage', VESPA_STATE);
+      return true;
+    }
+  } catch (error) {
+    console.error('[VESPA Upload] Error restoring state:', error);
+  }
+  return false;
+}
+
+/**
+ * Clear all saved state
+ */
+function clearVespaState() {
+  try {
+    sessionStorage.removeItem('vespaUploadState');
+    VESPA_STATE = {
+      currentStep: 1,
+      uploadType: null,
+      uploadMethod: null,
+      uploadSubType: null,
+      selectedSchool: null,
+      selectedFile: null,
+      parsedData: null,
+      validationResults: null,
+      emulationMode: false,
+      emulationCustomerId: null,
+      emulationAdminDetails: null,
+      initialized: false
+    };
+    
+    // Reset legacy variables
+    currentStep = 1;
+    uploadType = null;
+    selectedSchool = null;
+    selectedFile = null;
+    validationResults = null;
+    window.parsedCsvData = null;
+    
+    if (DEBUG_MODE) console.log('[VESPA Upload] State cleared');
+  } catch (error) {
+    console.error('[VESPA Upload] Error clearing state:', error);
+  }
 }
 
 /**
@@ -605,6 +731,15 @@ function initializeUploadBridge() {
     debugLog("No configuration available yet!", null, 'warn');
   }
   
+  // Check if we can restore previous state
+  const hasRestoredState = restoreVespaState();
+  if (hasRestoredState && VESPA_STATE.initialized) {
+    debugLog("Restored previous state, jumping to step " + currentStep, VESPA_STATE, 'success');
+  } else {
+    debugLog("No previous state found, starting fresh", null, 'info');
+    VESPA_STATE.initialized = true;
+  }
+  
   // Set the API URL based on config or fallback
   API_BASE_URL = determineApiUrl();
   // Fetch user context information with retry
@@ -830,6 +965,12 @@ function initializeUploadInterface(container) {
   
   // Add the wizard HTML to the container
   container.innerHTML = wizardHTML;
+  
+  // Check if we should use restored state
+  const hasRestoredState = VESPA_STATE.initialized && currentStep > 1;
+  if (hasRestoredState) {
+    debugLog("Will restore to step " + currentStep + " after initialization", VESPA_STATE);
+  }
   
   // Set up event listeners
   document.getElementById('vespa-prev-button').addEventListener('click', prevStep);
@@ -1141,11 +1282,16 @@ function renderStep(step) {
     debugLog("Cannot render step without configuration", null, 'error');
     return;
   }
-// Debug step rendering (PART 6 - Add this block right here)
-const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID; // <-- Modified
-debugLog(`Rendering step ${step}, User is SuperUser: ${isSuperUser}`, {
-  currentStep: step,
-  uploadType: uploadType,
+  
+  // Update the current step globally and save state
+  currentStep = step;
+  saveVespaState();
+  
+  // Debug step rendering (PART 6 - Add this block right here)
+  const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID; // <-- Modified
+  debugLog(`Rendering step ${step}, User is SuperUser: ${isSuperUser}`, {
+    currentStep: step,
+    uploadType: uploadType,
   isSuperUser: isSuperUser
 });
 
@@ -2859,16 +3005,60 @@ A123459,sdavis@school.edu,6.5,Biology,Chemistry,Psychology,,`;
         });
 
         debugLog(`Validation response status: ${response.status} ${response.statusText}`);
-        const resultData = await response.json().catch(err => {
+        
+        // Try to get response body regardless of status
+        let resultData = null;
+        const responseText = await response.text();
+        
+        try {
+          resultData = JSON.parse(responseText);
+          debugLog("Parsed API response:", resultData);
+        } catch (parseError) {
+          debugLog("Raw response text:", responseText, 'warn');
           if (!response.ok) {
-            throw new Error(`API responded with status: ${response.status}. Response body was not valid JSON or empty.`);
+            throw new Error(`API error ${response.status}: Unable to parse response. Raw response: ${responseText.substring(0, 200)}`);
           }
-          debugLog("Could not parse JSON response from API, but status was OK.", err, 'warn');
-          throw new Error(`Could not parse API response: ${err.message}. Check API format.`);
-        });
+          throw new Error(`Could not parse API response: ${parseError.message}`);
+        }
 
         if (!response.ok) {
-          const errorMessage = resultData?.message || resultData?.error || (`API error: ${response.status}` + (resultData?.details ? ` Details: ${JSON.stringify(resultData.details)}` : ''));
+          // Extract detailed error information
+          let errorDetails = [];
+          
+          // Check for various error formats from the API
+          if (resultData?.errors && Array.isArray(resultData.errors)) {
+            errorDetails = resultData.errors.map(err => 
+              typeof err === 'string' ? err : (err.message || err.error || JSON.stringify(err))
+            );
+          } else if (resultData?.error) {
+            errorDetails.push(resultData.error);
+          } else if (resultData?.message) {
+            errorDetails.push(resultData.message);
+          } else if (resultData?.details) {
+            errorDetails.push(JSON.stringify(resultData.details));
+          }
+          
+          const errorMessage = errorDetails.length > 0 
+            ? `Validation failed:\n${errorDetails.join('\n')}` 
+            : `API error ${response.status}: ${response.statusText}`;
+          
+          debugLog("API validation error details:", { 
+            status: response.status, 
+            statusText: response.statusText,
+            errors: errorDetails,
+            fullResponse: resultData 
+          }, 'error');
+          
+          // Store the error details for display
+          validationResults = {
+            success: false,
+            isValid: false,
+            errors: errorDetails,
+            rawResponse: resultData,
+            source: 'api'
+          };
+          
+          displayValidationErrors(errorDetails);
           throw new Error(errorMessage);
         }
         
@@ -4215,6 +4405,30 @@ function bindStepEvents() {
   window.showSelfRegistrationModal = showSelfRegistrationModal;
   window.generateRegistrationLink = generateRegistrationLink;
   // Note: viewQRCode, downloadQRFromView, and regenerateQRLink are assigned to window after their definitions
+  
+  // Expose the state management functions globally for debugging and external access
+  window.VESPAUpload = {
+    saveState: saveVespaState,
+    restoreState: restoreVespaState,
+    clearState: clearVespaState,
+    getState: () => VESPA_STATE,
+    getCurrentStep: () => currentStep,
+    getUploadType: () => uploadType,
+    getSelectedFile: () => selectedFile,
+    getValidationResults: () => validationResults,
+    renderStep: renderStep,
+    resetToStart: () => {
+      clearVespaState();
+      currentStep = 1;
+      uploadType = null;
+      selectedFile = null;
+      validationResults = null;
+      const container = document.querySelector('#view_3020 .kn-rich_text__content');
+      if (container) {
+        initializeUploadInterface(container);
+      }
+    }
+  };
   
   // Academic Data Management functions
   window.showAcademicDataInterface = showAcademicDataInterface;
@@ -8206,6 +8420,7 @@ A123457,jdoe@school.edu,6.8,English Literature,History,Psychology,,`;
       renderStep(1);
     }
   }
+
 
 
 
