@@ -2051,10 +2051,26 @@ function renderSelectSchoolStep() {
             statusClass = 'success';
             statusIcon = '✅';
             summaryHtml = `
-                <p><strong>Your data has been successfully queued for processing.</strong></p>
-                <p>Job ID: <code>${processingResults.jobId || 'N/A'}</code></p>
-                <p>You will receive an email at <strong>${processingResults.notificationEmail || 'your registered email'}</strong> with detailed results once processing is complete.</p>
-                <p class="vespa-success-message" style="margin-top: 20px;">✓ You can safely close this window now.</p>
+                <div style="animation: fadeIn 0.5s ease-in">
+                    <p style="font-size: 18px; color: #2e7d32; font-weight: bold;">
+                        <span style="font-size: 32px;">✅</span> Your data has been successfully queued for processing!
+                    </p>
+                    <div style="margin: 20px 0; padding: 20px; background: #e8f5e9; border-radius: 10px; border: 2px solid #4caf50;">
+                        <p style="margin: 10px 0;"><strong>Job ID:</strong> <code style="background: #fff; padding: 5px 10px; border-radius: 4px;">${processingResults.jobId || 'N/A'}</code></p>
+                        <p style="margin: 10px 0; font-size: 16px;">
+                            <span style="font-size: 20px;">📧</span> 
+                            <strong>Email notification will be sent to:</strong><br>
+                            <span style="color: #1976d2; font-size: 18px;">${processingResults.notificationEmail || 'your registered email'}</span>
+                        </p>
+                        <p style="margin: 15px 0; padding: 15px; background: #fff; border-left: 4px solid #4caf50; font-weight: bold;">
+                            ⚠️ IMPORTANT: The upload is now being processed in the background.<br>
+                            Do NOT re-upload the same file - this will create duplicate records!
+                        </p>
+                    </div>
+                    <p class="vespa-success-message" style="margin-top: 20px; font-size: 16px; color: #2e7d32;">
+                        ✓ Processing is underway. You can safely close this window now.
+                    </p>
+                </div>
             `;
         } else if (processingResults.status === 'submission_failed') {
             statusText = 'Upload Submission Failed';
