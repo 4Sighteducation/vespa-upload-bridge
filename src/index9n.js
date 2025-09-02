@@ -1755,6 +1755,8 @@ function renderSelectSchoolStep() {
             <li><strong>Required fields:</strong> ULN, UPN, Firstname, Lastname, Student Email, Gender, DOB, Group, Year Gp, Level, Tutors, Head of Year</li>
             <li><strong>Level values:</strong> Must be either "Level 2" or "Level 3"</li>
             <li><strong>Tutors, Head of Year:</strong> Must contain valid email address(es) of existing staff.</li>
+            <li style="color: #d32f2f; font-weight: bold;">⚠️ IMPORTANT: Use commas (,) NOT semicolons (;) to separate multiple emails</li>
+            <li>Example: <code>teacher1@school.edu, teacher2@school.edu</code> ✓ NOT <code>teacher1@school.edu; teacher2@school.edu</code> ✗</li>
             <li>Ensure staff (Tutors, HoY) exist before this upload.</li>
           </ul>
         `;
@@ -2737,6 +2739,66 @@ A123459,sdavis@school.edu,6.5,Biology,Chemistry,Psychology,,`;
             message: `Row ${rowNum}: Level must be "Level 2" or "Level 3", got "${row['Level']}"`
           });
         }
+        
+        // Tutors email format check - handle multiple emails
+        if (row['Tutors']) {
+          const tutorsField = row['Tutors'].trim();
+          
+          // Check for semicolons (common mistake)
+          if (tutorsField.includes(';')) {
+            results.isValid = false;
+            results.errors.push({
+              row: rowNum,
+              type: 'Format Error',
+              field: 'Tutors',
+              message: `Row ${rowNum}: Tutors field contains semicolons (;). Please use commas (,) to separate multiple email addresses. Found: "${tutorsField}"`
+            });
+          } else {
+            // Split by comma and validate each email
+            const tutorEmails = tutorsField.split(',').map(email => email.trim());
+            tutorEmails.forEach(email => {
+              if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                results.isValid = false;
+                results.errors.push({
+                  row: rowNum,
+                  type: 'Format Error',
+                  field: 'Tutors',
+                  message: `Row ${rowNum}: Invalid email format in Tutors field: "${email}". Each email must be in format: name@domain.com`
+                });
+              }
+            });
+          }
+        }
+        
+        // Head of Year email format check - handle multiple emails
+        if (row['Head of Year']) {
+          const hoyField = row['Head of Year'].trim();
+          
+          // Check for semicolons (common mistake)
+          if (hoyField.includes(';')) {
+            results.isValid = false;
+            results.errors.push({
+              row: rowNum,
+              type: 'Format Error',
+              field: 'Head of Year',
+              message: `Row ${rowNum}: Head of Year field contains semicolons (;). Please use commas (,) to separate multiple email addresses. Found: "${hoyField}"`
+            });
+          } else {
+            // Split by comma and validate each email
+            const hoyEmails = hoyField.split(',').map(email => email.trim());
+            hoyEmails.forEach(email => {
+              if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                results.isValid = false;
+                results.errors.push({
+                  row: rowNum,
+                  type: 'Format Error',
+                  field: 'Head of Year',
+                  message: `Row ${rowNum}: Invalid email format in Head of Year field: "${email}". Each email must be in format: name@domain.com`
+                });
+              }
+            });
+          }
+        }
       } else if (uploadType === 'student-ks4') {
         const requiredFields = ['UPN', 'Student_Email', 'sub1', 'ex1'];
         requiredFields.forEach(field => {
@@ -3027,13 +3089,41 @@ A123459,sdavis@school.edu,6.5,Biology,Chemistry,Psychology,,`;
           
           // Check for various error formats from the API
           if (resultData?.errors && Array.isArray(resultData.errors)) {
-            errorDetails = resultData.errors.map(err => 
-              typeof err === 'string' ? err : (err.message || err.error || JSON.stringify(err))
-            );
+            errorDetails = resultData.errors.map(err => {
+              if (typeof err === 'string') {
+                // Improve the error message if it's about invalid email format
+                if (err.includes('Invalid Tutor email format') && err.includes(';')) {
+                  return err.replace('Invalid Tutor email format', 
+                    'Invalid Tutor email format - Use commas (,) not semicolons (;) to separate multiple emails');
+                }
+                if (err.includes('Invalid Head of Year email format') && err.includes(';')) {
+                  return err.replace('Invalid Head of Year email format', 
+                    'Invalid Head of Year email format - Use commas (,) not semicolons (;) to separate multiple emails');
+                }
+                return err;
+              }
+              return err.message || err.error || JSON.stringify(err);
+            });
           } else if (resultData?.error) {
-            errorDetails.push(resultData.error);
+            let error = resultData.error;
+            // Improve the error message if it's about invalid email format
+            if (error.includes('Invalid') && error.includes('email format') && error.includes(';')) {
+              error = error.replace('Invalid Tutor email format', 
+                'Invalid Tutor email format - Use commas (,) not semicolons (;) to separate multiple emails');
+              error = error.replace('Invalid Head of Year email format', 
+                'Invalid Head of Year email format - Use commas (,) not semicolons (;) to separate multiple emails');
+            }
+            errorDetails.push(error);
           } else if (resultData?.message) {
-            errorDetails.push(resultData.message);
+            let message = resultData.message;
+            // Improve the error message if it's about invalid email format
+            if (message.includes('Invalid') && message.includes('email format') && message.includes(';')) {
+              message = message.replace('Invalid Tutor email format', 
+                'Invalid Tutor email format - Use commas (,) not semicolons (;) to separate multiple emails');
+              message = message.replace('Invalid Head of Year email format', 
+                'Invalid Head of Year email format - Use commas (,) not semicolons (;) to separate multiple emails');
+            }
+            errorDetails.push(message);
           } else if (resultData?.details) {
             errorDetails.push(JSON.stringify(resultData.details));
           }
@@ -3244,14 +3334,39 @@ A123459,sdavis@school.edu,6.5,Biology,Chemistry,Psychology,,`;
         let errorData = '';
         
         if (typeof error === 'string') {
-          // Handle string errors
+          // Handle string errors - improve clarity for common issues
           errorMessage = error;
+          
+          // Parse row number from error string if present
+          const rowMatch = error.match(/Row (\d+):/);
+          if (rowMatch) {
+            errorRow = rowMatch[1];
+          }
+          
+          // Enhance error message clarity
+          if (error.includes('semicolon') || error.includes(';')) {
+            errorType = 'Email Separator Error';
+            // Highlight the issue more clearly
+            errorMessage = errorMessage
+              .replace(/;/g, '<span style="color: red; font-weight: bold;">;</span>')
+              .replace('semicolons', '<span style="color: red; font-weight: bold;">semicolons</span>')
+              .replace('commas', '<span style="color: green; font-weight: bold;">commas</span>');
+          }
         } else {
           // Handle object errors with different possible structures
           errorRow = error.row || '';
           errorType = error.type || 'Validation Error';
           errorField = error.field || '';
           errorMessage = error.message || error.error || 'Unknown error';
+          
+          // Enhance error message clarity for semicolon issues
+          if (errorMessage.includes('semicolon') || errorMessage.includes(';')) {
+            errorType = 'Email Separator Error';
+            errorMessage = errorMessage
+              .replace(/;/g, '<span style="color: red; font-weight: bold;">;</span>')
+              .replace('semicolons', '<span style="color: red; font-weight: bold;">semicolons</span>')
+              .replace('commas', '<span style="color: green; font-weight: bold;">commas</span>');
+          }
           
           // If we have data that failed validation, show it
           if (error.data) {
