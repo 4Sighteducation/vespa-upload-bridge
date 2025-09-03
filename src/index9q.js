@@ -2405,11 +2405,14 @@ Mr,David,Wilson,dwilson@school.edu,hod,,,"Science,Physics",`;
         break;
         
       case 'student-onboard':
-        templateContent = `ULN,UPN,Firstname,Lastname,Student Email,Gender,DOB,Group,Year Gp,Level,Tutors,Head of Year
-1234567890,A123456,Alex,Johnson,ajohnson@school.edu,M,15/09/2006,12B,12,Level 3,jsmith@school.edu,jdoe@school.edu
-2345678901,A123457,Emma,Williams,ewilliams@school.edu,F,22/10/2006,12A,12,Level 3,"jsmith@school.edu,ebrown@school.edu",jdoe@school.edu
-3456789012,A123458,Michael,Brown,mbrown@school.edu,M,08/03/2007,12C,12,Level 3,dwilson@school.edu,jdoe@school.edu
-4567890123,A123459,Sophie,Davis,sdavis@school.edu,F,14/07/2006,12A,12,Level 3,ebrown@school.edu,jdoe@school.edu`;
+        templateContent = `*** IMPORTANT: DELETE ALL EXAMPLE DATA ROWS BEFORE UPLOADING YOUR ACTUAL STUDENT DATA ***
+*** REQUIRED FIELDS: Firstname, Lastname, Student Email, Group, Year Gp, Level, Tutors ***
+*** OPTIONAL FIELDS: UPN (auto-generated if blank), Gender, DOB, Head of Year, Subject Teachers ***
+UPN,Firstname,Lastname,Student Email,Gender,DOB,Group,Year Gp,Level,Tutors,Head of Year,Subject Teachers
+A123456,Alex,Johnson,ajohnson@school.edu,M,15/09/2006,B,12,Level 3,jsmith@school.edu,jdoe@school.edu,
+A123457,Emma,Williams,ewilliams@school.edu,F,22/10/2006,A,12,Level 3,"jsmith@school.edu,ebrown@school.edu",jdoe@school.edu,"mteacher@school.edu,scienceteacher@school.edu"
+,Michael,Brown,mbrown@school.edu,M,08/03/2007,C,12,Level 3,dwilson@school.edu,jdoe@school.edu,
+,Sophie,Davis,sdavis@school.edu,F,14/07/2006,A,12,Level 3,ebrown@school.edu,jdoe@school.edu,`;
         filename = 'StudentData.csv';
         break;
         
