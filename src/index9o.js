@@ -15,9 +15,25 @@ const CHECK_INTERVAL = 500; // Check every 500ms
 const MAX_CHECKS = 20; // Give up after 10 seconds (20 checks)
 const SUPER_USER_ROLE_ID = 'object_21';
 
-// State management
+// State management with persistence
+let VESPA_STATE = {
+  currentStep: 1,
+  uploadType: null, // 'staff' or 'student'
+  uploadMethod: null, // 'csv' or 'manual'
+  uploadSubType: null, // 'student-onboard', 'student-questionnaire', etc.
+  selectedSchool: null,
+  selectedFile: null,
+  parsedData: null,
+  validationResults: null,
+  emulationMode: false,
+  emulationCustomerId: null,
+  emulationAdminDetails: null,
+  initialized: false
+};
+
+// Legacy variables for backward compatibility
 let currentStep = 1;
-let uploadType = null; // 'staff' or 'student'
+let uploadType = null;
 let validationResults = null;
 let processingResults = null;
 let selectedSchool = null; // For super user mode
@@ -142,6 +158,116 @@ window.showChangeEmulationModal = function() {
   
   // Scroll to top
   window.scrollTo(0, 0);
+}
+
+// ========== STATE MANAGEMENT FUNCTIONS ==========
+
+/**
+ * Save the current VESPA state to sessionStorage
+ */
+function saveVespaState() {
+  try {
+    // Update VESPA_STATE with current values
+    VESPA_STATE.currentStep = currentStep;
+    VESPA_STATE.uploadType = uploadType;
+    VESPA_STATE.uploadMethod = document.querySelector('input[name="upload-method"]:checked')?.value || VESPA_STATE.uploadMethod;
+    VESPA_STATE.uploadSubType = document.querySelector('input[name="upload-type"]:checked')?.value || VESPA_STATE.uploadSubType;
+    VESPA_STATE.selectedSchool = selectedSchool;
+    VESPA_STATE.selectedFile = selectedFile;
+    VESPA_STATE.validationResults = validationResults;
+    VESPA_STATE.parsedData = window.parsedCsvData || VESPA_STATE.parsedData;
+    
+    // Save emulation state
+    const emulationState = getEmulationState();
+    if (emulationState) {
+      VESPA_STATE.emulationMode = true;
+      VESPA_STATE.emulationCustomerId = emulationState.school?.id;
+      VESPA_STATE.emulationAdminDetails = emulationState.admins;
+    }
+    
+    // Save to sessionStorage
+    sessionStorage.setItem('vespaUploadState', JSON.stringify(VESPA_STATE));
+    if (DEBUG_MODE) console.log('[VESPA Upload] State saved to sessionStorage', VESPA_STATE);
+  } catch (error) {
+    console.error('[VESPA Upload] Error saving state:', error);
+  }
+}
+
+/**
+ * Restore VESPA state from sessionStorage
+ */
+function restoreVespaState() {
+  try {
+    const savedState = sessionStorage.getItem('vespaUploadState');
+    if (savedState) {
+      const parsedState = JSON.parse(savedState);
+      VESPA_STATE = { ...VESPA_STATE, ...parsedState };
+      
+      // Restore legacy variables
+      currentStep = VESPA_STATE.currentStep || 1;
+      uploadType = VESPA_STATE.uploadType;
+      selectedSchool = VESPA_STATE.selectedSchool;
+      selectedFile = VESPA_STATE.selectedFile;
+      validationResults = VESPA_STATE.validationResults;
+      
+      // Restore parsed CSV data
+      if (VESPA_STATE.parsedData) {
+        window.parsedCsvData = VESPA_STATE.parsedData;
+      }
+      
+      // Restore emulation state if it exists
+      if (VESPA_STATE.emulationMode && VESPA_STATE.emulationCustomerId) {
+        setEmulationState({
+          school: {
+            id: VESPA_STATE.emulationCustomerId,
+            name: VESPA_STATE.selectedSchool?.name || 'Unknown School'
+          },
+          admins: VESPA_STATE.emulationAdminDetails || []
+        });
+      }
+      
+      if (DEBUG_MODE) console.log('[VESPA Upload] State restored from sessionStorage', VESPA_STATE);
+      return true;
+    }
+  } catch (error) {
+    console.error('[VESPA Upload] Error restoring state:', error);
+  }
+  return false;
+}
+
+/**
+ * Clear all saved state
+ */
+function clearVespaState() {
+  try {
+    sessionStorage.removeItem('vespaUploadState');
+    VESPA_STATE = {
+      currentStep: 1,
+      uploadType: null,
+      uploadMethod: null,
+      uploadSubType: null,
+      selectedSchool: null,
+      selectedFile: null,
+      parsedData: null,
+      validationResults: null,
+      emulationMode: false,
+      emulationCustomerId: null,
+      emulationAdminDetails: null,
+      initialized: false
+    };
+    
+    // Reset legacy variables
+    currentStep = 1;
+    uploadType = null;
+    selectedSchool = null;
+    selectedFile = null;
+    validationResults = null;
+    window.parsedCsvData = null;
+    
+    if (DEBUG_MODE) console.log('[VESPA Upload] State cleared');
+  } catch (error) {
+    console.error('[VESPA Upload] Error clearing state:', error);
+  }
 }
 
 /**
@@ -605,6 +731,15 @@ function initializeUploadBridge() {
     debugLog("No configuration available yet!", null, 'warn');
   }
   
+  // Check if we can restore previous state
+  const hasRestoredState = restoreVespaState();
+  if (hasRestoredState && VESPA_STATE.initialized) {
+    debugLog("Restored previous state, jumping to step " + currentStep, VESPA_STATE, 'success');
+  } else {
+    debugLog("No previous state found, starting fresh", null, 'info');
+    VESPA_STATE.initialized = true;
+  }
+  
   // Set the API URL based on config or fallback
   API_BASE_URL = determineApiUrl();
   // Fetch user context information with retry
@@ -830,6 +965,12 @@ function initializeUploadInterface(container) {
   
   // Add the wizard HTML to the container
   container.innerHTML = wizardHTML;
+  
+  // Check if we should use restored state
+  const hasRestoredState = VESPA_STATE.initialized && currentStep > 1;
+  if (hasRestoredState) {
+    debugLog("Will restore to step " + currentStep + " after initialization", VESPA_STATE);
+  }
   
   // Set up event listeners
   document.getElementById('vespa-prev-button').addEventListener('click', prevStep);
@@ -1141,11 +1282,16 @@ function renderStep(step) {
     debugLog("Cannot render step without configuration", null, 'error');
     return;
   }
-// Debug step rendering (PART 6 - Add this block right here)
-const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID; // <-- Modified
-debugLog(`Rendering step ${step}, User is SuperUser: ${isSuperUser}`, {
-  currentStep: step,
-  uploadType: uploadType,
+  
+  // Update the current step globally and save state
+  currentStep = step;
+  saveVespaState();
+  
+  // Debug step rendering (PART 6 - Add this block right here)
+  const isSuperUser = VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID; // <-- Modified
+  debugLog(`Rendering step ${step}, User is SuperUser: ${isSuperUser}`, {
+    currentStep: step,
+    uploadType: uploadType,
   isSuperUser: isSuperUser
 });
 
@@ -1609,6 +1755,8 @@ function renderSelectSchoolStep() {
             <li><strong>Required fields:</strong> ULN, UPN, Firstname, Lastname, Student Email, Gender, DOB, Group, Year Gp, Level, Tutors, Head of Year</li>
             <li><strong>Level values:</strong> Must be either "Level 2" or "Level 3"</li>
             <li><strong>Tutors, Head of Year:</strong> Must contain valid email address(es) of existing staff.</li>
+            <li style="color: #d32f2f; font-weight: bold;">⚠️ IMPORTANT: Use commas (,) NOT semicolons (;) to separate multiple emails</li>
+            <li>Example: <code>teacher1@school.edu, teacher2@school.edu</code> ✓ NOT <code>teacher1@school.edu; teacher2@school.edu</code> ✗</li>
             <li>Ensure staff (Tutors, HoY) exist before this upload.</li>
           </ul>
         `;
@@ -1903,10 +2051,26 @@ function renderSelectSchoolStep() {
             statusClass = 'success';
             statusIcon = '✅';
             summaryHtml = `
-                <p><strong>Your data has been successfully queued for processing.</strong></p>
-                <p>Job ID: <code>${processingResults.jobId || 'N/A'}</code></p>
-                <p>You will receive an email at <strong>${processingResults.notificationEmail || 'your registered email'}</strong> with detailed results once processing is complete.</p>
-                <p class="vespa-success-message" style="margin-top: 20px;">✓ You can safely close this window now.</p>
+                <div style="animation: fadeIn 0.5s ease-in">
+                    <p style="font-size: 18px; color: #2e7d32; font-weight: bold;">
+                        <span style="font-size: 32px;">✅</span> Your data has been successfully queued for processing!
+                    </p>
+                    <div style="margin: 20px 0; padding: 20px; background: #e8f5e9; border-radius: 10px; border: 2px solid #4caf50;">
+                        <p style="margin: 10px 0;"><strong>Job ID:</strong> <code style="background: #fff; padding: 5px 10px; border-radius: 4px;">${processingResults.jobId || 'N/A'}</code></p>
+                        <p style="margin: 10px 0; font-size: 16px;">
+                            <span style="font-size: 20px;">📧</span> 
+                            <strong>Email notification will be sent to:</strong><br>
+                            <span style="color: #1976d2; font-size: 18px;">${processingResults.notificationEmail || 'your registered email'}</span>
+                        </p>
+                        <p style="margin: 15px 0; padding: 15px; background: #fff; border-left: 4px solid #4caf50; font-weight: bold;">
+                            ⚠️ IMPORTANT: The upload is now being processed in the background.<br>
+                            Do NOT re-upload the same file - this will create duplicate records!
+                        </p>
+                    </div>
+                    <p class="vespa-success-message" style="margin-top: 20px; font-size: 16px; color: #2e7d32;">
+                        ✓ Processing is underway. You can safely close this window now.
+                    </p>
+                </div>
             `;
         } else if (processingResults.status === 'submission_failed') {
             statusText = 'Upload Submission Failed';
@@ -2556,7 +2720,9 @@ A123459,sdavis@school.edu,6.5,Biology,Chemistry,Psychology,,`;
         }
       } else if (uploadType === 'student-onboard') { // Changed from 'student'
         // Required fields for students (Stage 1 - Onboarding)
-        const requiredFields = ['ULN', 'UPN', 'Firstname', 'Lastname', 'Student Email', 'Gender', 'DOB', 'Group', 'Year Gp', 'Level', 'Tutors', 'Head of Year'];
+        // Updated: UPN is optional, ULN removed, Gender/DOB/Head of Year are now optional
+        const requiredFields = ['Firstname', 'Lastname', 'Student Email', 'Group', 'Year Gp', 'Level', 'Tutors'];
+        const optionalFields = ['UPN', 'Gender', 'DOB', 'Head of Year', 'Subject Teachers'];
         
         requiredFields.forEach(field => {
           if (!row[field] || row[field].trim() === '') {
@@ -2590,6 +2756,66 @@ A123459,sdavis@school.edu,6.5,Biology,Chemistry,Psychology,,`;
             field: 'Level',
             message: `Row ${rowNum}: Level must be "Level 2" or "Level 3", got "${row['Level']}"`
           });
+        }
+        
+        // Tutors email format check - handle multiple emails
+        if (row['Tutors']) {
+          const tutorsField = row['Tutors'].trim();
+          
+          // Check for semicolons (common mistake)
+          if (tutorsField.includes(';')) {
+            results.isValid = false;
+            results.errors.push({
+              row: rowNum,
+              type: 'Format Error',
+              field: 'Tutors',
+              message: `Row ${rowNum}: Tutors field contains semicolons (;). Please use commas (,) to separate multiple email addresses. Found: "${tutorsField}"`
+            });
+          } else {
+            // Split by comma and validate each email
+            const tutorEmails = tutorsField.split(',').map(email => email.trim());
+            tutorEmails.forEach(email => {
+              if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                results.isValid = false;
+                results.errors.push({
+                  row: rowNum,
+                  type: 'Format Error',
+                  field: 'Tutors',
+                  message: `Row ${rowNum}: Invalid email format in Tutors field: "${email}". Each email must be in format: name@domain.com`
+                });
+              }
+            });
+          }
+        }
+        
+        // Head of Year email format check - handle multiple emails
+        if (row['Head of Year']) {
+          const hoyField = row['Head of Year'].trim();
+          
+          // Check for semicolons (common mistake)
+          if (hoyField.includes(';')) {
+            results.isValid = false;
+            results.errors.push({
+              row: rowNum,
+              type: 'Format Error',
+              field: 'Head of Year',
+              message: `Row ${rowNum}: Head of Year field contains semicolons (;). Please use commas (,) to separate multiple email addresses. Found: "${hoyField}"`
+            });
+          } else {
+            // Split by comma and validate each email
+            const hoyEmails = hoyField.split(',').map(email => email.trim());
+            hoyEmails.forEach(email => {
+              if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                results.isValid = false;
+                results.errors.push({
+                  row: rowNum,
+                  type: 'Format Error',
+                  field: 'Head of Year',
+                  message: `Row ${rowNum}: Invalid email format in Head of Year field: "${email}". Each email must be in format: name@domain.com`
+                });
+              }
+            });
+          }
         }
       } else if (uploadType === 'student-ks4') {
         const requiredFields = ['UPN', 'Student_Email', 'sub1', 'ex1'];
@@ -2859,16 +3085,88 @@ A123459,sdavis@school.edu,6.5,Biology,Chemistry,Psychology,,`;
         });
 
         debugLog(`Validation response status: ${response.status} ${response.statusText}`);
-        const resultData = await response.json().catch(err => {
+        
+        // Try to get response body regardless of status
+        let resultData = null;
+        const responseText = await response.text();
+        
+        try {
+          resultData = JSON.parse(responseText);
+          debugLog("Parsed API response:", resultData);
+        } catch (parseError) {
+          debugLog("Raw response text:", responseText, 'warn');
           if (!response.ok) {
-            throw new Error(`API responded with status: ${response.status}. Response body was not valid JSON or empty.`);
+            throw new Error(`API error ${response.status}: Unable to parse response. Raw response: ${responseText.substring(0, 200)}`);
           }
-          debugLog("Could not parse JSON response from API, but status was OK.", err, 'warn');
-          throw new Error(`Could not parse API response: ${err.message}. Check API format.`);
-        });
+          throw new Error(`Could not parse API response: ${parseError.message}`);
+        }
 
         if (!response.ok) {
-          const errorMessage = resultData?.message || resultData?.error || (`API error: ${response.status}` + (resultData?.details ? ` Details: ${JSON.stringify(resultData.details)}` : ''));
+          // Extract detailed error information
+          let errorDetails = [];
+          
+          // Check for various error formats from the API
+          if (resultData?.errors && Array.isArray(resultData.errors)) {
+            errorDetails = resultData.errors.map(err => {
+              if (typeof err === 'string') {
+                // Improve the error message if it's about invalid email format
+                if (err.includes('Invalid Tutor email format') && err.includes(';')) {
+                  return err.replace('Invalid Tutor email format', 
+                    'Invalid Tutor email format - Use commas (,) not semicolons (;) to separate multiple emails');
+                }
+                if (err.includes('Invalid Head of Year email format') && err.includes(';')) {
+                  return err.replace('Invalid Head of Year email format', 
+                    'Invalid Head of Year email format - Use commas (,) not semicolons (;) to separate multiple emails');
+                }
+                return err;
+              }
+              return err.message || err.error || JSON.stringify(err);
+            });
+          } else if (resultData?.error) {
+            let error = resultData.error;
+            // Improve the error message if it's about invalid email format
+            if (error.includes('Invalid') && error.includes('email format') && error.includes(';')) {
+              error = error.replace('Invalid Tutor email format', 
+                'Invalid Tutor email format - Use commas (,) not semicolons (;) to separate multiple emails');
+              error = error.replace('Invalid Head of Year email format', 
+                'Invalid Head of Year email format - Use commas (,) not semicolons (;) to separate multiple emails');
+            }
+            errorDetails.push(error);
+          } else if (resultData?.message) {
+            let message = resultData.message;
+            // Improve the error message if it's about invalid email format
+            if (message.includes('Invalid') && message.includes('email format') && message.includes(';')) {
+              message = message.replace('Invalid Tutor email format', 
+                'Invalid Tutor email format - Use commas (,) not semicolons (;) to separate multiple emails');
+              message = message.replace('Invalid Head of Year email format', 
+                'Invalid Head of Year email format - Use commas (,) not semicolons (;) to separate multiple emails');
+            }
+            errorDetails.push(message);
+          } else if (resultData?.details) {
+            errorDetails.push(JSON.stringify(resultData.details));
+          }
+          
+          const errorMessage = errorDetails.length > 0 
+            ? `Validation failed:\n${errorDetails.join('\n')}` 
+            : `API error ${response.status}: ${response.statusText}`;
+          
+          debugLog("API validation error details:", { 
+            status: response.status, 
+            statusText: response.statusText,
+            errors: errorDetails,
+            fullResponse: resultData 
+          }, 'error');
+          
+          // Store the error details for display
+          validationResults = {
+            success: false,
+            isValid: false,
+            errors: errorDetails,
+            rawResponse: resultData,
+            source: 'api'
+          };
+          
+          displayValidationErrors(errorDetails);
           throw new Error(errorMessage);
         }
         
@@ -3054,14 +3352,39 @@ A123459,sdavis@school.edu,6.5,Biology,Chemistry,Psychology,,`;
         let errorData = '';
         
         if (typeof error === 'string') {
-          // Handle string errors
+          // Handle string errors - improve clarity for common issues
           errorMessage = error;
+          
+          // Parse row number from error string if present
+          const rowMatch = error.match(/Row (\d+):/);
+          if (rowMatch) {
+            errorRow = rowMatch[1];
+          }
+          
+          // Enhance error message clarity
+          if (error.includes('semicolon') || error.includes(';')) {
+            errorType = 'Email Separator Error';
+            // Highlight the issue more clearly
+            errorMessage = errorMessage
+              .replace(/;/g, '<span style="color: red; font-weight: bold;">;</span>')
+              .replace('semicolons', '<span style="color: red; font-weight: bold;">semicolons</span>')
+              .replace('commas', '<span style="color: green; font-weight: bold;">commas</span>');
+          }
         } else {
           // Handle object errors with different possible structures
           errorRow = error.row || '';
           errorType = error.type || 'Validation Error';
           errorField = error.field || '';
           errorMessage = error.message || error.error || 'Unknown error';
+          
+          // Enhance error message clarity for semicolon issues
+          if (errorMessage.includes('semicolon') || errorMessage.includes(';')) {
+            errorType = 'Email Separator Error';
+            errorMessage = errorMessage
+              .replace(/;/g, '<span style="color: red; font-weight: bold;">;</span>')
+              .replace('semicolons', '<span style="color: red; font-weight: bold;">semicolons</span>')
+              .replace('commas', '<span style="color: green; font-weight: bold;">commas</span>');
+          }
           
           // If we have data that failed validation, show it
           if (error.data) {
@@ -4215,6 +4538,30 @@ function bindStepEvents() {
   window.showSelfRegistrationModal = showSelfRegistrationModal;
   window.generateRegistrationLink = generateRegistrationLink;
   // Note: viewQRCode, downloadQRFromView, and regenerateQRLink are assigned to window after their definitions
+  
+  // Expose the state management functions globally for debugging and external access
+  window.VESPAUpload = {
+    saveState: saveVespaState,
+    restoreState: restoreVespaState,
+    clearState: clearVespaState,
+    getState: () => VESPA_STATE,
+    getCurrentStep: () => currentStep,
+    getUploadType: () => uploadType,
+    getSelectedFile: () => selectedFile,
+    getValidationResults: () => validationResults,
+    renderStep: renderStep,
+    resetToStart: () => {
+      clearVespaState();
+      currentStep = 1;
+      uploadType = null;
+      selectedFile = null;
+      validationResults = null;
+      const container = document.querySelector('#view_3020 .kn-rich_text__content');
+      if (container) {
+        initializeUploadInterface(container);
+      }
+    }
+  };
   
   // Academic Data Management functions
   window.showAcademicDataInterface = showAcademicDataInterface;
