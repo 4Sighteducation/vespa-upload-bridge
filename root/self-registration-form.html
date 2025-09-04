@@ -761,7 +761,19 @@
             
             <div class="loading" id="loading">
                 <div class="spinner"></div>
-                <p>Processing your registration...</p>
+                <p style="font-weight: 600; font-size: 18px; margin-bottom: 15px;">Processing your registration...</p>
+                <div style="max-width: 400px; margin: 0 auto; padding: 15px;">
+                    <p style="color: #666; font-size: 14px; line-height: 1.6;">
+                        <strong>Please wait...</strong><br>
+                        If many students are registering at the same time, this may take a moment.
+                    </p>
+                    <p style="color: #666; font-size: 14px; line-height: 1.6; margin-top: 10px;">
+                        Your account is being created and you'll receive an email with your login credentials shortly.
+                    </p>
+                    <p style="color: #666; font-size: 14px; line-height: 1.6; margin-top: 10px;">
+                        If the page doesn't redirect automatically, you can return later and log in using the credentials sent to your email.
+                    </p>
+                </div>
             </div>
             
             <!-- Success Screen with Password Display -->
@@ -783,11 +795,27 @@
                     </div>
                 </div>
                 <button id="login-button" class="login-button">
-                    Go to VESPA Login →
+                    Continue to Sign In →
                 </button>
                 <p class="security-note">
-                    ⚠️ Save these details - they've also been emailed to you
+                    ✉️ These login details have also been emailed to you for your records.
                 </p>
+                <div style="margin-top: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px; font-size: 14px;">
+                    <p style="margin-bottom: 10px; color: #1565c0;">
+                        <strong>Note:</strong> If you're not directed to the login page immediately, 
+                        or if the page appears stuck, you can:
+                    </p>
+                    <ul style="margin: 10px 0; padding-left: 20px; color: #555;">
+                        <li>Wait a moment and the page will redirect automatically</li>
+                        <li>Or click here to go directly to the login page: 
+                            <a href="https://vespaacademy.knack.com/vespa-academy#home/" 
+                               style="color: #007bff; text-decoration: underline;">
+                                VESPA Login
+                            </a>
+                        </li>
+                        <li>Use the credentials shown above or check your email</li>
+                    </ul>
+                </div>
             </div>
         </div>
     </div>
@@ -1409,11 +1437,15 @@
                     document.getElementById('display-email').textContent = result.credentials.email;
                     document.getElementById('display-password').textContent = result.credentials.password;
                     
-                    // Set up login button
-                    document.getElementById('login-button').onclick = function() {
-                        // Open login page with email pre-filled
-                        window.location.href = result.credentials.loginUrl;
-                    };
+                                    // Set up login button
+                document.getElementById('login-button').onclick = function() {
+                    // Show loading state while redirecting
+                    document.getElementById('login-button').textContent = 'Loading VESPA...';
+                    document.getElementById('login-button').disabled = true;
+                    
+                    // Redirect to login page with auto-login credentials
+                    window.location.href = result.credentials.loginUrl;
+                };
                     
                     // Show success screen
                     document.getElementById('success-screen').style.display = 'block';
