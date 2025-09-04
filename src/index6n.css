@@ -1563,14 +1563,17 @@ code {
 }
 
 /* Ensure proper grid layouts */
-#staff-manual-entry-form .vespa-form-row:first-of-type,
-#student-manual-entry-form .vespa-form-row:first-of-type {
+#staff-manual-entry-form .vespa-form-row:first-of-type {
   grid-template-columns: 1fr 2fr 2fr;
 }
 
-#staff-manual-entry-form .vespa-form-row:not(:first-of-type),
-#student-manual-entry-form .vespa-form-row:not(:first-of-type) {
+#staff-manual-entry-form .vespa-form-row:not(:first-of-type) {
   grid-template-columns: 1fr 1fr;
+}
+
+/* Student form has all rows with 2 equal columns after ULN removal */
+#student-manual-entry-form .vespa-form-row {
+  grid-template-columns: 1fr 1fr !important;
 }
 
 /* Manual entry results */

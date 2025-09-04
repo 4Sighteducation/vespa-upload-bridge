@@ -16,9 +16,9 @@ Features
 
 Supported Objects (with preset configurations):
 ------------------------------------------------
-Object_10 (VESPA Results):       email=field_197,  establishment=field_133
-Object_29 (Questionnaires):      email=field_2732, establishment=field_1821
-Object_3  (User Accounts):       email=field_70,   establishment=field_122
+Object_10 (VESPA Results):       email=field_197,  establishment=field_133, tutor_group=field_223
+Object_29 (Questionnaires):      email=field_2732, establishment=field_1821, tutor_group=field_1824
+Object_3  (User Accounts):       email=field_70,   establishment=field_122, tutor_group=field_708
 
 Filtering
 ---------
@@ -29,11 +29,14 @@ or
 or
   --filter-field field_XXX --filter-operator is --filter-value VALUE (generic)
 
+You can also filter by tutor group:
+  --tutor-group VALUE (auto-detects tutor group field based on object)
+
 Examples
 --------
-python knack_dedupe.py --object object_10 --email-field field_197 --establishment 12345 --keep oldest --backup dupes.csv
-python knack_dedupe.py --object object_29 --email-field field_2732 --establishment 12345 --keep oldest --apply
-python knack_dedupe.py --object object_3 --email-field field_70 --establishment 12345 --keep oldest --dry-run
+python knack_dedupe.py --object object_10 --establishment 63bc1c145f917b001289b14e --keep oldest --backup dupes.csv
+python knack_dedupe.py --object object_29 --establishment 12345 --tutor-group "A" --keep oldest --apply
+python knack_dedupe.py --object object_3 --establishment 686ce50e6b2cd002d1e3f180 --keep oldest --dry-run
 """
 
 import argparse
@@ -56,17 +59,20 @@ OBJECT_FIELD_MAPPINGS = {
     "object_10": {
         "name": "VESPA Results",
         "email_field": "field_197",
-        "establishment_field": "field_133"
+        "establishment_field": "field_133",
+        "tutor_group_field": "field_223"
     },
     "object_29": {
         "name": "Questionnaire Responses",
         "email_field": "field_2732",
-        "establishment_field": "field_1821"
+        "establishment_field": "field_1821",
+        "tutor_group_field": "field_1824"
     },
     "object_3": {
         "name": "User Accounts",
         "email_field": "field_70",
-        "establishment_field": "field_122"
+        "establishment_field": "field_122",
+        "tutor_group_field": "field_708"
     }
 }
 
@@ -323,19 +329,19 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Supported Objects (with auto-detected fields):
-  object_10 (VESPA Results):      email=field_197,  establishment=field_133
-  object_29 (Questionnaires):     email=field_2732, establishment=field_1821
-  object_3  (User Accounts):      email=field_70,   establishment=field_122
+  object_10 (VESPA Results):      email=field_197,  establishment=field_133, tutor_group=field_223
+  object_29 (Questionnaires):     email=field_2732, establishment=field_1821, tutor_group=field_1824
+  object_3  (User Accounts):      email=field_70,   establishment=field_122, tutor_group=field_708
 
 Examples:
   # Dry run with backup
-  python knack_dedupe.py --object object_10 --establishment 12345 --backup dupes.csv
+  python knack_dedupe.py --object object_10 --establishment 63bc1c145f917b001289b14e --backup dupes.csv
   
-  # Apply deletions (keeps oldest)
-  python knack_dedupe.py --object object_29 --establishment 12345 --apply
+  # Apply deletions with tutor group filter
+  python knack_dedupe.py --object object_29 --establishment 12345 --tutor-group "A" --apply
   
   # Keep newest records
-  python knack_dedupe.py --object object_3 --establishment 12345 --keep newest --apply
+  python knack_dedupe.py --object object_3 --establishment 686ce50e6b2cd002d1e3f180 --keep newest --apply
         """
     )
     ap.add_argument("--app-id", help="Knack Application ID (or set KNACK_APP_ID / .env)")
@@ -355,7 +361,9 @@ Examples:
                     help="Disable Gmail-specific normalization (dot/plus handling)")
     # Server-side filters
     ap.add_argument("--establishment", default=None,
-                    help="Filter by establishment (auto-detects field based on object)")
+                    help="Filter by establishment ID (auto-detects field based on object)")
+    ap.add_argument("--tutor-group", default=None,
+                    help="Filter by tutor group (auto-detects field based on object)")
     ap.add_argument("--establishment-field", default=None,
                     help="Explicit establishment field key (overrides auto-detection)")
     ap.add_argument("--filter-field", default=None,
@@ -388,8 +396,10 @@ Examples:
         print(f"Known objects: {', '.join(OBJECT_FIELD_MAPPINGS.keys())}")
         sys.exit(2)
 
-    # Build filters, if any
-    filters = None
+    # Build filters
+    filters = []
+    
+    # Add establishment filter
     if args.establishment:
         # Determine establishment field
         est_field = args.establishment_field
@@ -403,9 +413,25 @@ Examples:
             print(f"Known objects: {', '.join(OBJECT_FIELD_MAPPINGS.keys())}")
             sys.exit(2)
         
-        filters = [{"field": est_field, "operator": "is", "value": args.establishment}]
-    elif args.filter_field and args.filter_value:
-        filters = [{"field": args.filter_field, "operator": args.filter_operator, "value": args.filter_value}]
+        filters.append({"field": est_field, "operator": "is", "value": args.establishment})
+    
+    # Add tutor group filter
+    if args.tutor_group:
+        if args.object_key in OBJECT_FIELD_MAPPINGS and "tutor_group_field" in OBJECT_FIELD_MAPPINGS[args.object_key]:
+            tutor_field = OBJECT_FIELD_MAPPINGS[args.object_key]["tutor_group_field"]
+            filters.append({"field": tutor_field, "operator": "is", "value": args.tutor_group})
+            if args.verbose:
+                print(f"Auto-detected tutor group field: {tutor_field}")
+        else:
+            print(f"WARNING: Tutor group filter not available for {args.object_key}")
+    
+    # Add generic filter if specified
+    if args.filter_field and args.filter_value:
+        filters.append({"field": args.filter_field, "operator": args.filter_operator, "value": args.filter_value})
+    
+    # Convert to None if no filters
+    if not filters:
+        filters = None
 
     if filters:
         print(f"Applying server-side filters: {filters}")
@@ -456,7 +482,14 @@ Examples:
     print(f"Keep strategy:           {args.keep}")
     
     if filters:
-        print(f"Filters applied:         {filters[0]['field']} = {filters[0]['value']}")
+        for f in filters:
+            field_name = f['field']
+            if field_name == OBJECT_FIELD_MAPPINGS.get(args.object_key, {}).get("establishment_field"):
+                print(f"Establishment filter:    {field_name} = {f['value']}")
+            elif field_name == OBJECT_FIELD_MAPPINGS.get(args.object_key, {}).get("tutor_group_field"):
+                print(f"Tutor group filter:      {field_name} = {f['value']}")
+            else:
+                print(f"Filter applied:          {field_name} {f.get('operator', '=')} {f['value']}")
     
     if to_delete:
         print("\n" + "-"*60)
@@ -481,7 +514,13 @@ Examples:
         print("="*60)
         if to_delete:
             print("\nTo actually delete these duplicates, re-run with --apply")
-            print(f"Command: python knack_dedupe.py --object {args.object_key} --establishment {args.establishment or 'YOUR_ID'} --apply")
+            cmd_parts = ["python knack_dedupe.py", f"--object {args.object_key}"]
+            if args.establishment:
+                cmd_parts.append(f"--establishment {args.establishment}")
+            if args.tutor_group:
+                cmd_parts.append(f'--tutor-group "{args.tutor_group}"')
+            cmd_parts.append("--apply")
+            print(f"Command: {' '.join(cmd_parts)}")
         return
 
     if to_delete == 0:

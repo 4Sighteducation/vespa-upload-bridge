@@ -6,25 +6,29 @@ Knack Archive and Clear - Export establishment records to CSV, archive to Object
 Features
 --------
 1. Export records from Object_10 (VESPA Results) and Object_29 (Questionnaires) to CSV
-2. Filter by establishment and optionally by year group
+2. Filter by establishment (name or ID), year group, and tutor group
 3. Upload CSV files to Object_68 (Archive object) with metadata
 4. Clear non-preserved fields from the original records
 5. Supports dry-run mode to preview actions without making changes
+6. Establishment lookup by name for convenience
 
 Object Configurations
 --------------------
 Object_10 (VESPA Results):
   - Establishment field: field_133
   - Year group field: field_144
+  - Tutor group field: field_223
   - Preserved fields: field_133, field_439, field_187, field_137, field_197, field_143, 
                      field_568, field_223, field_2299, field_145, field_429, field_2191, 
-                     field_144, field_782
+                     field_144, field_782 (faculty)
 
 Object_29 (Questionnaires):
   - Establishment field: field_1821
   - Year group field: field_1826
+  - Tutor group field: field_1824
   - Preserved fields: field_1821, field_1823, field_2732, field_2069, field_2071, 
-                     field_3266, field_2070, field_792
+                     field_3266, field_2070, field_792, field_1824 (group), 
+                     field_1825 (faculty), field_1826 (year), field_1830 (gender)
 
 Object_68 (Archive):
   - field_1593: Filename (short text)
@@ -33,17 +37,18 @@ Object_68 (Archive):
   - field_1596: Archived on (date field)
   - field_3653: CSV type ('10 - results' or '29 - Questions')
   - field_3654: Year group (short text, if specified)
+  - field_3655: Tutor group (short text, if specified)
 
 Examples
 --------
 # Archive all records for an establishment
-python knack_archive_clear.py --establishment 12345 --apply
+python knack_archive_clear.py --establishment 63bc1c145f917b001289b14e --apply
 
-# Archive only Year 11 records
-python knack_archive_clear.py --establishment 12345 --year-group "Year 11" --apply
+# Archive only Year 11, Group A records
+python knack_archive_clear.py --establishment 686ce50e6b2cd002d1e3f180 --year-group "Year 11" --tutor-group "A" --apply
 
 # Dry run to preview what will be archived
-python knack_archive_clear.py --establishment 12345 --dry-run
+python knack_archive_clear.py --establishment 63bc1c145f917b001289b14e --dry-run
 
 # Skip the clearing step (only archive)
 python knack_archive_clear.py --establishment 12345 --no-clear --apply
@@ -79,6 +84,7 @@ OBJECT_CONFIGS = {
         "name": "VESPA Results",
         "establishment_field": "field_133",
         "year_group_field": "field_144",
+        "tutor_group_field": "field_223",
         "csv_type": "10 - results",
         "preserved_fields": [
             "field_133",  # Establishment
@@ -94,13 +100,14 @@ OBJECT_CONFIGS = {
             "field_429",  # Connected Head of Year
             "field_2191", # Connected Subject Teachers
             "field_144",  # Year Group
-            "field_782"   # (Additional field)
+            "field_782"   # Faculty
         ]
     },
     "object_29": {
         "name": "Questionnaire Responses",
         "establishment_field": "field_1821",
         "year_group_field": "field_1826",
+        "tutor_group_field": "field_1824",
         "csv_type": "29 - Questions",
         "preserved_fields": [
             "field_1821", # Establishment
@@ -110,7 +117,11 @@ OBJECT_CONFIGS = {
             "field_2071", # Connected Subject Teachers
             "field_3266", # Connected Heads of Year
             "field_2070", # Connected Tutors
-            "field_792"   # Connected to Object_10
+            "field_792",  # Connected to Object_10
+            "field_1824", # Group
+            "field_1825", # Faculty
+            "field_1826", # Year Group
+            "field_1830"  # Gender
         ]
     }
 }
@@ -123,7 +134,8 @@ ARCHIVE_CONFIG = {
     "csv_file_field": "field_1595",
     "archived_date_field": "field_1596",
     "csv_type_field": "field_3653",
-    "year_group_field": "field_3654"
+    "year_group_field": "field_3654",
+    "tutor_group_field": "field_3655"
 }
 
 
@@ -312,7 +324,8 @@ def upload_to_archive(app_id: str, api_key: str,
                      filename: str,
                      establishment_id: str,
                      csv_type: str,
-                     year_group: Optional[str] = None) -> Dict[str, Any]:
+                     year_group: Optional[str] = None,
+                     tutor_group: Optional[str] = None) -> Dict[str, Any]:
     """Upload CSV to Object_68 (Archive)"""
     # Note: Knack file uploads require a two-step process:
     # 1. Upload the file to get a file ID
@@ -336,6 +349,10 @@ def upload_to_archive(app_id: str, api_key: str,
     # Add year group if specified
     if year_group:
         payload[ARCHIVE_CONFIG["year_group_field"]] = year_group
+    
+    # Add tutor group if specified
+    if tutor_group:
+        payload[ARCHIVE_CONFIG["tutor_group_field"]] = tutor_group
     
     # Note: File field (field_1595) is omitted for now
     # Files are saved locally in archive_exports directory
@@ -389,13 +406,13 @@ Archives records from Object_10 and Object_29 to Object_68, then clears non-esse
 
 Examples:
   # Archive all records for an establishment
-  python knack_archive_clear.py --establishment 12345 --apply
+  python knack_archive_clear.py --establishment 63bc1c145f917b001289b14e --apply
   
-  # Archive only Year 11 records
-  python knack_archive_clear.py --establishment 12345 --year-group "Year 11" --apply
+  # Archive only Year 11, Group A records
+  python knack_archive_clear.py --establishment 686ce50e6b2cd002d1e3f180 --year-group "Year 11" --tutor-group "A" --apply
   
   # Dry run to preview
-  python knack_archive_clear.py --establishment 12345 --dry-run
+  python knack_archive_clear.py --establishment 63bc1c145f917b001289b14e --dry-run
   
   # Skip clearing step
   python knack_archive_clear.py --establishment 12345 --no-clear --apply
@@ -408,6 +425,8 @@ Examples:
                     help="Establishment ID to archive")
     ap.add_argument("--year-group", 
                     help="Optional: Archive only specific year group")
+    ap.add_argument("--tutor-group",
+                    help="Optional: Archive only specific tutor group")
     ap.add_argument("--apply", action="store_true",
                     help="Actually perform the archive and clear operations")
     ap.add_argument("--dry-run", action="store_true",
@@ -430,6 +449,9 @@ Examples:
         print("Provide --app-id/--api-key or set KNACK_APP_ID/KNACK_API_KEY")
         sys.exit(2)
     
+    # Use establishment ID directly
+    establishment_id = args.establishment
+    
     # Create output directory if needed
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
@@ -437,9 +459,11 @@ Examples:
     print("="*60)
     print("KNACK ARCHIVE AND CLEAR")
     print("="*60)
-    print(f"Establishment: {args.establishment}")
+    print(f"Establishment: {establishment_id}")
     if args.year_group:
         print(f"Year Group:    {args.year_group}")
+    if args.tutor_group:
+        print(f"Tutor Group:   {args.tutor_group}")
     print(f"Mode:          {'DRY RUN' if args.dry_run or not args.apply else 'APPLY CHANGES'}")
     print(f"Clear Records: {'No' if args.no_clear else 'Yes'}")
     print()
@@ -455,7 +479,7 @@ Examples:
             {
                 "field": config["establishment_field"],
                 "operator": "is",
-                "value": args.establishment
+                "value": establishment_id
             }
         ]
         
@@ -464,6 +488,13 @@ Examples:
                 "field": config["year_group_field"],
                 "operator": "is",
                 "value": args.year_group
+            })
+        
+        if args.tutor_group and "tutor_group_field" in config:
+            filters.append({
+                "field": config["tutor_group_field"],
+                "operator": "is",
+                "value": args.tutor_group
             })
         
         if args.verbose:
@@ -490,7 +521,8 @@ Examples:
         # Generate filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         year_suffix = f"_{args.year_group.replace(' ', '')}" if args.year_group else ""
-        filename = f"{object_key}_{args.establishment}{year_suffix}_{timestamp}.csv"
+        group_suffix = f"_{args.tutor_group}" if args.tutor_group else ""
+        filename = f"{object_key}_{establishment_id}{year_suffix}{group_suffix}_{timestamp}.csv"
         
         # Save local copy
         local_path = os.path.join(args.output_dir, filename)
@@ -508,9 +540,10 @@ Examples:
                     app_id, api_key,
                     csv_content=csv_content,
                     filename=filename,
-                    establishment_id=args.establishment,
+                    establishment_id=establishment_id,
                     csv_type=config["csv_type"],
-                    year_group=args.year_group
+                    year_group=args.year_group,
+                    tutor_group=args.tutor_group
                 )
                 print(f"✓ Archive record created in Object_68 with ID: {archive_record.get('id')}")
                 print(f"  Note: CSV file saved locally at: {local_path}")

@@ -514,7 +514,7 @@ function addStyles() {
   linkElement.id = 'vespa-upload-styles';
   linkElement.rel = 'stylesheet';
   linkElement.type = 'text/css';
-  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index6k.css';
+  linkElement.href = 'https://cdn.jsdelivr.net/gh/4Sighteducation/vespa-upload-bridge@main/src/index6n.css';
   
   document.head.appendChild(linkElement);
   debugLog("Dynamically linked external CSS: " + linkElement.href, null, 'info');
@@ -2253,17 +2253,6 @@ function renderSelectSchoolStep() {
       <form id="student-manual-entry-form" style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
         <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
           <div class="vespa-form-group">
-            <label for="student-uln">ULN <span style="color: red;">*</span></label>
-            <input type="text" id="student-uln" name="uln" required placeholder="10-digit ULN">
-          </div>
-          <div class="vespa-form-group">
-            <label for="student-upn">UPN <span style="color: red;">*</span></label>
-            <input type="text" id="student-upn" name="upn" required placeholder="e.g., A123456">
-          </div>
-        </div>
-        
-        <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
-          <div class="vespa-form-group">
             <label for="student-first-name">First Name <span style="color: red;">*</span></label>
             <input type="text" id="student-first-name" name="firstName" required>
           </div>
@@ -2273,9 +2262,15 @@ function renderSelectSchoolStep() {
           </div>
         </div>
         
-        <div class="vespa-form-group" style="margin-bottom: 15px;">
-          <label for="student-email">Student Email <span style="color: red;">*</span></label>
-          <input type="email" id="student-email" name="email" required>
+        <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+          <div class="vespa-form-group">
+            <label for="student-email">Student Email <span style="color: red;">*</span></label>
+            <input type="email" id="student-email" name="email" required>
+          </div>
+          <div class="vespa-form-group">
+            <label for="student-upn">UPN (Optional)</label>
+            <input type="text" id="student-upn" name="upn" placeholder="Leave blank to auto-generate">
+          </div>
         </div>
         
         <div class="vespa-form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
@@ -4364,8 +4359,7 @@ function bindStepEvents() {
         }
         
         csvData = {
-          'ULN': form.uln.value.trim(),
-          'UPN': form.upn.value.trim(), // Required field
+          'UPN': form.upn.value.trim() || '', // Optional - will auto-generate if blank
           'Firstname': form.firstName.value.trim(),
           'Lastname': form.lastName.value.trim(),
           'Student Email': form.email.value.trim(),

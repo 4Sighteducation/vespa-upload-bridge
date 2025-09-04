@@ -8,7 +8,9 @@ A collection of Python scripts for managing Knack database records, including de
 - [Scripts Overview](#scripts-overview)
 - [1. Deduplication Script (knack_dedupe.py)](#1-deduplication-script-knack_dedupepy)
 - [2. Archive & Clear Script (knack_archive_clear.py)](#2-archive--clear-script-knack_archive_clearpy)
-- [3. View Archive Script (view_archive.py)](#3-view-archive-script-view_archivepy)
+- [3. Delete Students Script (knack_delete_students.py)](#3-delete-students-script-knack_delete_studentspy)
+- [4. Establishment Lookup Script (knack_establishment_lookup.py)](#4-establishment-lookup-script-knack_establishment_lookuppy)
+- [5. View Archive Script (view_archive.py)](#5-view-archive-script-view_archivepy)
 - [Common Use Cases](#common-use-cases)
 - [Important Notes](#important-notes)
 
@@ -38,8 +40,10 @@ You can provide credentials in three ways (in order of precedence):
 
 | Script | Purpose | Main Features |
 |--------|---------|---------------|
-| `knack_dedupe.py` | Remove duplicate records based on email | Auto-detects fields, filters by establishment, keeps oldest/newest |
-| `knack_archive_clear.py` | Archive and clear establishment data | Exports to CSV, uploads to Object_68, clears non-essential fields |
+| `knack_dedupe.py` | Remove duplicate records based on email | Auto-detects fields, filters by establishment/tutor group, keeps oldest/newest |
+| `knack_archive_clear.py` | Archive and clear establishment data | Exports to CSV, uploads to Object_68, clears non-essential fields, supports tutor group |
+| `knack_delete_students.py` | Delete student records | Two modes: ALL STUDENT DATA or QUESTIONNAIRE DATA only |
+| `knack_establishment_lookup.py` | Find establishment IDs by name | Search establishments, list all, get IDs quickly |
 | `view_archive.py` | View archived CSV files | Displays summary of exported data |
 
 ## 1. Deduplication Script (knack_dedupe.py)
@@ -47,9 +51,9 @@ You can provide credentials in three ways (in order of precedence):
 Removes duplicate records based on email addresses with automatic field detection for known objects.
 
 ### Supported Objects
-- **Object_10** (VESPA Results): email=field_197, establishment=field_133
-- **Object_29** (Questionnaires): email=field_2732, establishment=field_1821
-- **Object_3** (User Accounts): email=field_70, establishment=field_122
+- **Object_10** (VESPA Results): email=field_197, establishment=field_133, tutor_group=field_223
+- **Object_29** (Questionnaires): email=field_2732, establishment=field_1821, tutor_group=field_1824
+- **Object_3** (User Accounts): email=field_70, establishment=field_122, tutor_group=field_708
 
 ### Basic Commands
 
@@ -58,14 +62,14 @@ Removes duplicate records based on email addresses with automatic field detectio
 # Object_10 - VESPA Results
 python .\src\knack_dedupe.py `
   --object object_10 `
-  --establishment 686ce50e6b2cd002d1e3f180 `
+  --establishment 63bc1c145f917b001289b14e `
   --keep oldest `
   --backup object10_duplicates.csv
 
 # Object_29 - Questionnaire Responses
 python .\src\knack_dedupe.py `
   --object object_29 `
-  --establishment 686ce50e6b2cd002d1e3f180 `
+  --establishment 63bc1c145f917b001289b14e `
   --keep oldest `
   --backup object29_duplicates.csv
 
@@ -89,7 +93,7 @@ python .\src\knack_dedupe.py `
 # Object_29 - Delete duplicates
 python .\src\knack_dedupe.py `
   --object object_29 `
-  --establishment 686ce50e6b2cd002d1e3f180 `
+  --establishment 63bc1c145f917b001289b14e `
   --keep oldest `
   --apply
 
@@ -108,6 +112,13 @@ python .\src\knack_dedupe.py `
   --object object_10 `
   --establishment 686ce50e6b2cd002d1e3f180 `
   --keep newest `
+  --apply
+
+# Filter by tutor group
+python .\src\knack_dedupe.py `
+  --object object_29 `
+  --establishment 63bc1c145f917b001289b14e `
+  --tutor-group "A" `
   --apply
 
 # Verbose output for debugging
@@ -137,6 +148,7 @@ python .\src\knack_dedupe.py `
 - `--object`: Object key (e.g., object_10)
 - `--email-field`: Email field key (auto-detected for known objects)
 - `--establishment`: Filter by establishment ID
+- `--tutor-group`: Filter by tutor group (auto-detected for known objects)
 - `--establishment-field`: Explicit establishment field (overrides auto-detection)
 - `--keep`: Which record to keep ('oldest' or 'newest', default: oldest)
 - `--apply`: Actually delete duplicates (without this, it's a dry run)
@@ -160,9 +172,9 @@ Archives establishment records to CSV and Object_68, then optionally clears non-
 - Saves local backup copies
 
 ### Preserved Fields
-**Object_10**: field_133, field_439, field_187, field_137, field_197, field_143, field_568, field_223, field_2299, field_145, field_429, field_2191, field_144, field_782
+**Object_10**: field_133 (establishment), field_439 (staff admin), field_187 (name), field_137 (school ID), field_197 (email), field_143 (gender), field_568 (level), field_223 (group), field_2299, field_145 (tutors), field_429 (head of year), field_2191 (subject teachers), field_144 (year group), field_782 (faculty)
 
-**Object_29**: field_1821, field_1823, field_2732, field_2069, field_2071, field_3266, field_2070, field_792
+**Object_29**: field_1821 (establishment), field_1823 (name), field_2732 (email), field_2069 (staff admin), field_2071 (subject teachers), field_3266 (heads of year), field_2070 (tutors), field_792 (connected to Object_10), field_1824 (group), field_1825 (faculty), field_1826 (year group), field_1830 (gender)
 
 ### Basic Commands
 
@@ -208,6 +220,13 @@ python .\src\knack_archive_clear.py `
   --year-group "Year 12" `
   --no-clear `
   --apply
+
+# Archive specific tutor group
+python .\src\knack_archive_clear.py `
+  --establishment 63bc1c145f917b001289b14e `
+  --year-group "Year 11" `
+  --tutor-group "A" `
+  --apply
 ```
 
 #### Custom Output Directory
@@ -222,6 +241,7 @@ python .\src\knack_archive_clear.py `
 ### Command Line Options
 - `--establishment`: Establishment ID to archive (required)
 - `--year-group`: Optional year group filter
+- `--tutor-group`: Optional tutor group filter
 - `--apply`: Actually perform operations (without this, it's a dry run)
 - `--dry-run`: Preview mode (no changes)
 - `--no-clear`: Only archive, don't clear original records
@@ -237,8 +257,123 @@ python .\src\knack_archive_clear.py `
 - **field_1596**: Archived date
 - **field_3653**: CSV type ('10 - results' or '29 - Questions')
 - **field_3654**: Year group (if specified)
+- **field_3655**: Tutor group (if specified)
 
-## 3. View Archive Script (view_archive.py)
+## 3. Delete Students Script (knack_delete_students.py)
+
+Deletes student records with two operational modes and multiple filtering options.
+
+### Deletion Modes
+
+#### Mode 1: ALL STUDENT DATA
+- Deletes Object_3 accounts with ONLY "Student" role (not mixed roles)
+- Finds and deletes all related records in Object_10, Object_29, Object_113 by matching email
+- Complete removal of student from system
+
+#### Mode 2: QUESTIONNAIRE DATA
+- Deletes only Object_10 and Object_29 records
+- Leaves Object_3 accounts intact
+- Useful for clearing assessment data while keeping accounts
+
+### Basic Commands
+
+#### Delete All Student Data
+```powershell
+# Dry run - preview what will be deleted
+python .\src\knack_delete_students.py `
+  --mode all-student-data `
+  --establishment 686ce50e6b2cd002d1e3f180 `
+  --backup students_backup.csv
+
+# Actually delete (requires confirmation)
+python .\src\knack_delete_students.py `
+  --mode all-student-data `
+  --establishment 686ce50e6b2cd002d1e3f180 `
+  --apply
+```
+
+#### Delete Questionnaire Data Only
+```powershell
+# Delete for specific year and tutor group
+python .\src\knack_delete_students.py `
+  --mode questionnaire-data `
+  --establishment 63bc1c145f917b001289b14e `
+  --year-group "Year 11" `
+  --tutor-group "A" `
+  --apply
+
+# Delete all questionnaire data for establishment
+python .\src\knack_delete_students.py `
+  --mode questionnaire-data `
+  --establishment 686ce50e6b2cd002d1e3f180 `
+  --apply
+```
+
+### Command Line Options
+- `--mode`: Required. Either 'all-student-data' or 'questionnaire-data'
+- `--establishment`: Establishment ID to process
+- `--year-group`: Filter by year group (Object_3: field_550, Object_10: field_144, Object_29: field_1826)
+- `--tutor-group`: Filter by tutor group (Object_3: field_708, Object_10: field_223, Object_29: field_1824)
+- `--apply`: Actually delete records (without this, it's a dry run)
+- `--backup`: Path to CSV backup file
+- `--verbose`: Detailed output
+
+### Safety Features
+- Dry run by default
+- Shows detailed preview of what will be deleted
+- Requires typing "DELETE" to confirm when using --apply
+- Creates optional CSV backup before deletion
+
+## 4. Establishment Lookup Script (knack_establishment_lookup.py)
+
+Standalone utility to find establishment IDs by name - useful for getting IDs quickly in terminal.
+
+### Basic Commands
+
+#### Search for Establishment
+```powershell
+# Find establishment by partial name
+python .\src\knack_establishment_lookup.py --search british
+
+# Find establishment by exact name
+python .\src\knack_establishment_lookup.py "British International School of Kuala Lumpur"
+
+# List all establishments
+python .\src\knack_establishment_lookup.py --list
+
+# Limit results when listing
+python .\src\knack_establishment_lookup.py --list --limit 50
+```
+
+### Example Output
+```
+Found 2 establishments containing 'british':
+------------------------------------------------------------
+British International School of Kuala Lumpur (ID: 686ce50e6b2cd002d1e3f180)
+SAFA British School (ID: 64a7dd41a9e6170029904e3d)
+```
+
+### Command Line Options
+- `name`: Establishment name to lookup (exact match)
+- `--search`: Search for establishments containing this text
+- `--list`: List all establishments
+- `--limit`: Maximum results to show (default: 100)
+- `--app-id`: Knack Application ID
+- `--api-key`: Knack REST API Key
+
+### Use Cases
+```powershell
+# Get ID for specific school
+python .\src\knack_establishment_lookup.py "SAFA British School"
+
+# Find all schools with "International" in name
+python .\src\knack_establishment_lookup.py --search international
+
+# Quick reference list of all establishments
+python .\src\knack_establishment_lookup.py --list > establishments.txt
+```
+
+## 5. View Archive Script (view_archive.py)
 
 Quick utility to view summary of archived CSV files.
 
@@ -248,6 +383,19 @@ python .\src\view_archive.py
 ```
 
 ## Common Use Cases
+
+### Quick Start - Finding Establishment IDs
+```powershell
+# First, find your establishment ID
+python .\src\knack_establishment_lookup.py --search british
+
+# Example output:
+# British International School of Kuala Lumpur (ID: 686ce50e6b2cd002d1e3f180)
+# SAFA British School (ID: 64a7dd41a9e6170029904e3d)
+
+# Then use the ID in other scripts
+python .\src\knack_dedupe.py --object object_29 --establishment 64a7dd41a9e6170029904e3d
+```
 
 ### Full Establishment Cleanup Workflow
 ```powershell
@@ -365,6 +513,7 @@ For issues or questions:
 
 ## Version History
 
+- **v2.0** - Added delete students script, establishment lookup utility, and tutor group filtering
 - **v1.2** - Added HTML stripping and empty column removal to archive script
 - **v1.1** - Added automatic field detection for known objects
 - **v1.0** - Initial release with deduplication and archive functionality
