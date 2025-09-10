@@ -2092,6 +2092,141 @@ select[multiple] option:checked {
   letter-spacing: 0.3px;
 }
 
+/* Staff Self-Registration Styles */
+.vespa-staff-registration-content {
+  padding: 10px;
+}
+
+.vespa-staff-registration-content h3 {
+  color: #007bff;
+  margin-bottom: 15px;
+}
+
+.vespa-school-info {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  margin: 20px 0;
+}
+
+.vespa-school-info h4 {
+  margin-bottom: 10px;
+  color: #495057;
+}
+
+.vespa-school-info ul {
+  margin: 5px 0 0 20px;
+  padding: 0;
+  list-style-type: disc;
+}
+
+.vespa-school-info li {
+  margin-bottom: 5px;
+  color: #666;
+}
+
+/* Staff registration button specific style */
+#staff-registration-button {
+  background: #28a745;
+  color: white;
+  border: 1px solid #28a745;
+}
+
+#staff-registration-button:hover {
+  background: #218838;
+  border-color: #1e7e34;
+}
+
+/* Staff QR code specific styles */
+.vespa-registration-link-result h4 {
+  color: #28a745;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+#staff-qrcode {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  display: inline-block;
+}
+
+/* Staff form options */
+.vespa-form-options label {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+
+.vespa-form-options input[type="checkbox"] {
+  margin-right: 10px;
+  cursor: pointer;
+}
+
+/* Staff registration form group styles */
+.vespa-staff-registration-content .vespa-form-group {
+  margin: 20px 0;
+}
+
+.vespa-staff-registration-content .vespa-form-group label {
+  display: block;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.vespa-staff-registration-content .vespa-form-group input,
+.vespa-staff-registration-content .vespa-form-group textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.vespa-staff-registration-content .vespa-form-group input[type="number"] {
+  width: 150px;
+}
+
+/* Staff link management styles */
+.vespa-staff-links-container {
+  padding: 20px;
+}
+
+.vespa-staff-link-item {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+  transition: all 0.2s;
+}
+
+.vespa-staff-link-item:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transform: translateY(-1px);
+}
+
+.vespa-staff-link-item.expired {
+  opacity: 0.6;
+  background: #f5f5f5;
+}
+
+.vespa-staff-link-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.vespa-staff-link-detail {
+  font-size: 14px;
+}
+
+.vespa-staff-link-detail strong {
+  color: #495057;
+}
+
 /* Compact table adjustments */
 .vespa-account-management table.dataTable.compact tbody td {
   line-height: 1.4;
