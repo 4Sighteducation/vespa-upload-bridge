@@ -918,6 +918,7 @@ function initializeUploadInterface(container) {
           <button id="universal-password-button" class="vespa-button secondary small-button" style="display: none;">Set Universal Password</button>
           ${isSuperUser ? `
             <button id="self-registration-button" class="vespa-button secondary small-button">📱 Generate Student QR Code</button>
+            <button id="staff-registration-button" class="vespa-button secondary small-button">👥 Generate Staff QR Code</button>
             <button id="header-emulation-button" class="vespa-button secondary small-button">🏢 Emulation Settings</button>
           ` : ''}
         </div>
@@ -1021,6 +1022,40 @@ function initializeUploadInterface(container) {
       });
     } else {
       debugLog("Self-registration button not found in DOM", null, 'error');
+    }
+    
+    // Add event listener for staff registration button
+    const staffRegBtn = document.getElementById('staff-registration-button');
+    if (staffRegBtn) {
+      debugLog("Adding event listener to staff registration button", null, 'info');
+      staffRegBtn.addEventListener('click', function(e) {
+        debugLog("Staff registration button clicked", null, 'info');
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Check if we're emulating a school
+        const emulationState = getEmulationState();
+        if (!emulationState || !emulationState.school) {
+          showError('Please select a school to emulate first using the Emulation Settings button.');
+          return;
+        }
+        
+        try {
+          if (typeof showStaffSelfRegistrationModal === 'function') {
+            showStaffSelfRegistrationModal();
+          } else if (typeof window.showStaffSelfRegistrationModal === 'function') {
+            window.showStaffSelfRegistrationModal();
+          } else {
+            debugLog("showStaffSelfRegistrationModal function not found!", null, 'error');
+            showError('Unable to open staff registration modal. Please refresh the page and try again.');
+          }
+        } catch (error) {
+          debugLog("Error calling showStaffSelfRegistrationModal:", error, 'error');
+          showError('An error occurred. Please try again.');
+        }
+      });
+    } else {
+      debugLog("Staff registration button not found in DOM", null, 'warn');
     }
     
     const emulationBtn = document.getElementById('header-emulation-button');
@@ -1269,7 +1304,8 @@ function addDebugIndicator() {
     });
   });
   
-  document.body.appendChild(indicator);
+  // Commenting out the debug indicator - no longer needed
+  // document.body.appendChild(indicator);
 }
 
 /**
@@ -4110,6 +4146,8 @@ function bindStepEvents() {
           // If validation was successful, allow moving to the next step
           if (validationResults && validationResults.success) { // Use .success
             debugLog("Validation was successful, proceeding to next step");
+            // Change button text to show it will proceed
+            nextStepValidateButton.textContent = 'Next';
             currentStep++; 
             renderStep(currentStep); 
           } else {
@@ -4534,6 +4572,8 @@ function bindStepEvents() {
   window.showEmulationSettingsModal = showEmulationSettingsModal;
   window.showSelfRegistrationModal = showSelfRegistrationModal;
   window.generateRegistrationLink = generateRegistrationLink;
+  window.showStaffSelfRegistrationModal = showStaffSelfRegistrationModal;
+  window.generateStaffRegistrationLink = generateStaffRegistrationLink;
   // Note: viewQRCode, downloadQRFromView, and regenerateQRLink are assigned to window after their definitions
   
   // Expose the state management functions globally for debugging and external access
@@ -5187,6 +5227,288 @@ function bindStepEvents() {
       debugLog("Error in showSelfRegistrationModal:", error, 'error');
       showError('Failed to open registration modal. Please try again.');
     }
+  }
+  
+  /**
+   * Shows the staff self-registration QR code generation modal (Super Users only).
+   */
+  function showStaffSelfRegistrationModal() {
+    debugLog("showStaffSelfRegistrationModal called", null, 'info');
+    
+    try {
+      // Check if we're emulating a school
+      const emulationState = getEmulationState();
+      if (!emulationState || !emulationState.school) {
+        showError('Please select a school to emulate first using the Emulation Settings button.');
+        return;
+      }
+      
+      debugLog("Opening staff self-registration modal for emulated school", emulationState.school);
+      
+      const modalContent = `
+      <div class="vespa-staff-registration-content">
+        <h3>Generate Staff Registration QR Code</h3>
+        <p>Create a QR code for staff members to self-register at your school.</p>
+        
+        <div class="vespa-school-info" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
+          <h4 style="margin-bottom: 10px;">Selected School:</h4>
+          <div><strong>${emulationState.school.name}</strong></div>
+          <div style="color: #666; font-size: 14px; margin-top: 5px;">Customer ID: ${emulationState.school.id}</div>
+          ${emulationState.admins && emulationState.admins.length > 0 ? `
+            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #dee2e6;">
+              <strong>Staff Admins:</strong>
+              <ul style="margin: 5px 0 0 20px; padding: 0;">
+                ${emulationState.admins.map(admin => `<li>${admin.name} (${admin.email})</li>`).join('')}
+              </ul>
+            </div>
+          ` : ''}
+        </div>
+        
+        <div class="vespa-form-group" style="margin: 20px 0;">
+          <label for="staff-qr-logo-url" style="display: block; font-weight: bold; margin-bottom: 10px;">
+            School Logo URL (optional):
+          </label>
+          <input type="url" id="staff-qr-logo-url" placeholder="https://example.com/logo.png" 
+                 style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+          <div id="staff-logo-preview" style="margin-top: 10px; text-align: center;"></div>
+        </div>
+        
+        <div class="vespa-form-group" style="margin: 20px 0;">
+          <label for="staff-registration-message" style="display: block; font-weight: bold; margin-bottom: 10px;">
+            Custom Welcome Message (optional):
+          </label>
+          <textarea id="staff-registration-message" rows="3" 
+                    placeholder="Welcome to our school! Please complete your registration below."
+                    style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; resize: vertical;"></textarea>
+        </div>
+        
+        <div class="vespa-form-group" style="margin: 20px 0;">
+          <label for="staff-qr-expiry-days" style="display: block; font-weight: bold; margin-bottom: 10px;">
+            Link Expiry (days):
+          </label>
+          <input type="number" id="staff-qr-expiry-days" value="30" min="1" max="365"
+                 style="width: 150px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+        </div>
+        
+        <div class="vespa-form-options" style="margin: 20px 0;">
+          <label style="display: flex; align-items: center; margin-bottom: 10px; cursor: pointer;">
+            <input type="checkbox" id="staff-require-school-email" checked 
+                   style="margin-right: 10px;">
+            <span>Require school email domain for registration</span>
+          </label>
+          <label style="display: flex; align-items: center; margin-bottom: 10px; cursor: pointer;">
+            <input type="checkbox" id="staff-auto-approve" checked 
+                   style="margin-right: 10px;">
+            <span>Auto-approve registrations</span>
+          </label>
+          <label style="display: flex; align-items: center; cursor: pointer;">
+            <input type="checkbox" id="staff-include-roles" checked 
+                   style="margin-right: 10px;">
+            <span>Allow staff to select their roles during registration</span>
+          </label>
+        </div>
+        
+        <div class="vespa-modal-actions" style="margin-top: 20px; text-align: right;">
+          <button id="cancel-staff-registration-link-btn" class="vespa-button secondary">Cancel</button>
+          <button id="generate-staff-registration-link-btn" class="vespa-button primary">Generate QR Code</button>
+        </div>
+      </div>
+    `;
+
+    showModal('Generate Staff Registration QR Code', modalContent);
+
+    // Add event listeners
+    document.getElementById('staff-qr-logo-url').addEventListener('input', handleStaffLogoPreview);
+    
+    document.getElementById('generate-staff-registration-link-btn').addEventListener('click', async () => {
+      const logoUrl = document.getElementById('staff-qr-logo-url').value.trim();
+      const requireSchoolEmail = document.getElementById('staff-require-school-email').checked;
+      const autoApprove = document.getElementById('staff-auto-approve').checked;
+      const includeRoles = document.getElementById('staff-include-roles').checked;
+      const expiresIn = parseInt(document.getElementById('staff-qr-expiry-days').value) || 30;
+      const customMessage = document.getElementById('staff-registration-message').value.trim();
+      
+      // Generate the staff registration link
+      await generateStaffRegistrationLink({
+        customerId: emulationState.school.id,
+        customerName: emulationState.school.name,
+        logoUrl,
+        requireSchoolEmail,
+        autoApprove,
+        includeRoles,
+        expiresIn,
+        customMessage,
+        adminIds: emulationState.admins ? emulationState.admins.map(a => a.id) : []
+      });
+    });
+    
+    document.getElementById('cancel-staff-registration-link-btn').addEventListener('click', closeModal);
+    
+    } catch (error) {
+      debugLog("Error in showStaffSelfRegistrationModal:", error, 'error');
+      showError('Failed to open staff registration modal. Please try again.');
+    }
+  }
+  
+  /**
+   * Handle staff logo preview
+   */
+  function handleStaffLogoPreview(event) {
+    const url = event.target.value.trim();
+    const previewDiv = document.getElementById('staff-logo-preview');
+    
+    if (url) {
+      const img = new Image();
+      img.onload = function() {
+        previewDiv.innerHTML = `<img src="${url}" alt="Logo Preview" style="max-width: 200px; max-height: 100px; border: 1px solid #ddd; padding: 5px; border-radius: 4px;">`;
+      };
+      img.onerror = function() {
+        previewDiv.innerHTML = '<div style="color: #dc3545; font-size: 14px;">⚠️ Unable to load image</div>';
+      };
+      img.src = url;
+    } else {
+      previewDiv.innerHTML = '';
+    }
+  }
+  
+  /**
+   * Generates a self-registration link for staff
+   */
+  async function generateStaffRegistrationLink(options) {
+    try {
+      // Close the current modal
+      closeModal();
+      
+      // Show loading
+      showModal('Generating Staff Registration Link', '<div style="text-align: center; padding: 20px;"><div class="vespa-spinner"></div><p>Generating link and QR code...</p></div>');
+      
+      // Call the new API endpoint to generate and store the staff link
+      const response = await $.ajax({
+        url: `${API_BASE_URL}staff-registration/generate-link`,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(options),
+        xhrFields: { withCredentials: true }
+      });
+      
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to generate registration link');
+      }
+      
+      debugLog('Staff registration link generated:', response);
+      
+      // Load QR code library if not already loaded
+      if (typeof QRCode === 'undefined') {
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js');
+      }
+      
+      // Display the link and QR code
+      const resultContent = `
+        <div class="vespa-registration-link-result">
+          <h4>✅ Staff Registration QR Code Generated!</h4>
+          
+          <div class="vespa-qr-code" style="text-align: center; margin: 20px 0;">
+            <div id="staff-qrcode" style="display: inline-block; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></div>
+          </div>
+          
+          <div class="vespa-link-box" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <div style="font-weight: bold; margin-bottom: 10px;">Registration Link:</div>
+            <div style="word-break: break-all; font-family: monospace; font-size: 12px; padding: 10px; background: white; border: 1px solid #dee2e6; border-radius: 4px;">
+              ${response.registrationUrl}
+            </div>
+            <button id="copy-staff-link-btn" class="vespa-button secondary small" style="margin-top: 10px;">
+              📋 Copy Link
+            </button>
+          </div>
+          
+          <div class="vespa-link-details" style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin: 20px 0;">
+            <h5>QR Code Details:</h5>
+            <ul style="margin: 10px 0; padding-left: 20px;">
+              <li><strong>School:</strong> ${response.configSettings.customerName}</li>
+              <li><strong>Valid until:</strong> ${new Date(response.expiresAt).toLocaleDateString()}</li>
+              <li><strong>Email requirement:</strong> ${response.configSettings.requireSchoolEmail ? 'School email required' : 'Any email allowed'}</li>
+              <li><strong>Auto-approve:</strong> ${response.configSettings.autoApprove ? 'Yes' : 'Manual approval required'}</li>
+              <li><strong>Role selection:</strong> ${response.configSettings.includeRoles ? 'Staff can select roles' : 'Default roles only'}</li>
+            </ul>
+          </div>
+          
+          <div class="vespa-info-box" style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 12px; margin: 15px 0;">
+            <div class="vespa-info-icon" style="display: inline-block; margin-right: 8px;">💡</div>
+            <div class="vespa-info-content" style="display: inline-block; width: calc(100% - 30px); vertical-align: top;">
+              <strong>For staff onboarding:</strong> Share this QR code with new staff members. They can scan it to self-register and will be automatically connected to the appropriate admins and school records.
+            </div>
+          </div>
+          
+          <div class="vespa-modal-actions" style="margin-top: 20px; text-align: right; display: flex; gap: 10px; justify-content: flex-end;">
+            <button id="download-staff-qr-btn" class="vespa-button secondary">📥 Download QR Code</button>
+            <button id="view-staff-links-btn" class="vespa-button secondary">📋 View All Staff Links</button>
+            <button id="close-staff-registration-result-btn" class="vespa-button primary">Close</button>
+          </div>
+        </div>
+      `;
+      
+      showModal('Staff Registration Link Generated', resultContent);
+      
+      // Generate QR Code
+      new QRCode(document.getElementById("staff-qrcode"), {
+        text: response.registrationUrl,
+        width: 256,
+        height: 256,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.H
+      });
+      
+      // Add event listeners for buttons
+      document.getElementById('copy-staff-link-btn').addEventListener('click', () => {
+        navigator.clipboard.writeText(response.registrationUrl).then(() => {
+          showSuccess('Link copied to clipboard!');
+        }).catch(() => {
+          // Fallback for older browsers
+          const textArea = document.createElement("textarea");
+          textArea.value = response.registrationUrl;
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textArea);
+          showSuccess('Link copied to clipboard!');
+        });
+      });
+      
+      document.getElementById('download-staff-qr-btn').addEventListener('click', () => {
+        const canvas = document.querySelector('#staff-qrcode canvas');
+        if (canvas) {
+          const link = document.createElement('a');
+          link.download = `staff-registration-${response.linkId}.png`;
+          link.href = canvas.toDataURL();
+          link.click();
+        }
+      });
+      
+      document.getElementById('view-staff-links-btn').addEventListener('click', () => {
+        closeModal();
+        showStaffQRLinksManagement();
+      });
+      
+      document.getElementById('close-staff-registration-result-btn').addEventListener('click', closeModal);
+      
+    } catch (error) {
+      debugLog('Error generating staff registration link:', error, 'error');
+      showError(error.responseJSON?.message || error.message || 'Failed to generate registration link');
+    }
+  }
+  
+  /**
+   * Show staff QR links management interface
+   */
+  function showStaffQRLinksManagement() {
+    // This will be implemented to show all staff registration links
+    showModal('Staff Registration Links', `
+      <div style="text-align: center; padding: 20px;">
+        <p>Staff registration links management will be available here.</p>
+        <p style="color: #666; margin-top: 10px;">This feature is coming soon!</p>
+      </div>
+    `);
   }
 
   /**
