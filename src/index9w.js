@@ -10,7 +10,7 @@ let VESPA_UPLOAD_CONFIG = null;
 
 // Constants
 let API_BASE_URL = 'https://vespa-upload-api-07e11c285370.herokuapp.com/api'; // Default fallback
-const DEBUG_MODE = true;
+const DEBUG_MODE = false;
 const CHECK_INTERVAL = 500; // Check every 500ms
 const MAX_CHECKS = 20; // Give up after 10 seconds (20 checks)
 const SUPER_USER_ROLE_ID = 'object_21';
