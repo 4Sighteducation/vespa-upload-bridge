@@ -2232,6 +2232,188 @@ select[multiple] option:checked {
   line-height: 1.4;
 }
 
+/* Qualification Type Badges */
+.vespa-qual-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  border-radius: 12px;
+  margin-left: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.vespa-qual-badge.a-level {
+  background: #007bff;
+  color: white;
+}
+
+.vespa-qual-badge.as-level {
+  background: #17a2b8;
+  color: white;
+}
+
+.vespa-qual-badge.btec {
+  background: #28a745;
+  color: white;
+}
+
+.vespa-qual-badge.cambridge-national {
+  background: #dc3545;
+  color: white;
+}
+
+.vespa-qual-badge.t-level {
+  background: #6610f2;
+  color: white;
+}
+
+.vespa-qual-badge.welsh-bacc,
+.vespa-qual-badge.wbq {
+  background: #fd7e14;
+  color: white;
+}
+
+.vespa-qual-badge.epq {
+  background: #20c997;
+  color: white;
+}
+
+.vespa-qual-badge.ib {
+  background: #e83e8c;
+  color: white;
+}
+
+.vespa-qual-badge.city-guilds {
+  background: #6c757d;
+  color: white;
+}
+
+.vespa-qual-badge.diploma {
+  background: #343a40;
+  color: white;
+}
+
+.vespa-qual-badge.certificate {
+  background: #795548;
+  color: white;
+}
+
+.vespa-qual-badge.nvq,
+.vespa-qual-badge.gnvq {
+  background: #607d8b;
+  color: white;
+}
+
+.vespa-qual-badge.cambridge-intl {
+  background: #ff5722;
+  color: white;
+}
+
+.vespa-qual-badge.ocr {
+  background: #009688;
+  color: white;
+}
+
+.vespa-qual-badge.level-3,
+.vespa-qual-badge.level-2 {
+  background: #9c27b0;
+  color: white;
+}
+
+.vespa-qual-badge.applied {
+  background: #3f51b5;
+  color: white;
+}
+
+/* Subject display with qualification type */
+.vespa-subject-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vespa-subject-name {
+  font-weight: 500;
+  color: #333;
+}
+
+.vespa-subject-type {
+  font-size: 11px;
+  color: #6c757d;
+  font-style: italic;
+}
+
+/* Enhanced preview table for subjects with qualification types */
+.vespa-preview-table .subject-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vespa-preview-table .qual-indicator {
+  display: inline-block;
+  width: 24px;
+  height: 18px;
+  font-size: 10px;
+  font-weight: bold;
+  text-align: center;
+  line-height: 18px;
+  border-radius: 3px;
+  background: #e9ecef;
+  color: #495057;
+}
+
+.vespa-preview-table .qual-indicator.a-level {
+  background: #007bff;
+  color: white;
+}
+
+.vespa-preview-table .qual-indicator.btec {
+  background: #28a745;
+  color: white;
+}
+
+.vespa-preview-table .qual-indicator.cambridge-national {
+  background: #dc3545;
+  color: white;
+}
+
+/* Tooltip for qualification types */
+.vespa-qual-tooltip {
+  position: relative;
+  display: inline-block;
+  cursor: help;
+}
+
+.vespa-qual-tooltip .vespa-qual-tooltiptext {
+  visibility: hidden;
+  width: 200px;
+  background-color: #333;
+  color: #fff;
+  text-align: center;
+  border-radius: 6px;
+  padding: 8px;
+  position: absolute;
+  z-index: 1;
+  bottom: 125%;
+  left: 50%;
+  margin-left: -100px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  font-size: 12px;
+}
+
+.vespa-qual-tooltip:hover .vespa-qual-tooltiptext {
+  visibility: visible;
+  opacity: 1;
+}
+
 /* Better print styles for Account Management */
 @media print {
   .vespa-account-management .vespa-am-filters,
