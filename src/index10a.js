@@ -2948,6 +2948,35 @@ A123459,sdavis@school.edu,6.5,Biology,Chemistry,Psychology,,`;
           }
         }
         
+        // Normalize common subject name variations to match API expectations
+        const subjectNameMappings = {
+          'Maths (Further)': 'Further Mathematics',
+          'Mathematics (Further)': 'Further Mathematics',
+          'English Lang. & Lit.': 'English Language and Literature',
+          'English Language & Literature': 'English Language and Literature',
+          'D&T (Product Design)': 'Design and Technology: Product Design',
+          'DT (Product Design)': 'Design and Technology: Product Design',
+          'Design & Technology (Product Design)': 'Design and Technology: Product Design',
+          'Art (3D Design)': 'Art and Design: 3D Design',
+          'Art & Design (3D Design)': 'Art and Design: 3D Design',
+          'Art (Photography)': 'Art and Design: Photography',
+          'Art & Design (Photography)': 'Art and Design: Photography',
+          'Welsh 2nd Language': 'Welsh Second Language',
+          'Welsh Second Lang': 'Welsh Second Language',
+          'Advanced Skills Challenge Cert': 'Advanced Skills Baccalaureate',
+          'Advanced Skills Challenge Certificate': 'Advanced Skills Baccalaureate',
+          'Computing': 'Computer Science',
+          'Core Mathematics': 'Core Maths',
+          'L3 - Core Mathematics': 'Core Maths'
+        };
+        
+        // Apply mapping if exists
+        if (subjectNameMappings[cleanedSubject]) {
+          const mappedSubject = subjectNameMappings[cleanedSubject];
+          debugLog(`Mapping subject for validation: "${cleanedSubject}" -> "${mappedSubject}"`, null, 'debug');
+          cleanedSubject = mappedSubject;
+        }
+        
         return {
           original: subjectObj.original,
           cleaned: cleanedSubject
@@ -3006,7 +3035,33 @@ A123459,sdavis@school.edu,6.5,Biology,Chemistry,Psychology,,`;
                     }
                   }
                   
-                  // Check if the cleaned version is in the invalid list
+                  // Apply subject name mapping if exists
+                  const subjectNameMappings = {
+                    'Maths (Further)': 'Further Mathematics',
+                    'Mathematics (Further)': 'Further Mathematics',
+                    'English Lang. & Lit.': 'English Language and Literature',
+                    'English Language & Literature': 'English Language and Literature',
+                    'D&T (Product Design)': 'Design and Technology: Product Design',
+                    'DT (Product Design)': 'Design and Technology: Product Design',
+                    'Design & Technology (Product Design)': 'Design and Technology: Product Design',
+                    'Art (3D Design)': 'Art and Design: 3D Design',
+                    'Art & Design (3D Design)': 'Art and Design: 3D Design',
+                    'Art (Photography)': 'Art and Design: Photography',
+                    'Art & Design (Photography)': 'Art and Design: Photography',
+                    'Welsh 2nd Language': 'Welsh Second Language',
+                    'Welsh Second Lang': 'Welsh Second Language',
+                    'Advanced Skills Challenge Cert': 'Advanced Skills Baccalaureate',
+                    'Advanced Skills Challenge Certificate': 'Advanced Skills Baccalaureate',
+                    'Computing': 'Computer Science',
+                    'Core Mathematics': 'Core Maths',
+                    'L3 - Core Mathematics': 'Core Maths'
+                  };
+                  
+                  if (subjectNameMappings[cleanedCellValue]) {
+                    cleanedCellValue = subjectNameMappings[cleanedCellValue];
+                  }
+                  
+                  // Check if the cleaned and mapped version is in the invalid list
                   if (unrecognizedCleanedSubjects.includes(cleanedCellValue)) {
                     results.isValid = false; // Mark overall validation as false
                     results.errors.push({
@@ -3148,10 +3203,10 @@ A123459,sdavis@school.edu,6.5,Biology,Chemistry,Psychology,,`;
         const validationUrl = `${baseUrl}${endpointPath}`;
         debugLog(`Final validation URL: "${validationUrl}"`, null, 'info');
         
-        // For KS5 subjects, strip prefixes before validation
+        // For KS5 subjects, strip prefixes and normalize subject names before validation
         let dataForValidation = csvData;
         if (uploadType === 'student-ks5') {
-          debugLog("Processing KS5 subjects - stripping course type prefixes for validation", null, 'info');
+          debugLog("Processing KS5 subjects - stripping course type prefixes and normalizing names for validation", null, 'info');
           
           // Define the course type prefixes to strip
           const courseTypePrefixes = [
@@ -3160,11 +3215,33 @@ A123459,sdavis@school.edu,6.5,Biology,Chemistry,Psychology,,`;
             'CM - ', 'OCR - ', 'L3 - ', 'L2 - '
           ];
           
-          // Create a copy of the data with prefixes stripped
+          // Subject name mappings to match API expectations
+          const subjectNameMappings = {
+            'Maths (Further)': 'Further Mathematics',
+            'Mathematics (Further)': 'Further Mathematics',
+            'English Lang. & Lit.': 'English Language and Literature',
+            'English Language & Literature': 'English Language and Literature',
+            'D&T (Product Design)': 'Design and Technology: Product Design',
+            'DT (Product Design)': 'Design and Technology: Product Design',
+            'Design & Technology (Product Design)': 'Design and Technology: Product Design',
+            'Art (3D Design)': 'Art and Design: 3D Design',
+            'Art & Design (3D Design)': 'Art and Design: 3D Design',
+            'Art (Photography)': 'Art and Design: Photography',
+            'Art & Design (Photography)': 'Art and Design: Photography',
+            'Welsh 2nd Language': 'Welsh Second Language',
+            'Welsh Second Lang': 'Welsh Second Language',
+            'Advanced Skills Challenge Cert': 'Advanced Skills Baccalaureate',
+            'Advanced Skills Challenge Certificate': 'Advanced Skills Baccalaureate',
+            'Computing': 'Computer Science',
+            'Core Mathematics': 'Core Maths',
+            'L3 - Core Mathematics': 'Core Maths'
+          };
+          
+          // Create a copy of the data with prefixes stripped and names normalized
           dataForValidation = csvData.map(row => {
             const cleanedRow = { ...row };
             
-            // Clean subject columns (sub1 through sub5)
+            // Clean and normalize subject columns (sub1 through sub5)
             for (let i = 1; i <= 5; i++) {
               const subKey = `sub${i}`;
               if (cleanedRow[subKey]) {
@@ -3173,10 +3250,19 @@ A123459,sdavis@school.edu,6.5,Biology,Chemistry,Psychology,,`;
                 // Check and remove any matching prefix
                 for (const prefix of courseTypePrefixes) {
                   if (subjectValue.startsWith(prefix)) {
-                    cleanedRow[subKey] = subjectValue.substring(prefix.length).trim();
-                    debugLog(`Stripped prefix "${prefix}" from "${subjectValue}" -> "${cleanedRow[subKey]}"`, null, 'debug');
+                    subjectValue = subjectValue.substring(prefix.length).trim();
+                    debugLog(`Stripped prefix "${prefix}" from "${cleanedRow[subKey]}" -> "${subjectValue}"`, null, 'debug');
                     break;
                   }
+                }
+                
+                // Apply subject name mapping if exists
+                if (subjectNameMappings[subjectValue]) {
+                  const mappedSubject = subjectNameMappings[subjectValue];
+                  debugLog(`Mapped subject for validation: "${subjectValue}" -> "${mappedSubject}"`, null, 'debug');
+                  cleanedRow[subKey] = mappedSubject;
+                } else {
+                  cleanedRow[subKey] = subjectValue;
                 }
               }
             }
@@ -3184,7 +3270,7 @@ A123459,sdavis@school.edu,6.5,Biology,Chemistry,Psychology,,`;
             return cleanedRow;
           });
           
-          debugLog("Prefixes stripped for validation. Original data preserved for processing.", null, 'info');
+          debugLog("Prefixes stripped and names normalized for validation. Original data preserved for processing.", null, 'info');
         }
         
         let logOutput = '=== CSV DATA BEING SENT TO API ===\n';
