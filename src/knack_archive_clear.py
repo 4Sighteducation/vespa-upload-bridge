@@ -342,7 +342,7 @@ def upload_to_archive(app_id: str, api_key: str,
     payload = {
         ARCHIVE_CONFIG["filename_field"]: filename,
         ARCHIVE_CONFIG["establishment_field"]: establishment_id,
-        ARCHIVE_CONFIG["archived_date_field"]: datetime.now().strftime("%m/%d/%Y"),
+        ARCHIVE_CONFIG["archived_date_field"]: datetime.now().strftime("%Y-%m-%d"),  # ISO format for Knack API
         ARCHIVE_CONFIG["csv_type_field"]: csv_type
     }
     
@@ -364,6 +364,95 @@ def upload_to_archive(app_id: str, api_key: str,
         raise RuntimeError(f"Error uploading to archive: {r.status_code} - {r.text}")
     
     return r.json()
+
+
+def increment_year_group(year_group: str) -> str:
+    """Increment year group value by 1, handling various formats"""
+    if not year_group:
+        return year_group
+    
+    import re
+    
+    # Try to find a number in the string
+    match = re.search(r'(\d+)', year_group)
+    if match:
+        old_num = match.group(1)
+        new_num = str(int(old_num) + 1)
+        
+        # Replace the old number with the new one, preserving format
+        result = year_group.replace(old_num, new_num, 1)
+        return result
+    
+    # If no number found, return unchanged
+    return year_group
+
+
+def update_year_groups(app_id: str, api_key: str, establishment_id: str) -> Dict[str, int]:
+    """Update year groups across all objects by incrementing by 1"""
+    session = requests.Session()
+    session.headers.update(headers(app_id, api_key))
+    
+    results = {
+        'object_10': 0,
+        'object_29': 0,
+        'object_6': 0,
+        'object_3': 0,
+        'errors': []
+    }
+    
+    # Object configurations with their year group fields
+    objects_to_update = [
+        {'key': 'object_10', 'field': 'field_144', 'establishment_field': 'field_133'},
+        {'key': 'object_29', 'field': 'field_1826', 'establishment_field': 'field_1821'},
+        {'key': 'object_6', 'field': 'field_548', 'establishment_field': 'field_179'},
+        {'key': 'object_3', 'field': 'field_550', 'establishment_field': 'field_122'}
+    ]
+    
+    for obj_config in objects_to_update:
+        object_key = obj_config['key']
+        year_field = obj_config['field']
+        est_field = obj_config['establishment_field']
+        
+        print(f"\nUpdating year groups in {object_key}...")
+        
+        # Fetch records for this establishment
+        url = f"{API_BASE}/objects/{object_key}/records"
+        filters = {
+            "match": "and",
+            "rules": [{"field": est_field, "operator": "is", "value": establishment_id}]
+        }
+        params = {
+            "filters": json.dumps(filters),
+            "rows_per_page": 1000
+        }
+        
+        response = session.get(url, params=params)
+        if response.status_code != 200:
+            results['errors'].append(f"Failed to fetch {object_key}: {response.status_code}")
+            continue
+        
+        records = response.json().get('records', [])
+        print(f"  Found {len(records)} records")
+        
+        # Update each record
+        for record in records:
+            current_year = record.get(year_field, '')
+            if current_year:
+                new_year = increment_year_group(current_year)
+                if new_year != current_year:
+                    # Update the record
+                    update_url = f"{API_BASE}/objects/{object_key}/records/{record['id']}"
+                    update_payload = {year_field: new_year}
+                    
+                    update_response = session.put(update_url, json=update_payload)
+                    if update_response.status_code in (200, 204):
+                        results[object_key] += 1
+                        if results[object_key] == 1 or results[object_key] % 10 == 0:
+                            print(f"    Updated {results[object_key]} records ('{current_year}' → '{new_year}')")
+                    else:
+                        results['errors'].append(f"Failed to update {object_key} record {record['id']}: {update_response.status_code}")
+    
+    return results
 
 
 def clear_record_fields(app_id: str, api_key: str, 
@@ -403,10 +492,14 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Archives records from Object_10 and Object_29 to Object_68, then clears non-essential fields.
+Optionally updates year groups by incrementing them (e.g., Year 12 → Year 13).
 
 Examples:
   # Archive all records for an establishment
   python knack_archive_clear.py --establishment 63bc1c145f917b001289b14e --apply
+  
+  # Archive and update year groups
+  python knack_archive_clear.py --establishment 63bc1c145f917b001289b14e --update-year-group --apply
   
   # Archive only Year 11, Group A records
   python knack_archive_clear.py --establishment 686ce50e6b2cd002d1e3f180 --year-group "Year 11" --tutor-group "A" --apply
@@ -414,8 +507,8 @@ Examples:
   # Dry run to preview
   python knack_archive_clear.py --establishment 63bc1c145f917b001289b14e --dry-run
   
-  # Skip clearing step
-  python knack_archive_clear.py --establishment 12345 --no-clear --apply
+  # Skip clearing step but update year groups
+  python knack_archive_clear.py --establishment 12345 --no-clear --update-year-group --apply
         """
     )
     
@@ -433,6 +526,8 @@ Examples:
                     help="Preview what would be archived without making changes")
     ap.add_argument("--no-clear", action="store_true",
                     help="Only archive, don't clear the original records")
+    ap.add_argument("--update-year-group", action="store_true",
+                    help="Increment year groups by 1 (e.g., Year 12 → Year 13)")
     ap.add_argument("--output-dir", default="archive_exports",
                     help="Directory to save local CSV copies (default: archive_exports)")
     ap.add_argument("--verbose", "-v", action="store_true",
@@ -599,6 +694,43 @@ Examples:
     print("\n" + "="*60)
     print("ARCHIVE COMPLETE" if args.apply and not args.dry_run else "DRY RUN COMPLETE")
     print("="*60)
+    
+    # Handle year group updates if requested
+    if args.update_year_group:
+        print("\n" + "="*60)
+        print("UPDATING YEAR GROUPS")
+        print("="*60)
+        
+        if args.apply and not args.dry_run:
+            update_results = update_year_groups(app_id, api_key, establishment_id)
+            
+            print("\n" + "-"*60)
+            print("YEAR GROUP UPDATE SUMMARY")
+            print("-"*60)
+            print(f"Object_10 records updated: {update_results['object_10']}")
+            print(f"Object_29 records updated: {update_results['object_29']}")
+            print(f"Object_6 records updated:  {update_results['object_6']}")
+            print(f"Object_3 records updated:  {update_results['object_3']}")
+            
+            if update_results['errors']:
+                print(f"\n⚠ Errors occurred:")
+                for error in update_results['errors'][:5]:
+                    print(f"  - {error}")
+                if len(update_results['errors']) > 5:
+                    print(f"  ... and {len(update_results['errors']) - 5} more errors")
+            else:
+                print("\n✓ All year groups updated successfully")
+        else:
+            print("\nDRY RUN - Would update year groups across:")
+            print("  - Object_10 (field_144)")
+            print("  - Object_29 (field_1826)")
+            print("  - Object_6 (field_548)")
+            print("  - Object_3 (field_550)")
+            print("\nExample transformations:")
+            print("  '12' → '13'")
+            print("  'Year 12' → 'Year 13'")
+            print("  'Yr12' → 'Yr13'")
+            print("  'year 12' → 'year 13'")
     
     if args.dry_run or not args.apply:
         print("\nTo apply these changes, re-run with --apply")
