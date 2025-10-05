@@ -2,6 +2,31 @@
 
 A collection of Python scripts for managing Knack database records, including deduplication, archiving, and data cleanup.
 
+## 🚨 URGENT: Kellet School QR Code Issue (September 26, 2025)
+
+**Problem**: Students getting "unable to initialize registration form" - works only on VPN  
+**Root Cause**: CORS/network blocking issue (NOT rate limiting)  
+**Customer ID**: 68ad56ab27597d0311a5d4e7
+
+### Immediate Actions Required:
+1. **Run**: `.\src\KELLET_IMMEDIATE_ACTION.ps1` for complete action plan
+2. **Student Workarounds** (communicate immediately):
+   - Use mobile data instead of school WiFi
+   - Complete registration from home network
+   - Continue using VPN if already connected
+
+### Emergency Scripts Created:
+- **`KELLET_IMMEDIATE_ACTION.ps1`** - Complete action plan with fixes
+- **`kellet_cors_emergency_fix.ps1`** - CORS-specific diagnosis and fix
+- **`kellet_urgent_investigation.ps1`** - Full diagnostic monitoring
+- **`kellet_immediate_fix.ps1`** - Quick restart and scaling commands
+
+### General QR Monitoring Tools:
+- **`monitor_qr_access.ps1/.sh`** - Monitor QR code access patterns
+- **`qr_diagnostic.ps1`** - Quick diagnostic command reference
+
+---
+
 ## Table of Contents
 - [Setup](#setup)
 - [Environment Variables](#environment-variables)
@@ -521,3 +546,43 @@ For issues or questions:
 ---
 
 **Remember**: Always test with dry runs first and keep backups!
+
+## Files Reference
+
+### Python Scripts
+All scripts are located in the `src/` directory:
+
+| File | Location | Purpose |
+|------|----------|---------|
+| **knack_dedupe.py** | `.\src\knack_dedupe.py` | Remove duplicate records based on email |
+| **knack_dedupe_enhanced.py** | `.\src\knack_dedupe_enhanced.py` | Enhanced deduplication script (if different from above) |
+| **knack_archive_clear.py** | `.\src\knack_archive_clear.py` | Archive establishment data to CSV and Object_68, optionally clear fields |
+| **knack_delete_students.py** | `.\src\knack_delete_students.py` | Delete student records (two modes: all data or questionnaire only) |
+| **knack_establishment_lookup.py** | `.\src\knack_establishment_lookup.py` | Find establishment IDs by name |
+| **view_archive.py** | `.\src\view_archive.py` | View summary of archived CSV files |
+
+### Configuration Files
+
+| File | Location | Purpose |
+|------|----------|---------|
+| **.env** | `.\` (project root) | Store Knack credentials (KNACK_APP_ID, KNACK_API_KEY) |
+
+### Output Directories
+
+| Directory | Default Location | Purpose |
+|-----------|-----------------|---------|
+| **archive_exports** | `.\archive_exports\` | Default directory for archived CSV files |
+| **Backup CSVs** | User-specified | Backup files from deduplication (e.g., `object10_duplicates.csv`) |
+
+### Quick Access Commands
+
+```powershell
+# Navigate to scripts directory
+cd .\src\
+
+# List all Knack management scripts
+dir .\src\knack_*.py
+
+# View archived exports
+dir .\archive_exports\*.csv
+```

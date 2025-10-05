@@ -1,0 +1,52 @@
+Hi Chris,
+
+So sorry that you had this experience this morning. I've identified the exact issue - your school's network is blocking GitHub (where our registration form is currently hosted). This is common with international schools that have stricter web filtering. The VPN worked because it bypassed these restrictions.
+
+Good news - I have both an immediate fix and a permanent solution:
+
+**Immediate Solutions (students can use these RIGHT NOW):**
+
+1. **Easiest Option**: Have students turn OFF school WiFi and use their mobile data instead. The QR code will work perfectly.
+
+2. **Alternative**: Students can screenshot/save the QR code and complete registration from home tonight.
+
+3. **For those with VPN**: They can continue using it as they have been.
+
+**Permanent Solution (implementing today):**
+- I'm moving the registration form from GitHub to our own domain (vespa.academy)
+- This will completely eliminate the blocking issue for all international schools
+- The new links will work perfectly on your school network
+- I'll regenerate your QR codes with the new domain once ready
+
+**For any students who urgently need to register right now:**
+They should simply switch to mobile data (turn off WiFi) and scan the QR code. It will work immediately.
+
+I'll send you confirmation once the permanent fix is deployed. Again, my sincere apologies for the inconvenience - we'll have this sorted very quickly.
+
+Please let me know if you need anything else or if students are still having issues after trying mobile data.
+
+Best regards,
+[Your name]
+
+---
+
+ALTERNATIVE SHORTER VERSION:
+---
+
+Hi Chris,
+
+So sorry about this morning's issues. I've found the problem - your school's firewall is blocking GitHub (where the form is hosted). International schools often have this restriction.
+
+**Quick Fix for Students (use NOW):**
+• Turn OFF school WiFi 
+• Use mobile data instead
+• Scan QR code - it will work!
+
+(Or they can complete registration from home later)
+
+**Permanent fix:** I'm moving everything to vespa.academy today, which won't be blocked by any school. Will send new QR codes once ready.
+
+Will confirm once complete. Any urgent questions, just let me know!
+
+Best regards,
+[Your name]
