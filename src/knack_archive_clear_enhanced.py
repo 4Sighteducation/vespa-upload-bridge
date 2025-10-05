@@ -350,19 +350,33 @@ def upload_to_archive(app_id: str, api_key: str,
     return r.json()
 
 
-def increment_year_group(year_group: str) -> str:
-    """Increment year group value by 1, handling various formats"""
-    if not year_group:
+def increment_year_group(year_group):
+    """Increment year group value by 1, handling various formats (string, int, 'Year 12', 'Yr12', '12')"""
+    if year_group is None or year_group == '':
         return year_group
     
+    # Remember original type
+    original_type = type(year_group)
+    
+    # Convert to string if it's an integer
+    year_group_str = str(year_group)
+    
     # Try to find a number in the string
-    match = re.search(r'(\d+)', year_group)
+    match = re.search(r'(\d+)', year_group_str)
     if match:
         old_num = match.group(1)
         new_num = str(int(old_num) + 1)
         
         # Replace the old number with the new one, preserving format
-        result = year_group.replace(old_num, new_num, 1)
+        # This handles: "12" → "13", "Yr12" → "Yr13", "Year 12" → "Year 13"
+        result = year_group_str.replace(old_num, new_num, 1)
+        
+        # If input was integer, return integer
+        if original_type == int:
+            try:
+                return int(result)
+            except:
+                return result
         return result
     
     # If no number found, return unchanged
@@ -418,43 +432,54 @@ def update_year_and_group_fields(app_id: str, api_key: str, establishment_id: st
         print(f"  Found {len(records)} records")
         
         # Update each record
-        for record in records:
+        for i, record in enumerate(records, 1):
             update_payload = {}
             
-            # Update year field
-            current_year = record.get(year_field, '')
-            if current_year:
-                new_year = increment_year_group(current_year)
-                if new_year != current_year:
-                    update_payload[year_field] = new_year
-            
-            # Update group field (if it exists and contains "12")
-            if group_field:
-                current_group = record.get(group_field, '')
-                if current_group and '12' in str(current_group):
-                    new_group = str(current_group).replace('12', '13')
-                    if new_group != current_group:
-                        update_payload[group_field] = new_group
-            
-            # Apply updates if there are any
-            if update_payload:
-                update_url = f"{API_BASE}/objects/{object_key}/records/{record['id']}"
+            try:
+                # Update year field
+                current_year = record.get(year_field, '')
+                if current_year or current_year == 0:
+                    new_year = increment_year_group(current_year)
+                    if new_year != current_year:
+                        update_payload[year_field] = new_year
                 
-                update_response = session.put(update_url, json=update_payload)
-                if update_response.status_code in (200, 204):
-                    if year_field in update_payload:
-                        results[object_key]['year'] += 1
-                        if results[object_key]['year'] == 1 or results[object_key]['year'] % 10 == 0:
-                            print(f"    Updated {results[object_key]['year']} year records ('{current_year}' → '{update_payload[year_field]}')")
+                # Update group field (if it exists and contains "12")
+                if group_field:
+                    current_group = record.get(group_field, '')
+                    if current_group and '12' in str(current_group):
+                        new_group = str(current_group).replace('12', '13')
+                        if new_group != current_group:
+                            update_payload[group_field] = new_group
+                
+                # Apply updates if there are any
+                if update_payload:
+                    update_url = f"{API_BASE}/objects/{object_key}/records/{record['id']}"
                     
-                    if group_field and group_field in update_payload:
-                        results[object_key]['group'] += 1
-                        if results[object_key]['group'] == 1 or results[object_key]['group'] % 10 == 0:
-                            print(f"    Updated {results[object_key]['group']} group records ('{current_group}' → '{update_payload[group_field]}')")
-                else:
-                    results['errors'].append(f"Failed to update {object_key} record {record['id']}: {update_response.status_code}")
-                
-                time.sleep(0.1)  # Rate limiting
+                    update_response = session.put(update_url, json=update_payload)
+                    if update_response.status_code in (200, 204):
+                        if year_field in update_payload:
+                            results[object_key]['year'] += 1
+                            if results[object_key]['year'] == 1 or results[object_key]['year'] % 10 == 0:
+                                print(f"    Updated {results[object_key]['year']} year records ('{current_year}' → '{update_payload[year_field]}')")
+                        
+                        if group_field and group_field in update_payload:
+                            results[object_key]['group'] += 1
+                            if results[object_key]['group'] == 1 or results[object_key]['group'] % 10 == 0:
+                                print(f"    Updated {results[object_key]['group']} group records ('{current_group}' → '{update_payload[group_field]}')")
+                    else:
+                        error_msg = f"Failed to update {object_key} record {record['id']}: {update_response.status_code} - {update_response.text}"
+                        results['errors'].append(error_msg)
+                        if i <= 3:  # Print first few errors
+                            print(f"    ERROR: {error_msg}")
+                    
+                    time.sleep(0.1)  # Rate limiting
+                    
+            except Exception as e:
+                error_msg = f"Exception updating {object_key} record {i}: {e}"
+                results['errors'].append(error_msg)
+                if i <= 3:  # Print first few errors
+                    print(f"    ERROR: {error_msg}")
+                continue
     
     return results
 
