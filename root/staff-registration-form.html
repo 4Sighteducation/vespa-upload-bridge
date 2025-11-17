@@ -228,6 +228,157 @@
             border-left: 4px solid #4caf50;
         }
         
+        /* Success Modal Styles */
+        .success-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .success-modal-overlay.show {
+            display: flex;
+        }
+        
+        .success-modal {
+            background: white;
+            border-radius: 16px;
+            max-width: 500px;
+            width: 100%;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: slideUp 0.3s ease;
+            position: relative;
+        }
+        
+        .success-modal-header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            background: #4caf50;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            color: white;
+        }
+        
+        .success-modal-header h2 {
+            color: #2e7d32;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        
+        .success-modal-body {
+            color: #333;
+            line-height: 1.8;
+        }
+        
+        .success-modal-body p {
+            margin-bottom: 15px;
+        }
+        
+        .email-instructions {
+            background: #f5f5f5;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+            text-align: left;
+        }
+        
+        .email-instructions ul {
+            list-style: none;
+            padding: 0;
+            margin: 10px 0 0 0;
+        }
+        
+        .email-instructions li {
+            padding: 8px 0;
+            padding-left: 25px;
+            position: relative;
+        }
+        
+        .email-instructions li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #4caf50;
+            font-weight: bold;
+        }
+        
+        .email-instructions strong {
+            color: #007bff;
+        }
+        
+        .contact-info {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .contact-info a {
+            color: #007bff;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        .contact-info a:hover {
+            text-decoration: underline;
+        }
+        
+        .modal-close-button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 25px;
+            transition: all 0.3s ease;
+        }
+        
+        .modal-close-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
         .loading {
             display: none;
             text-align: center;
@@ -491,18 +642,90 @@
             document.getElementById('registration-form').style.display = 'none';
         }
         
-        // Show success message
-        function showSuccess(message) {
-            const successDiv = document.getElementById('success-message');
-            successDiv.innerHTML = `
-                <h3>✅ Registration Complete!</h3>
-                <p>${message}</p>
-                <p style="margin-top: 15px;">You will receive an email with your login details shortly.</p>
-                <p style="margin-top: 10px; font-size: 14px;">You can close this page now.</p>
+        // Show success modal with detailed instructions
+        function showSuccessModal(responseData) {
+            const details = responseData.details || {};
+            const emailInstructions = details.emailInstructions || {};
+            
+            // Create modal HTML
+            const modalHTML = `
+                <div class="success-modal">
+                    <div class="success-modal-header">
+                        <div class="success-icon">✓</div>
+                        <h2>${details.title || 'Account Successfully Created!'}</h2>
+                    </div>
+                    <div class="success-modal-body">
+                        <p style="text-align: center; font-size: 18px; color: #2e7d32; font-weight: 600;">
+                            ${details.message || 'Your VESPA Academy account has been created successfully.'}
+                        </p>
+                        
+                        <div class="email-instructions">
+                            <strong>📧 Next Steps:</strong>
+                            <ul>
+                                <li>${emailInstructions.main || 'Please check your email in a few minutes for your welcome email with login details.'}</li>
+                                <li>${emailInstructions.spam || 'If you don\'t receive the email, please check your spam/junk folder.'}</li>
+                                <li>${emailInstructions.whitelist || 'To ensure you receive all VESPA Academy emails, please whitelist our domain: vespa.academy'}</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="contact-info">
+                            <strong>Need Help?</strong><br>
+                            ${emailInstructions.contact || 'If you have any issues or questions, please contact us at '}
+                            <a href="mailto:admin@vespa.academy">admin@vespa.academy</a>
+                        </div>
+                        
+                        <button class="modal-close-button" onclick="closeSuccessModal()">
+                            Got it, thanks!
+                        </button>
+                    </div>
+                </div>
             `;
-            successDiv.style.display = 'block';
+            
+            // Create or update modal overlay
+            let modalOverlay = document.getElementById('success-modal-overlay');
+            if (!modalOverlay) {
+                modalOverlay = document.createElement('div');
+                modalOverlay.id = 'success-modal-overlay';
+                modalOverlay.className = 'success-modal-overlay';
+                document.body.appendChild(modalOverlay);
+            }
+            
+            modalOverlay.innerHTML = modalHTML;
+            modalOverlay.classList.add('show');
+            
+            // Hide form and other messages
             document.getElementById('registration-form').style.display = 'none';
             document.getElementById('error-message').style.display = 'none';
+            document.getElementById('success-message').style.display = 'none';
+            document.getElementById('loading').style.display = 'none';
+        }
+        
+        // Close success modal
+        function closeSuccessModal() {
+            const modalOverlay = document.getElementById('success-modal-overlay');
+            if (modalOverlay) {
+                modalOverlay.classList.remove('show');
+                // Optionally remove after animation
+                setTimeout(() => {
+                    modalOverlay.remove();
+                }, 300);
+            }
+        }
+        
+        // Legacy success function for backwards compatibility
+        function showSuccess(message) {
+            showSuccessModal({
+                details: {
+                    title: 'Account Successfully Created!',
+                    message: message || 'Your VESPA Academy account has been created successfully.',
+                    emailInstructions: {
+                        main: 'Please check your email in a few minutes for your welcome email with login details.',
+                        spam: 'If you don\'t receive the email, please check your spam/junk folder.',
+                        whitelist: 'To ensure you receive all VESPA Academy emails, please whitelist our domain: vespa.academy',
+                        contact: 'If you have any issues or questions, please contact us at '
+                    }
+                }
+            });
         }
         
         // Handle form submission
@@ -561,7 +784,8 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    showSuccess(data.message || 'Registration successful!');
+                    // Use the new success modal with detailed instructions
+                    showSuccessModal(data);
                 } else {
                     showError(data.message || 'Registration failed. Please try again.');
                     submitButton.disabled = false;
