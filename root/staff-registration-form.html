@@ -36,6 +36,15 @@
             padding: 20px;
             text-align: center;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        
+        .header-logo {
+            max-width: 150px;
+            max-height: 60px;
+            margin: 0 auto 15px;
+            display: block;
+            object-fit: contain;
         }
         
         .header h1 {
@@ -228,7 +237,57 @@
             border-left: 4px solid #4caf50;
         }
         
-        /* Success Modal Styles */
+        /* Processing Overlay Styles */
+        .processing-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .processing-overlay.show {
+            display: flex;
+        }
+        
+        .processing-content {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            text-align: center;
+            max-width: 300px;
+            width: 90%;
+        }
+        
+        .processing-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        .processing-text {
+            color: #333;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        .processing-subtext {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        /* Success Modal Styles - Fully Responsive */
         .success-modal-overlay {
             display: none;
             position: fixed;
@@ -240,8 +299,10 @@
             z-index: 10000;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            padding: 10px;
             animation: fadeIn 0.3s ease;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
         }
         
         .success-modal-overlay.show {
@@ -253,10 +314,15 @@
             border-radius: 16px;
             max-width: 500px;
             width: 100%;
-            padding: 30px;
+            padding: 20px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             animation: slideUp 0.3s ease;
             position: relative;
+            margin: auto;
+            max-height: 90vh;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            box-sizing: border-box;
         }
         
         .success-modal-header {
@@ -290,6 +356,88 @@
         
         .success-modal-body p {
             margin-bottom: 15px;
+        }
+        
+        /* Mobile Responsive Styles for Modal */
+        @media (max-width: 768px) {
+            .success-modal {
+                max-width: 100%;
+                padding: 20px 15px;
+                border-radius: 12px 12px 0 0;
+                margin: 0;
+                max-height: 95vh;
+            }
+            
+            .success-modal-overlay {
+                padding: 0;
+                align-items: flex-end;
+            }
+            
+            .success-icon {
+                width: 60px;
+                height: 60px;
+                font-size: 30px;
+                margin-bottom: 15px;
+            }
+            
+            .success-modal-header h2 {
+                font-size: 20px;
+            }
+            
+            .success-modal-body {
+                font-size: 14px;
+            }
+            
+            .email-instructions {
+                padding: 12px;
+                margin: 15px 0;
+            }
+            
+            .email-instructions li {
+                padding: 6px 0;
+                font-size: 13px;
+            }
+            
+            .contact-info {
+                padding: 12px;
+                font-size: 13px;
+            }
+            
+            .modal-close-button {
+                padding: 16px;
+                font-size: 16px;
+                position: sticky;
+                bottom: 0;
+                margin-top: 20px;
+                z-index: 10;
+                background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);
+            }
+            
+            /* Ensure modal content doesn't overlap close button */
+            .success-modal {
+                display: flex;
+                flex-direction: column;
+            }
+            
+            .success-modal-body {
+                flex: 1;
+                overflow-y: auto;
+                padding-bottom: 10px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .success-modal {
+                padding: 15px 12px;
+            }
+            
+            .success-modal-header h2 {
+                font-size: 18px;
+            }
+            
+            .email-instructions {
+                padding: 10px;
+            }
         }
         
         .email-instructions {
@@ -442,6 +590,7 @@
 <body>
     <div class="container">
         <div class="header">
+            <img src="https://vespa.academy/_astro/vespalogo.BGrK1ARl.png" alt="VESPA Academy" class="header-logo">
             <h1>Staff Registration</h1>
             <div class="school-name" id="school-name">Loading...</div>
         </div>
@@ -455,6 +604,15 @@
             
             <div class="error-message" id="error-message"></div>
             <div class="success-message" id="success-message"></div>
+            
+            <!-- Processing Overlay -->
+            <div class="processing-overlay" id="processing-overlay">
+                <div class="processing-content">
+                    <div class="processing-spinner"></div>
+                    <div class="processing-text">Creating Your Account</div>
+                    <div class="processing-subtext">Please wait, this may take a moment...</div>
+                </div>
+            </div>
             
             <div class="loading" id="loading">
                 <div class="spinner"></div>
@@ -674,7 +832,7 @@
                             <a href="mailto:admin@vespa.academy">admin@vespa.academy</a>
                         </div>
                         
-                        <button class="modal-close-button" onclick="closeSuccessModal()">
+                        <button class="modal-close-button" onclick="closeSuccessModal()" id="modal-close-btn">
                             Got it, thanks!
                         </button>
                     </div>
@@ -693,11 +851,29 @@
             modalOverlay.innerHTML = modalHTML;
             modalOverlay.classList.add('show');
             
+            // Prevent body scroll when modal is open
+            document.body.style.overflow = 'hidden';
+            
             // Hide form and other messages
             document.getElementById('registration-form').style.display = 'none';
             document.getElementById('error-message').style.display = 'none';
             document.getElementById('success-message').style.display = 'none';
             document.getElementById('loading').style.display = 'none';
+            
+            // Ensure close button is accessible on mobile
+            setTimeout(() => {
+                const modal = modalOverlay.querySelector('.success-modal');
+                const closeButton = modalOverlay.querySelector('#modal-close-btn');
+                if (modal && closeButton) {
+                    // Scroll to top initially
+                    modal.scrollTop = 0;
+                    // On mobile, ensure close button is always visible
+                    if (window.innerWidth <= 768) {
+                        // Scroll close button into view
+                        closeButton.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                    }
+                }
+            }, 100);
         }
         
         // Close success modal
@@ -705,12 +881,25 @@
             const modalOverlay = document.getElementById('success-modal-overlay');
             if (modalOverlay) {
                 modalOverlay.classList.remove('show');
+                // Restore body scroll
+                document.body.style.overflow = '';
                 // Optionally remove after animation
                 setTimeout(() => {
                     modalOverlay.remove();
                 }, 300);
             }
         }
+        
+        // Close modal when clicking outside (mobile-friendly)
+        document.addEventListener('click', function(event) {
+            const modalOverlay = document.getElementById('success-modal-overlay');
+            if (modalOverlay && modalOverlay.classList.contains('show')) {
+                // If clicking on the overlay (not the modal content), close it
+                if (event.target === modalOverlay) {
+                    closeSuccessModal();
+                }
+            }
+        });
         
         // Legacy success function for backwards compatibility
         function showSuccess(message) {
@@ -728,6 +917,26 @@
             });
         }
         
+        // Show processing overlay
+        function showProcessing() {
+            const processingOverlay = document.getElementById('processing-overlay');
+            if (processingOverlay) {
+                processingOverlay.classList.add('show');
+                // Prevent body scroll when processing
+                document.body.style.overflow = 'hidden';
+            }
+        }
+        
+        // Hide processing overlay
+        function hideProcessing() {
+            const processingOverlay = document.getElementById('processing-overlay');
+            if (processingOverlay) {
+                processingOverlay.classList.remove('show');
+                // Restore body scroll
+                document.body.style.overflow = '';
+            }
+        }
+        
         // Handle form submission
         async function handleSubmit(event) {
             event.preventDefault();
@@ -735,6 +944,9 @@
             const submitButton = document.getElementById('submit-button');
             submitButton.disabled = true;
             submitButton.textContent = 'Processing...';
+            
+            // Show processing overlay
+            showProcessing();
             
             // Collect form data
             const formData = new FormData(event.target);
@@ -784,15 +996,19 @@
                 const data = await response.json();
                 
                 if (data.success) {
+                    // Hide processing overlay
+                    hideProcessing();
                     // Use the new success modal with detailed instructions
                     showSuccessModal(data);
                 } else {
+                    hideProcessing();
                     showError(data.message || 'Registration failed. Please try again.');
                     submitButton.disabled = false;
                     submitButton.textContent = 'Complete Registration';
                 }
             } catch (error) {
                 console.error('Registration error:', error);
+                hideProcessing();
                 showError('An error occurred during registration. Please try again.');
                 submitButton.disabled = false;
                 submitButton.textContent = 'Complete Registration';
