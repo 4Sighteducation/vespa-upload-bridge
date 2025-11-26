@@ -197,6 +197,14 @@
                   this.showMessage(`Logged in as: ${this.schoolContext.customerName}`, 'info');
                 } else if (this.isSuperUser) {
                   this.showMessage('Super User Mode Active - All Schools', 'info');
+                } else if (!this.isSuperUser && !this.schoolContext) {
+                  // Staff admin but no school context - this is a problem
+                  console.error('Staff admin user has no school context!', {
+                    userEmail: this.userEmail,
+                    response: data
+                  });
+                  this.showMessage('⚠️ Your school context could not be determined. Contact support if this persists.', 'warning');
+                  // Still set authChecked to true so UI shows
                 }
               } else {
                 throw new Error(data.message || 'Auth check failed');
@@ -259,13 +267,13 @@
                 }
                 // If no school selected, load ALL (no filter)
               } else {
-                // Staff admin - MUST use their school
-                if (!this.schoolContext || !this.schoolContext.schoolId) {
-                  this.showMessage('Unable to determine your school. Please refresh the page.', 'error');
-                  this.loading = false;
-                  return;
+                // Staff admin - try to use their school
+                if (this.schoolContext && this.schoolContext.schoolId) {
+                  schoolUuidForRls = this.schoolContext.schoolId;
+                } else {
+                  // No school context - RLS will return 0 results, but let UI show
+                  debugLog('Warning: Staff admin has no schoolId, RLS will return no results');
                 }
-                schoolUuidForRls = this.schoolContext.schoolId;
               }
               
               debugLog('Loading accounts', {
@@ -292,11 +300,8 @@
               if (schoolUuidForRls) {
                 params.append('emulatedSchoolId', schoolUuidForRls);
                 debugLog('Added schoolId filter for RLS', schoolUuidForRls);
-              } else if (!this.isSuperUser) {
-                // Staff admin MUST have a school - don't load anything
-                this.showMessage('No school context available. Please refresh the page.', 'error');
-                this.loading = false;
-                return;
+              } else {
+                debugLog('No schoolId for RLS - will return all accounts (super user) or none (staff admin with RLS)');
               }
               
               const response = await fetch(
