@@ -230,10 +230,11 @@
                 params.append('yearGroup', this.selectedYearGroup);
               }
               
-              if (this.selectedSchool && this.isSuperUser) {
-                params.append('customerId', this.selectedSchool.id);
-              } else if (this.schoolContext && !this.isSuperUser) {
-                params.append('customerId', this.schoolContext.customerId);
+              // Add school filter (using Supabase UUID for emulation/RLS)
+              if (this.selectedSchool && this.isSuperUser && this.selectedSchool.schoolId) {
+                params.append('emulatedSchoolId', this.selectedSchool.schoolId);
+              } else if (this.schoolContext && !this.isSuperUser && this.schoolContext.schoolId) {
+                params.append('emulatedSchoolId', this.schoolContext.schoolId);
               }
               
               const response = await fetch(
@@ -291,6 +292,11 @@
             this.loadingText = 'Saving changes...';
             
             try {
+              // Get emulated school ID if applicable
+              const emulatedSchoolId = this.isSuperUser && this.selectedSchool?.schoolId
+                ? this.selectedSchool.schoolId
+                : this.schoolContext?.schoolId || null;
+              
               const response = await fetch(
                 `${this.apiUrl}/api/v3/accounts/${encodeURIComponent(this.editingAccount.email)}`,
                 {
@@ -298,6 +304,7 @@
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                     accountType: this.currentTab === 'students' ? 'student' : 'staff',
+                    emulatedSchoolId: emulatedSchoolId,
                     ...this.editForm
                   })
                 }
@@ -356,15 +363,17 @@
           
           async loadAvailableStaff() {
             try {
-              const customerId = this.isSuperUser && this.selectedSchool 
-                ? this.selectedSchool.id 
-                : this.schoolContext?.customerId;
+              // Get the school UUID (not Knack customer ID)
+              const schoolId = this.connectionAccount?.schoolId || this.schoolContext?.schoolId;
               
-              if (!customerId) return;
+              if (!schoolId) {
+                debugLog('No schoolId available for loading staff');
+                return;
+              }
               
               // Load tutors
               const tutorsResponse = await fetch(
-                `${this.apiUrl}/api/v3/accounts/staff/available?customerId=${customerId}&roleType=tutor`,
+                `${this.apiUrl}/api/v3/accounts/staff/available?schoolId=${schoolId}&roleType=tutor`,
                 { headers: { 'Content-Type': 'application/json' } }
               );
               const tutorsData = await tutorsResponse.json();
@@ -372,7 +381,7 @@
               
               // Load heads of year
               const hoyResponse = await fetch(
-                `${this.apiUrl}/api/v3/accounts/staff/available?customerId=${customerId}&roleType=head_of_year`,
+                `${this.apiUrl}/api/v3/accounts/staff/available?schoolId=${schoolId}&roleType=head_of_year`,
                 { headers: { 'Content-Type': 'application/json' } }
               );
               const hoyData = await hoyResponse.json();
@@ -380,7 +389,7 @@
               
               // Load subject teachers
               const teachersResponse = await fetch(
-                `${this.apiUrl}/api/v3/accounts/staff/available?customerId=${customerId}&roleType=subject_teacher`,
+                `${this.apiUrl}/api/v3/accounts/staff/available?schoolId=${schoolId}&roleType=subject_teacher`,
                 { headers: { 'Content-Type': 'application/json' } }
               );
               const teachersData = await teachersResponse.json();
@@ -388,7 +397,7 @@
               
               // Load staff admins
               const adminsResponse = await fetch(
-                `${this.apiUrl}/api/v3/accounts/staff/available?customerId=${customerId}&roleType=staff_admin`,
+                `${this.apiUrl}/api/v3/accounts/staff/available?schoolId=${schoolId}&roleType=staff_admin`,
                 { headers: { 'Content-Type': 'application/json' } }
               );
               const adminsData = await adminsResponse.json();
@@ -407,6 +416,10 @@
             this.loading = true;
             
             try {
+              const emulatedSchoolId = this.isSuperUser && this.selectedSchool?.schoolId
+                ? this.selectedSchool.schoolId
+                : this.schoolContext?.schoolId || null;
+              
               const response = await fetch(
                 `${this.apiUrl}/api/v3/accounts/${encodeURIComponent(this.connectionAccount.email)}/connections`,
                 {
@@ -415,7 +428,8 @@
                   body: JSON.stringify({
                     connectionType: connectionType,
                     staffEmail: staffEmail,
-                    action: 'add'
+                    action: 'add',
+                    emulatedSchoolId: emulatedSchoolId
                   })
                 }
               );
@@ -445,6 +459,10 @@
             this.loading = true;
             
             try {
+              const emulatedSchoolId = this.isSuperUser && this.selectedSchool?.schoolId
+                ? this.selectedSchool.schoolId
+                : this.schoolContext?.schoolId || null;
+              
               const response = await fetch(
                 `${this.apiUrl}/api/v3/accounts/${encodeURIComponent(this.connectionAccount.email)}/connections`,
                 {
@@ -453,7 +471,8 @@
                   body: JSON.stringify({
                     connectionType: connectionType,
                     staffEmail: staffEmail,
-                    action: 'remove'
+                    action: 'remove',
+                    emulatedSchoolId: emulatedSchoolId
                   })
                 }
               );
