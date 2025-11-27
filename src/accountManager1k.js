@@ -140,6 +140,10 @@
             bulkConnectionType: '',
             bulkStaffEmail: '',
             
+            // Background job tracking
+            activeJobs: [], // { jobId, type, total, description }
+            jobPollingInterval: null,
+            
             // Messages
             message: null,
             messageType: null
@@ -922,7 +926,7 @@
             this.showBulkRemoveMenu = true;
           },
           
-          // NEW: Bulk connection update
+          // NEW: Bulk connection update (background job)
           async bulkUpdateConnections(connectionType, staffEmail, action) {
             if (!this.hasSelectedAccounts) {
               this.showMessage('Please select at least one account', 'warning');
@@ -931,79 +935,135 @@
             
             const count = this.selectedAccounts.length;
             const typeName = connectionType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
-            const confirmMessage = `${action === 'add' ? 'Add' : 'Remove'} ${typeName} ${action === 'add' ? 'to' : 'from'} ${count} student(s)?`;
-            
-            if (!confirm(confirmMessage)) return;
-            
-            this.bulkOperationInProgress = true;
-            this.bulkProgress = { current: 0, total: count, status: 'Starting bulk connection update...' };
-            
-            let successCount = 0;
-            let failCount = 0;
             
             try {
-              for (let i = 0; i < this.selectedAccounts.length; i++) {
-                const email = this.selectedAccounts[i];
+              const emulatedSchoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
+                ? this.selectedSchool.supabaseUuid
+                : this.schoolContext?.schoolId || null;
+              
+              // Submit job to queue
+              const response = await fetch(
+                `${this.apiUrl}/api/v3/bulk/submit`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    operationType: 'connection-update',
+                    emails: this.selectedAccounts,
+                    connectionData: {
+                      connectionType: connectionType,
+                      staffEmail: staffEmail,
+                      action: action
+                    },
+                    userContext: {
+                      emulatedSchoolId: emulatedSchoolId,
+                      userEmail: this.userEmail
+                    }
+                  })
+                }
+              );
+              
+              const data = await response.json();
+              
+              if (data.success) {
+                // Add to active jobs for background tracking
+                this.activeJobs.push({
+                  jobId: data.jobId,
+                  type: 'connection-update',
+                  action: action,
+                  connectionType: typeName,
+                  staffEmail: staffEmail,
+                  total: count,
+                  current: 0,
+                  status: 'Queued...',
+                  startTime: Date.now()
+                });
                 
-                this.bulkProgress.current = i + 1;
-                this.bulkProgress.status = `${action === 'add' ? 'Adding' : 'Removing'} connection for ${email}...`;
+                this.showMessage(
+                  `✅ Bulk operation queued! Processing ${count} students in background...`,
+                  'success'
+                );
+                
+                // Start polling if not already running
+                if (!this.jobPollingInterval) {
+                  this.startJobPolling();
+                }
+                
+                // Clear selection
+                this.selectedAccounts = [];
+                this.allSelected = false;
+                
+              } else {
+                throw new Error(data.message || 'Failed to submit bulk operation');
+              }
+              
+            } catch (error) {
+              console.error('Bulk operation submission error:', error);
+              this.showMessage('Failed to submit bulk operation: ' + error.message, 'error');
+            }
+          },
+          
+          // Start polling for job status
+          startJobPolling() {
+            if (this.jobPollingInterval) return; // Already polling
+            
+            debugLog('Starting job polling');
+            
+            this.jobPollingInterval = setInterval(async () => {
+              if (this.activeJobs.length === 0) {
+                // No active jobs, stop polling
+                clearInterval(this.jobPollingInterval);
+                this.jobPollingInterval = null;
+                debugLog('No active jobs, stopping polling');
+                return;
+              }
+              
+              // Poll each active job
+              for (let i = this.activeJobs.length - 1; i >= 0; i--) {
+                const job = this.activeJobs[i];
                 
                 try {
-                  const emulatedSchoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
-                    ? this.selectedSchool.supabaseUuid
-                    : this.schoolContext?.schoolId || null;
-                  
                   const response = await fetch(
-                    `${this.apiUrl}/api/v3/accounts/${encodeURIComponent(email)}/connections`,
-                    {
-                      method: 'PUT',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        connectionType: connectionType,
-                        staffEmail: staffEmail,
-                        action: action,
-                        emulatedSchoolId: emulatedSchoolId
-                      })
-                    }
+                    `${this.apiUrl}/api/v3/bulk/status/${job.jobId}`,
+                    { headers: { 'Content-Type': 'application/json' } }
                   );
                   
                   const data = await response.json();
                   
                   if (data.success) {
-                    successCount++;
-                  } else {
-                    throw new Error(data.message || 'Update failed');
+                    // Update job progress
+                    if (data.progress) {
+                      job.current = data.progress.current || 0;
+                      job.status = data.progress.status || 'Processing...';
+                    }
+                    
+                    // Check if completed or failed
+                    if (data.completed) {
+                      const result = data.result || {};
+                      this.showMessage(
+                        `✅ Bulk ${job.action} completed: ${result.successful || 0} success, ${result.failed || 0} failed`,
+                        result.failed === 0 ? 'success' : 'warning'
+                      );
+                      
+                      // Remove from active jobs
+                      this.activeJobs.splice(i, 1);
+                      
+                      // Reload accounts to see changes
+                      await this.loadAccounts();
+                      
+                    } else if (data.failed) {
+                      this.showMessage(
+                        `❌ Bulk ${job.action} failed: ${data.failedReason || 'Unknown error'}`,
+                        'error'
+                      );
+                      this.activeJobs.splice(i, 1);
+                    }
                   }
-                } catch (err) {
-                  failCount++;
-                  console.error(`Bulk connection update failed for ${email}:`, err);
-                }
-                
-                // Small delay to prevent overwhelming server (especially for comprehensive sync)
-                if (i < this.selectedAccounts.length - 1) {
-                  await new Promise(resolve => setTimeout(resolve, 200));
+                } catch (error) {
+                  console.error('Job polling error:', error);
                 }
               }
-              
-              this.showMessage(
-                `Bulk connection update completed: ${successCount} success, ${failCount} failed`,
-                failCount === 0 ? 'success' : 'warning'
-              );
-              
-              // Clear selection
-              this.selectedAccounts = [];
-              this.allSelected = false;
-              
-              // Reload accounts
-              await this.loadAccounts();
-              
-            } catch (error) {
-              console.error('Bulk connection update error:', error);
-              this.showMessage('Bulk connection update failed: ' + error.message, 'error');
-            } finally {
-              this.bulkOperationInProgress = false;
-              this.bulkProgress = { current: 0, total: 0, status: '' };
-            }
+            }, 2000); // Poll every 2 seconds
           },
           
           // ========== DELETE ==========
@@ -1078,18 +1138,19 @@
               </div>
             </div>
             
-            <!-- Bulk Progress Overlay -->
-            <div v-if="bulkOperationInProgress" class="am-loading-overlay">
-              <div class="am-loading-content">
-                <div class="am-spinner"></div>
-                <div class="am-loading-text">Bulk Operation in Progress</div>
-                <div class="am-progress-bar">
-                  <div class="am-progress-fill" :style="{ width: (bulkProgress.current / bulkProgress.total * 100) + '%' }"></div>
+            <!-- Background Job Tracker (Non-blocking) -->
+            <div v-if="activeJobs.length > 0" class="am-job-tracker">
+              <div v-for="job in activeJobs" :key="job.jobId" class="am-job-card">
+                <div class="am-job-header">
+                  <span class="am-job-title">
+                    {{ job.action === 'add' ? '➕' : '➖' }} {{ job.connectionType }}
+                  </span>
+                  <span class="am-job-count">{{ job.current }}/{{ job.total }}</span>
                 </div>
-                <div class="am-progress-text">
-                  {{ bulkProgress.current }} / {{ bulkProgress.total }}
+                <div class="am-job-progress-bar">
+                  <div class="am-job-progress-fill" :style="{ width: (job.current / job.total * 100) + '%' }"></div>
                 </div>
-                <div class="am-progress-status">{{ bulkProgress.status }}</div>
+                <div class="am-job-status">{{ job.status }}</div>
               </div>
             </div>
             
@@ -2625,6 +2686,82 @@
           border-radius: 8px;
           color: #0d47a1;
           font-size: 14px;
+        }
+        
+        /* ========== Background Job Tracker (Non-blocking) ========== */
+        .am-job-tracker {
+          position: fixed;
+          bottom: 20px;
+          right: 20px;
+          z-index: 9999;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          max-width: 350px;
+        }
+        
+        .am-job-card {
+          background: white;
+          border-radius: 12px;
+          padding: 16px;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+          border-left: 4px solid #079baa;
+          animation: am-slideInRight 0.3s ease-out;
+        }
+        
+        @keyframes am-slideInRight {
+          from {
+            opacity: 0;
+            transform: translateX(100px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
+        
+        .am-job-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 10px;
+        }
+        
+        .am-job-title {
+          font-weight: 600;
+          color: #2a3c7a;
+          font-size: 14px;
+        }
+        
+        .am-job-count {
+          background: #e3f2fd;
+          color: #1976d2;
+          padding: 2px 8px;
+          border-radius: 10px;
+          font-size: 12px;
+          font-weight: 600;
+        }
+        
+        .am-job-progress-bar {
+          height: 6px;
+          background: #e0e0e0;
+          border-radius: 3px;
+          overflow: hidden;
+          margin-bottom: 8px;
+        }
+        
+        .am-job-progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #079baa, #00e5db);
+          transition: width 0.5s ease;
+        }
+        
+        .am-job-status {
+          font-size: 12px;
+          color: #666;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
         
         /* ========== Responsive Design ========== */
