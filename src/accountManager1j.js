@@ -14,15 +14,15 @@
  * - 🎨 Beautiful VESPA-branded design
  * - 📱 Fully responsive
  * 
- * Version: 1j
+ * Version: 1k
  * Date: November 27, 2025
- * Fixes: Header contrast, group dropdown, dedupe emails, bulk operations prep
+ * Fixes: Checkbox event handler, bulk connection UI, better click handling
  */
 
 (function() {
   'use strict';
   
-  const VERSION = '1j';
+  const VERSION = '1k';
   const DEBUG_MODE = true;
   
   function debugLog(message, data) {
@@ -762,11 +762,14 @@
           },
           
           toggleSelect(email) {
+            debugLog('Toggle select called', { email, currentlySelected: this.isSelected(email) });
             const index = this.selectedAccounts.indexOf(email);
             if (index > -1) {
               this.selectedAccounts.splice(index, 1);
+              debugLog('Deselected', { email, remaining: this.selectedAccounts.length });
             } else {
               this.selectedAccounts.push(email);
+              debugLog('Selected', { email, total: this.selectedAccounts.length });
             }
             this.allSelected = this.selectedAccounts.length === this.accounts.length;
           },
@@ -848,6 +851,75 @@
               this.bulkProgress = { current: 0, total: 0, status: '' };
               this.showBulkMenu = false;
             }
+          },
+          
+          // Open bulk connection add modal
+          async openBulkConnectionAdd() {
+            this.showBulkMenu = false;
+            this.bulkConnectionType = '';
+            this.bulkStaffEmail = '';
+            
+            // Load available staff if not already loaded
+            if (this.schoolContext || this.selectedSchool) {
+              const schoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
+                ? this.selectedSchool.supabaseUuid
+                : this.schoolContext?.schoolId;
+              
+              if (schoolId) {
+                // Quick load of all staff types
+                try {
+                  const [tutors, hoy, teachers, admins] = await Promise.all([
+                    fetch(`${this.apiUrl}/api/v3/accounts/staff/available?schoolId=${schoolId}&roleType=tutor`).then(r => r.json()),
+                    fetch(`${this.apiUrl}/api/v3/accounts/staff/available?schoolId=${schoolId}&roleType=head_of_year`).then(r => r.json()),
+                    fetch(`${this.apiUrl}/api/v3/accounts/staff/available?schoolId=${schoolId}&roleType=subject_teacher`).then(r => r.json()),
+                    fetch(`${this.apiUrl}/api/v3/accounts/staff/available?schoolId=${schoolId}&roleType=staff_admin`).then(r => r.json())
+                  ]);
+                  
+                  if (tutors.success) this.availableStaff.tutors = tutors.staff || [];
+                  if (hoy.success) this.availableStaff.headsOfYear = hoy.staff || [];
+                  if (teachers.success) this.availableStaff.subjectTeachers = teachers.staff || [];
+                  if (admins.success) this.availableStaff.staffAdmins = admins.staff || [];
+                } catch (error) {
+                  console.error('Error loading staff for bulk operation:', error);
+                }
+              }
+            }
+            
+            this.showBulkConnectionMenu = true;
+          },
+          
+          // Open bulk connection remove modal
+          async openBulkConnectionRemove() {
+            this.showBulkMenu = false;
+            this.bulkConnectionType = '';
+            this.bulkStaffEmail = '';
+            
+            // Load available staff if not already loaded
+            if (this.schoolContext || this.selectedSchool) {
+              const schoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
+                ? this.selectedSchool.supabaseUuid
+                : this.schoolContext?.schoolId;
+              
+              if (schoolId) {
+                try {
+                  const [tutors, hoy, teachers, admins] = await Promise.all([
+                    fetch(`${this.apiUrl}/api/v3/accounts/staff/available?schoolId=${schoolId}&roleType=tutor`).then(r => r.json()),
+                    fetch(`${this.apiUrl}/api/v3/accounts/staff/available?schoolId=${schoolId}&roleType=head_of_year`).then(r => r.json()),
+                    fetch(`${this.apiUrl}/api/v3/accounts/staff/available?schoolId=${schoolId}&roleType=subject_teacher`).then(r => r.json()),
+                    fetch(`${this.apiUrl}/api/v3/accounts/staff/available?schoolId=${schoolId}&roleType=staff_admin`).then(r => r.json())
+                  ]);
+                  
+                  if (tutors.success) this.availableStaff.tutors = tutors.staff || [];
+                  if (hoy.success) this.availableStaff.headsOfYear = hoy.staff || [];
+                  if (teachers.success) this.availableStaff.subjectTeachers = teachers.staff || [];
+                  if (admins.success) this.availableStaff.staffAdmins = admins.staff || [];
+                } catch (error) {
+                  console.error('Error loading staff for bulk operation:', error);
+                }
+              }
+            }
+            
+            this.showBulkRemoveMenu = true;
           },
           
           // NEW: Bulk connection update
@@ -1106,10 +1178,10 @@
                     
                     <div class="am-dropdown-section" v-if="currentTab === 'students'">
                       <div class="am-dropdown-label">🔗 Connection Actions</div>
-                      <button @click="showBulkConnectionMenu = true; showBulkMenu = false;" class="am-dropdown-item">
+                      <button @click="openBulkConnectionAdd" class="am-dropdown-item">
                         ➕ Add Connections
                       </button>
-                      <button @click="showBulkRemoveMenu = true; showBulkMenu = false;" class="am-dropdown-item">
+                      <button @click="openBulkConnectionRemove" class="am-dropdown-item">
                         ➖ Remove Connections
                       </button>
                     </div>
@@ -1172,8 +1244,8 @@
                     <th class="am-th-checkbox">
                       <input 
                         type="checkbox" 
-                        v-model="allSelected"
-                        @change="toggleSelectAll"
+                        :checked="allSelected"
+                        @click="toggleSelectAll"
                         class="am-checkbox"
                       />
                     </th>
@@ -1214,7 +1286,7 @@
                       <input 
                         type="checkbox" 
                         :checked="isSelected(account.email)"
-                        @change="toggleSelect(account.email)"
+                        @click="toggleSelect(account.email)"
                         class="am-checkbox"
                       />
                     </td>
@@ -1552,6 +1624,110 @@
                 <div class="am-modal-footer">
                   <button @click="closeConnectionModal" class="am-button primary">
                     Done
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Bulk Connection Add Modal -->
+            <div v-if="showBulkConnectionMenu" class="am-modal-overlay" @click.self="showBulkConnectionMenu = false">
+              <div class="am-modal am-modal-small">
+                <div class="am-modal-header">
+                  <h3>➕ Bulk Add Connections ({{ selectedAccounts.length }} students)</h3>
+                  <button @click="showBulkConnectionMenu = false" class="am-modal-close">✖</button>
+                </div>
+                
+                <div class="am-modal-body">
+                  <p class="am-modal-description">
+                    Add the same staff member as a connection to all {{ selectedAccounts.length }} selected students.
+                  </p>
+                  
+                  <div class="am-form-group">
+                    <label>Connection Type:</label>
+                    <select v-model="bulkConnectionType" class="am-select">
+                      <option value="">Select type...</option>
+                      <option value="tutor">Tutor</option>
+                      <option value="head_of_year">Head of Year</option>
+                      <option value="subject_teacher">Subject Teacher</option>
+                      <option value="staff_admin">Staff Admin</option>
+                    </select>
+                  </div>
+                  
+                  <div class="am-form-group" v-if="bulkConnectionType">
+                    <label>Select Staff Member:</label>
+                    <select v-model="bulkStaffEmail" class="am-select">
+                      <option value="">Select staff...</option>
+                      <option 
+                        v-for="staff in availableStaff[bulkConnectionType === 'tutor' ? 'tutors' : bulkConnectionType === 'head_of_year' ? 'headsOfYear' : bulkConnectionType === 'subject_teacher' ? 'subjectTeachers' : 'staffAdmins']" 
+                        :key="staff.email"
+                        :value="staff.email">
+                        {{ staff.fullName }} ({{ staff.email }})
+                      </option>
+                    </select>
+                  </div>
+                </div>
+                
+                <div class="am-modal-footer">
+                  <button @click="showBulkConnectionMenu = false" class="am-button secondary">
+                    Cancel
+                  </button>
+                  <button 
+                    @click="bulkUpdateConnections(bulkConnectionType, bulkStaffEmail, 'add'); showBulkConnectionMenu = false"
+                    :disabled="!bulkConnectionType || !bulkStaffEmail"
+                    class="am-button primary">
+                    Add to {{ selectedAccounts.length }} Students
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Bulk Connection Remove Modal -->
+            <div v-if="showBulkRemoveMenu" class="am-modal-overlay" @click.self="showBulkRemoveMenu = false">
+              <div class="am-modal am-modal-small">
+                <div class="am-modal-header">
+                  <h3>➖ Bulk Remove Connections ({{ selectedAccounts.length }} students)</h3>
+                  <button @click="showBulkRemoveMenu = false" class="am-modal-close">✖</button>
+                </div>
+                
+                <div class="am-modal-body">
+                  <p class="am-modal-description">
+                    Remove the same staff member connection from all {{ selectedAccounts.length }} selected students.
+                  </p>
+                  
+                  <div class="am-form-group">
+                    <label>Connection Type:</label>
+                    <select v-model="bulkConnectionType" class="am-select">
+                      <option value="">Select type...</option>
+                      <option value="tutor">Tutor</option>
+                      <option value="head_of_year">Head of Year</option>
+                      <option value="subject_teacher">Subject Teacher</option>
+                      <option value="staff_admin">Staff Admin</option>
+                    </select>
+                  </div>
+                  
+                  <div class="am-form-group" v-if="bulkConnectionType">
+                    <label>Select Staff Member to Remove:</label>
+                    <select v-model="bulkStaffEmail" class="am-select">
+                      <option value="">Select staff...</option>
+                      <option 
+                        v-for="staff in availableStaff[bulkConnectionType === 'tutor' ? 'tutors' : bulkConnectionType === 'head_of_year' ? 'headsOfYear' : bulkConnectionType === 'subject_teacher' ? 'subjectTeachers' : 'staffAdmins']" 
+                        :key="staff.email"
+                        :value="staff.email">
+                        {{ staff.fullName }} ({{ staff.email }})
+                      </option>
+                    </select>
+                  </div>
+                </div>
+                
+                <div class="am-modal-footer">
+                  <button @click="showBulkRemoveMenu = false" class="am-button secondary">
+                    Cancel
+                  </button>
+                  <button 
+                    @click="bulkUpdateConnections(bulkConnectionType, bulkStaffEmail, 'remove'); showBulkRemoveMenu = false"
+                    :disabled="!bulkConnectionType || !bulkStaffEmail"
+                    class="am-button primary danger">
+                    Remove from {{ selectedAccounts.length }} Students
                   </button>
                 </div>
               </div>
@@ -2239,6 +2415,32 @@
           display: flex;
           flex-direction: column;
           animation: am-slideUp 0.3s ease-out;
+        }
+        
+        .am-modal-small {
+          max-width: 500px;
+        }
+        
+        .am-modal-description {
+          color: #666;
+          margin-bottom: 24px;
+          line-height: 1.6;
+        }
+        
+        .am-form-group {
+          margin-bottom: 20px;
+        }
+        
+        .am-form-group label {
+          display: block;
+          font-weight: 600;
+          color: #333;
+          margin-bottom: 8px;
+          font-size: 14px;
+        }
+        
+        .am-form-group .am-select {
+          width: 100%;
         }
         
         @keyframes am-slideUp {
