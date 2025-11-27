@@ -14,15 +14,15 @@
  * - 🎨 Beautiful VESPA-branded design
  * - 📱 Fully responsive
  * 
- * Version: 1i
+ * Version: 1j
  * Date: November 27, 2025
- * Fixes: Data object syntax, connection removal, table contrast, error handling
+ * Fixes: Header contrast, group dropdown, dedupe emails, bulk operations prep
  */
 
 (function() {
   'use strict';
   
-  const VERSION = '1i';
+  const VERSION = '1j';
   const DEBUG_MODE = true;
   
   function debugLog(message, data) {
@@ -133,6 +133,12 @@
             // Bulk operations
             showBulkMenu: false,
             bulkAction: null,
+            bulkOperationInProgress: false,
+            bulkProgress: { current: 0, total: 0, status: '' },
+            showBulkConnectionMenu: false,
+            showBulkRemoveMenu: false,
+            bulkConnectionType: '',
+            bulkStaffEmail: '',
             
             // Messages
             message: null,
@@ -161,9 +167,6 @@
             await this.loadAllSchools();
           }
           await this.loadAccounts();
-          if (this.currentTab === 'students') {
-            await this.loadAvailableGroups();
-          }
         },
         
         methods: {
@@ -262,24 +265,54 @@
             this.loadAccounts();
           },
           
-          // Load available groups for dropdown
-          async loadAvailableGroups() {
+          // Update available groups from loaded accounts
+          updateAvailableGroups() {
             try {
               // Get unique groups from current accounts
               const groups = [...new Set(
                 this.accounts
                   .map(a => a.tutorGroup)
-                  .filter(g => g && g !== '-')
+                  .filter(g => g && g !== '-' && g !== '')
               )].sort();
               
               this.availableGroups = groups;
-              debugLog('Available groups loaded', groups);
+              debugLog('Available groups updated', groups);
             } catch (error) {
-              console.error('Load groups error:', error);
+              console.error('Update groups error:', error);
             }
           },
           
           // ========== DATA LOADING ==========
+          
+          // Deduplicate accounts by email (strip HTML tags)
+          deduplicateAccounts(accounts) {
+            const seen = new Map();
+            const deduped = [];
+            
+            for (const account of accounts) {
+              // Strip HTML tags from email if present
+              let cleanEmail = account.email;
+              if (cleanEmail && cleanEmail.includes('<')) {
+                const match = cleanEmail.match(/mailto:([^"]+)/);
+                if (match) {
+                  cleanEmail = match[1];
+                } else {
+                  cleanEmail = cleanEmail.replace(/<[^>]*>/g, '').trim();
+                }
+              }
+              
+              // Use clean email as key
+              if (!seen.has(cleanEmail)) {
+                seen.set(cleanEmail, true);
+                account.email = cleanEmail; // Update to clean email
+                deduped.push(account);
+              } else {
+                debugLog('Skipping duplicate', { email: account.email, cleanEmail });
+              }
+            }
+            
+            return deduped;
+          },
           
           async loadAccounts() {
             this.loading = true;
@@ -348,9 +381,15 @@
               const data = await response.json();
               
               if (data.success) {
-                this.accounts = data.accounts || [];
+                // Deduplicate accounts (strip HTML from emails)
+                this.accounts = this.deduplicateAccounts(data.accounts || []);
                 this.totalAccounts = data.total || 0;
                 debugLog('Accounts loaded', { count: this.accounts.length });
+                
+                // Update available groups for dropdown (students only)
+                if (this.currentTab === 'students') {
+                  this.updateAvailableGroups();
+                }
               } else {
                 throw new Error(data.message || 'Failed to load accounts');
               }
@@ -753,15 +792,20 @@
             
             if (!confirm(confirmMessage)) return;
             
-            this.loading = true;
-            this.loadingText = `Processing ${count} accounts...`;
+            this.bulkOperationInProgress = true;
+            this.bulkProgress = { current: 0, total: count, status: 'Starting...' };
             
             let successCount = 0;
             let failCount = 0;
             
             try {
-              for (const email of this.selectedAccounts) {
+              for (let i = 0; i < this.selectedAccounts.length; i++) {
+                const email = this.selectedAccounts[i];
                 const account = this.accounts.find(a => a.email === email);
+                
+                this.bulkProgress.current = i + 1;
+                this.bulkProgress.status = `Processing ${email}...`;
+                
                 if (!account) continue;
                 
                 try {
@@ -776,6 +820,11 @@
                 } catch (err) {
                   failCount++;
                   console.error(`Failed for ${email}:`, err);
+                }
+                
+                // Small delay to prevent overwhelming server
+                if (i < this.selectedAccounts.length - 1) {
+                  await new Promise(resolve => setTimeout(resolve, 100));
                 }
               }
               
@@ -795,8 +844,93 @@
               console.error('Bulk action error:', error);
               this.showMessage('Bulk action failed: ' + error.message, 'error');
             } finally {
-              this.loading = false;
+              this.bulkOperationInProgress = false;
+              this.bulkProgress = { current: 0, total: 0, status: '' };
               this.showBulkMenu = false;
+            }
+          },
+          
+          // NEW: Bulk connection update
+          async bulkUpdateConnections(connectionType, staffEmail, action) {
+            if (!this.hasSelectedAccounts) {
+              this.showMessage('Please select at least one account', 'warning');
+              return;
+            }
+            
+            const count = this.selectedAccounts.length;
+            const typeName = connectionType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+            const confirmMessage = `${action === 'add' ? 'Add' : 'Remove'} ${typeName} ${action === 'add' ? 'to' : 'from'} ${count} student(s)?`;
+            
+            if (!confirm(confirmMessage)) return;
+            
+            this.bulkOperationInProgress = true;
+            this.bulkProgress = { current: 0, total: count, status: 'Starting bulk connection update...' };
+            
+            let successCount = 0;
+            let failCount = 0;
+            
+            try {
+              for (let i = 0; i < this.selectedAccounts.length; i++) {
+                const email = this.selectedAccounts[i];
+                
+                this.bulkProgress.current = i + 1;
+                this.bulkProgress.status = `${action === 'add' ? 'Adding' : 'Removing'} connection for ${email}...`;
+                
+                try {
+                  const emulatedSchoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
+                    ? this.selectedSchool.supabaseUuid
+                    : this.schoolContext?.schoolId || null;
+                  
+                  const response = await fetch(
+                    `${this.apiUrl}/api/v3/accounts/${encodeURIComponent(email)}/connections`,
+                    {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        connectionType: connectionType,
+                        staffEmail: staffEmail,
+                        action: action,
+                        emulatedSchoolId: emulatedSchoolId
+                      })
+                    }
+                  );
+                  
+                  const data = await response.json();
+                  
+                  if (data.success) {
+                    successCount++;
+                  } else {
+                    throw new Error(data.message || 'Update failed');
+                  }
+                } catch (err) {
+                  failCount++;
+                  console.error(`Bulk connection update failed for ${email}:`, err);
+                }
+                
+                // Small delay to prevent overwhelming server (especially for comprehensive sync)
+                if (i < this.selectedAccounts.length - 1) {
+                  await new Promise(resolve => setTimeout(resolve, 200));
+                }
+              }
+              
+              this.showMessage(
+                `Bulk connection update completed: ${successCount} success, ${failCount} failed`,
+                failCount === 0 ? 'success' : 'warning'
+              );
+              
+              // Clear selection
+              this.selectedAccounts = [];
+              this.allSelected = false;
+              
+              // Reload accounts
+              await this.loadAccounts();
+              
+            } catch (error) {
+              console.error('Bulk connection update error:', error);
+              this.showMessage('Bulk connection update failed: ' + error.message, 'error');
+            } finally {
+              this.bulkOperationInProgress = false;
+              this.bulkProgress = { current: 0, total: 0, status: '' };
             }
           },
           
@@ -872,6 +1006,21 @@
               </div>
             </div>
             
+            <!-- Bulk Progress Overlay -->
+            <div v-if="bulkOperationInProgress" class="am-loading-overlay">
+              <div class="am-loading-content">
+                <div class="am-spinner"></div>
+                <div class="am-loading-text">Bulk Operation in Progress</div>
+                <div class="am-progress-bar">
+                  <div class="am-progress-fill" :style="{ width: (bulkProgress.current / bulkProgress.total * 100) + '%' }"></div>
+                </div>
+                <div class="am-progress-text">
+                  {{ bulkProgress.current }} / {{ bulkProgress.total }}
+                </div>
+                <div class="am-progress-status">{{ bulkProgress.status }}</div>
+              </div>
+            </div>
+            
             <!-- Header -->
             <div class="am-header">
               <div class="am-header-left">
@@ -940,20 +1089,36 @@
                 </div>
                 
                 <!-- Bulk actions dropdown -->
-                <div v-if="hasSelectedAccounts" class="am-bulk-actions">
+                <div v-if="hasSelectedAccounts && currentTab === 'students'" class="am-bulk-actions">
                   <button class="am-button secondary" @click="showBulkMenu = !showBulkMenu">
-                    ⋮ Bulk Actions
+                    ⋮ Bulk Actions ({{ selectedAccounts.length }})
                   </button>
-                  <div v-if="showBulkMenu" class="am-dropdown-menu">
-                    <button @click="executeBulkAction('reset-password')" class="am-dropdown-item">
-                      🔐 Reset Passwords
-                    </button>
-                    <button @click="executeBulkAction('resend-welcome')" class="am-dropdown-item">
-                      📧 Resend Welcome Emails
-                    </button>
-                    <button @click="executeBulkAction('delete')" class="am-dropdown-item danger">
-                      🗑️ Delete Selected
-                    </button>
+                  <div v-if="showBulkMenu" class="am-dropdown-menu am-dropdown-wide">
+                    <div class="am-dropdown-section">
+                      <div class="am-dropdown-label">📧 Email Actions</div>
+                      <button @click="executeBulkAction('reset-password')" class="am-dropdown-item">
+                        🔐 Reset Passwords
+                      </button>
+                      <button @click="executeBulkAction('resend-welcome')" class="am-dropdown-item">
+                        📧 Resend Welcome Emails
+                      </button>
+                    </div>
+                    
+                    <div class="am-dropdown-section" v-if="currentTab === 'students'">
+                      <div class="am-dropdown-label">🔗 Connection Actions</div>
+                      <button @click="showBulkConnectionMenu = true; showBulkMenu = false;" class="am-dropdown-item">
+                        ➕ Add Connections
+                      </button>
+                      <button @click="showBulkRemoveMenu = true; showBulkMenu = false;" class="am-dropdown-item">
+                        ➖ Remove Connections
+                      </button>
+                    </div>
+                    
+                    <div class="am-dropdown-section">
+                      <button @click="executeBulkAction('delete')" class="am-dropdown-item danger">
+                        🗑️ Delete Selected
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -972,14 +1137,16 @@
                 </select>
                 
                 <!-- Tutor/Student Group filter (students only) -->
-                <input
-                  v-if="currentTab === 'students'"
-                  type="text"
-                  v-model="selectedGroup"
-                  @keyup.enter="loadAccounts"
-                  placeholder="Filter by group (e.g., 12A)..."
-                  class="am-input-filter"
-                />
+                <select 
+                  v-if="currentTab === 'students'" 
+                  v-model="selectedGroup" 
+                  @change="loadAccounts"
+                  class="am-select">
+                  <option value="">All Groups</option>
+                  <option v-for="group in availableGroups" :key="group" :value="group">
+                    {{ group }}
+                  </option>
+                </select>
                 
                 <!-- Search -->
                 <div class="am-search-box">
@@ -1474,6 +1641,32 @@
           font-weight: 500;
         }
         
+        .am-progress-bar {
+          width: 300px;
+          height: 8px;
+          background: rgba(255, 255, 255, 0.3);
+          border-radius: 4px;
+          margin: 20px auto;
+          overflow: hidden;
+        }
+        
+        .am-progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #00e5db, #079baa);
+          transition: width 0.3s ease;
+        }
+        
+        .am-progress-text {
+          font-size: 16px;
+          font-weight: 600;
+          margin-bottom: 8px;
+        }
+        
+        .am-progress-status {
+          font-size: 14px;
+          opacity: 0.9;
+        }
+        
         /* ========== Header ========== */
         .am-header {
           display: flex;
@@ -1664,6 +1857,28 @@
           animation: am-fadeIn 0.2s ease-out;
         }
         
+        .am-dropdown-wide {
+          min-width: 280px;
+        }
+        
+        .am-dropdown-section {
+          border-bottom: 1px solid #e0e0e0;
+          padding: 8px 0;
+        }
+        
+        .am-dropdown-section:last-child {
+          border-bottom: none;
+        }
+        
+        .am-dropdown-label {
+          padding: 8px 16px;
+          font-size: 12px;
+          font-weight: 700;
+          color: #666;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        
         @keyframes am-fadeIn {
           from { opacity: 0; transform: translateY(-5px); }
           to { opacity: 1; transform: translateY(0); }
@@ -1786,17 +2001,17 @@
         
         .am-table thead {
           background: linear-gradient(135deg, #2a3c7a, #3a4c8a);
-          color: white;
         }
         
         .am-table th {
           padding: 16px;
           text-align: left;
-          font-weight: 600;
+          font-weight: 700;
           font-size: 14px;
           text-transform: uppercase;
-          letter-spacing: 0.5px;
-          color: white; /* FIXED: Better contrast */
+          letter-spacing: 0.8px;
+          color: #ffffff !important; /* CRITICAL: Force white text for contrast */
+          text-shadow: 0 1px 2px rgba(0,0,0,0.3); /* Add shadow for extra readability */
         }
         
         .am-th-checkbox {
