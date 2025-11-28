@@ -756,7 +756,43 @@
             // Load all unique student groups for tutor assignment
             await this.loadAllStudentGroups();
             
+            // Load current assignments (groups for tutor, years for HOY)
+            await this.loadCurrentAssignments(staff);
+            
             debugLog('Opened role editor', { staff, currentRoles: this.roleForm });
+          },
+          
+          async loadCurrentAssignments(staff) {
+            try {
+              // Load current tutor groups if they're a tutor
+              if (staff.roles?.includes('tutor')) {
+                // Query Knack Object_7 to get their current groups
+                const response = await fetch(
+                  `${this.apiUrl}/api/v3/accounts/staff/${encodeURIComponent(staff.email)}/assignments`,
+                  {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                  }
+                );
+                
+                const data = await response.json();
+                
+                if (data.success && data.assignments) {
+                  // Pre-populate selections
+                  if (data.assignments.tutorGroups) {
+                    this.tutorGroupSelections = data.assignments.tutorGroups.split(',').map(g => g.trim()).filter(Boolean);
+                  }
+                  if (data.assignments.hoyYears) {
+                    this.hoyYearSelections = data.assignments.hoyYears.split(',').map(y => y.trim()).filter(Boolean);
+                  }
+                  
+                  debugLog('Loaded current assignments', data.assignments);
+                }
+              }
+            } catch (error) {
+              console.error('Error loading current assignments:', error);
+              // Non-critical, just means they start empty
+            }
           },
           
           async loadAllStudentGroups() {
@@ -845,7 +881,7 @@
                 : this.schoolContext?.schoolId || null;
               
               const response = await fetch(
-                `${this.apiUrl}/api/v3/staff/${encodeURIComponent(this.roleEditingStaff.email)}/roles`,
+                `${this.apiUrl}/api/v3/accounts/staff/${encodeURIComponent(this.roleEditingStaff.email)}/roles`,
                 {
                   method: 'PUT',
                   headers: { 'Content-Type': 'application/json' },
@@ -2159,6 +2195,14 @@
                     Select which groups this tutor will be assigned to. They will be automatically connected to all matching students.
                   </p>
                   
+                  <!-- Current Assignments Display -->
+                  <div v-if="tutorGroupSelections.length > 0" style="margin-bottom: 20px; padding: 16px; background: #e3f2fd; border-left: 4px solid #079baa; border-radius: 6px;">
+                    <h4 style="margin: 0 0 8px 0; color: #2a3c7a; font-size: 14px; font-weight: 600;">📌 Current Assignments:</h4>
+                    <p style="margin: 0; color: #1976d2; font-weight: 500;">
+                      {{ tutorGroupSelections.join(', ') }}
+                    </p>
+                  </div>
+                  
                   <div class="am-form-group">
                     <label style="margin-bottom: 12px; display: block;">Select Groups:</label>
                     
@@ -2213,6 +2257,14 @@
                   <p class="am-modal-description">
                     Select which year groups this Head of Year will be responsible for. They will be automatically connected to all matching students.
                   </p>
+                  
+                  <!-- Current Assignments Display -->
+                  <div v-if="hoyYearSelections.length > 0" style="margin-bottom: 20px; padding: 16px; background: #e3f2fd; border-left: 4px solid #079baa; border-radius: 6px;">
+                    <h4 style="margin: 0 0 8px 0; color: #2a3c7a; font-size: 14px; font-weight: 600;">📌 Current Assignments:</h4>
+                    <p style="margin: 0; color: #1976d2; font-weight: 500;">
+                      Year {{ hoyYearSelections.join(', ') }}
+                    </p>
+                  </div>
                   
                   <div class="am-form-group">
                     <label style="margin-bottom: 12px; display: block;">Select Year Groups:</label>
