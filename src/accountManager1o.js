@@ -931,8 +931,8 @@
                 // Close modals
                 this.closeRoleModals();
                 
-                // Reload accounts after a short delay
-                setTimeout(() => this.loadAccounts(), 2000);
+                // Reload accounts after worker completes (longer delay for role sync)
+                setTimeout(() => this.loadAccounts(), 5000);
               } else {
                 throw new Error(data.message || 'Failed to submit role assignment');
               }
