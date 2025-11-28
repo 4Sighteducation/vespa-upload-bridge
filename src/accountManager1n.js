@@ -849,26 +849,38 @@
             
             debugLog('Saving roles', { staff: this.roleEditingStaff.email, selectedRoles });
             
-            // Check if tutor or HOY roles need assignment
-            const needsTutorAssignment = this.roleForm.tutor && !this.roleEditingStaff.roles?.includes('tutor');
-            const needsHoyAssignment = this.roleForm.head_of_year && !this.roleEditingStaff.roles?.includes('head_of_year');
+            // Check if NEW tutor or HOY roles need assignment (first time only)
+            const needsTutorAssignment = this.roleForm.tutor && 
+              !this.roleEditingStaff.roles?.includes('tutor') && 
+              this.tutorGroupSelections.length === 0;
+            
+            const needsHoyAssignment = this.roleForm.head_of_year && 
+              !this.roleEditingStaff.roles?.includes('head_of_year') &&
+              this.hoyYearSelections.length === 0;
             
             if (needsTutorAssignment) {
-              // Show tutor group assignment modal
-              this.tutorGroupSelections = [];
-              this.showTutorAssignmentModal = true;
-              return; // Don't close role modal yet
+              // NEW tutor - must select groups first
+              this.showMessage('⚠️ Please click "Manage Groups" to assign tutor groups', 'warning');
+              return;
             }
             
             if (needsHoyAssignment) {
-              // Show HOY year assignment modal
-              this.hoyYearSelections = [];
-              this.showHoyAssignmentModal = true;
-              return; // Don't close role modal yet
+              // NEW HOY - must select years first
+              this.showMessage('⚠️ Please click "Manage Years" to assign year groups', 'warning');
+              return;
+            }
+            
+            // Build assignments from current selections
+            const assignments = {};
+            if (this.roleForm.tutor && this.tutorGroupSelections.length > 0) {
+              assignments.tutor = this.tutorGroupSelections;
+            }
+            if (this.roleForm.head_of_year && this.hoyYearSelections.length > 0) {
+              assignments.head_of_year = this.hoyYearSelections;
             }
             
             // Submit role changes
-            await this.submitRoleChanges(selectedRoles, {});
+            await this.submitRoleChanges(selectedRoles, assignments);
           },
           
           async submitRoleChanges(selectedRoles, assignments) {
@@ -933,46 +945,26 @@
             }
           },
           
-          async confirmTutorAssignment() {
+          confirmTutorAssignment() {
             if (this.tutorGroupSelections.length === 0) {
               this.showMessage('Please select at least one group', 'warning');
               return;
             }
             
-            const selectedRoles = Object.keys(this.roleForm).filter(role => this.roleForm[role]);
-            const assignments = {
-              tutor: this.tutorGroupSelections
-            };
-            
-            // Check if HOY also needs assignment
-            const needsHoyAssignment = this.roleForm.head_of_year && !this.roleEditingStaff.roles?.includes('head_of_year');
-            
-            if (needsHoyAssignment) {
-              // Show HOY modal next
-              this.showTutorAssignmentModal = false;
-              this.hoyYearSelections = [];
-              this.showHoyAssignmentModal = true;
-              return;
-            }
-            
-            // Submit
-            await this.submitRoleChanges(selectedRoles, assignments);
+            // Just close the modal and return to role editor
+            this.showTutorAssignmentModal = false;
+            this.showMessage(`✅ Selected ${this.tutorGroupSelections.length} group(s). Click "Save & Assign" to apply.`, 'info');
           },
           
-          async confirmHoyAssignment() {
+          confirmHoyAssignment() {
             if (this.hoyYearSelections.length === 0) {
               this.showMessage('Please select at least one year group', 'warning');
               return;
             }
             
-            const selectedRoles = Object.keys(this.roleForm).filter(role => this.roleForm[role]);
-            const assignments = {
-              tutor: this.tutorGroupSelections, // May be empty if only HOY
-              head_of_year: this.hoyYearSelections
-            };
-            
-            // Submit
-            await this.submitRoleChanges(selectedRoles, assignments);
+            // Just close the modal and return to role editor
+            this.showHoyAssignmentModal = false;
+            this.showMessage(`✅ Selected ${this.hoyYearSelections.length} year group(s). Click "Save & Assign" to apply.`, 'info');
           },
           
           closeRoleModals() {
@@ -2148,16 +2140,37 @@
                     <label style="margin-bottom: 12px; display: block;">Roles:</label>
                     
                     <div style="display: flex; flex-direction: column; gap: 12px;">
-                      <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 12px; background: #f5f7fa; border-radius: 6px; transition: all 0.2s;">
-                        <input type="checkbox" v-model="roleForm.tutor" class="am-checkbox" />
-                        <span style="font-weight: 600;">👨‍🏫 Tutor</span>
-                      </label>
+                      <!-- Tutor Role -->
+                      <div style="display: flex; align-items: center; gap: 10px;">
+                        <label style="flex: 1; display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 12px; background: #f5f7fa; border-radius: 6px; transition: all 0.2s;">
+                          <input type="checkbox" v-model="roleForm.tutor" class="am-checkbox" />
+                          <span style="font-weight: 600;">👨‍🏫 Tutor</span>
+                        </label>
+                        <button 
+                          v-if="roleForm.tutor"
+                          @click="showTutorAssignmentModal = true"
+                          class="am-button secondary"
+                          style="white-space: nowrap; font-size: 13px; padding: 8px 16px;">
+                          📋 Manage Groups
+                        </button>
+                      </div>
                       
-                      <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 12px; background: #f5f7fa; border-radius: 6px;">
-                        <input type="checkbox" v-model="roleForm.head_of_year" class="am-checkbox" />
-                        <span style="font-weight: 600;">🎓 Head of Year</span>
-                      </label>
+                      <!-- HOY Role -->
+                      <div style="display: flex; align-items: center; gap: 10px;">
+                        <label style="flex: 1; display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 12px; background: #f5f7fa; border-radius: 6px;">
+                          <input type="checkbox" v-model="roleForm.head_of_year" class="am-checkbox" />
+                          <span style="font-weight: 600;">🎓 Head of Year</span>
+                        </label>
+                        <button 
+                          v-if="roleForm.head_of_year"
+                          @click="showHoyAssignmentModal = true"
+                          class="am-button secondary"
+                          style="white-space: nowrap; font-size: 13px; padding: 8px 16px;">
+                          📋 Manage Years
+                        </button>
+                      </div>
                       
+                      <!-- Other Roles -->
                       <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 12px; background: #f5f7fa; border-radius: 6px;">
                         <input type="checkbox" v-model="roleForm.subject_teacher" class="am-checkbox" />
                         <span style="font-weight: 600;">📚 Subject Teacher</span>
@@ -2167,6 +2180,17 @@
                         <input type="checkbox" v-model="roleForm.staff_admin" class="am-checkbox" />
                         <span style="font-weight: 600;">👔 Staff Admin</span>
                       </label>
+                    </div>
+                  </div>
+                  
+                  <!-- Assignment Summary -->
+                  <div v-if="tutorGroupSelections.length > 0 || hoyYearSelections.length > 0" style="margin-top: 20px; padding: 16px; background: #e8f5e9; border-left: 4px solid #4caf50; border-radius: 6px;">
+                    <h4 style="margin: 0 0 12px 0; color: #2e7d32; font-size: 14px; font-weight: 600;">📌 Assignment Summary:</h4>
+                    <div v-if="tutorGroupSelections.length > 0" style="margin-bottom: 8px;">
+                      <strong>Tutor Groups:</strong> {{ tutorGroupSelections.join(', ') }}
+                    </div>
+                    <div v-if="hoyYearSelections.length > 0">
+                      <strong>HOY Years:</strong> Year {{ hoyYearSelections.join(', ') }}
                     </div>
                   </div>
                 </div>
