@@ -94,11 +94,14 @@
             
             // Search & filters
             searchQuery: '',
+            searchDebounceTimer: null, // For auto-search on typing
             selectedYearGroup: '',
-            selectedGroup: '', // Tutor group filter
+            selectedGroup: '', // Tutor group filter (students)
+            selectedStaffGroup: '', // Group filter for staff
             selectedSchool: null,
             allSchools: [], // For super user dropdown
-            availableGroups: [], // For group dropdown (FIXED: Added comma!)
+            availableGroups: [], // For group dropdown (students)
+            availableStaffGroups: [], // For staff group dropdown
             
             // Data
             accounts: [],
@@ -286,6 +289,33 @@
             }
           },
           
+          // Update available staff groups from loaded staff accounts
+          updateAvailableStaffGroups() {
+            try {
+              // Get unique groups from current staff accounts
+              const groups = [...new Set(
+                this.accounts
+                  .map(a => a.tutorGroup || a.department)
+                  .filter(g => g && g !== '-' && g !== '')
+              )].sort();
+              
+              this.availableStaffGroups = groups;
+              debugLog('Available staff groups updated', groups);
+            } catch (error) {
+              console.error('Update staff groups error:', error);
+            }
+          },
+          
+          // Debounced search - triggers automatically after user stops typing
+          debouncedSearch() {
+            if (this.searchDebounceTimer) {
+              clearTimeout(this.searchDebounceTimer);
+            }
+            this.searchDebounceTimer = setTimeout(() => {
+              this.loadAccounts();
+            }, 300); // 300ms delay
+          },
+          
           // ========== DATA LOADING ==========
           
           // Deduplicate accounts by email (strip HTML tags)
@@ -366,6 +396,11 @@
                 params.append('group', this.selectedGroup);
               }
               
+              // Add staff group filter
+              if (this.selectedStaffGroup && this.currentTab === 'staff') {
+                params.append('group', this.selectedStaffGroup);
+              }
+              
               // CRITICAL: Add school UUID for RLS filtering
               if (schoolUuidForRls) {
                 params.append('emulatedSchoolId', schoolUuidForRls);
@@ -390,9 +425,11 @@
                 this.totalAccounts = data.total || 0;
                 debugLog('Accounts loaded', { count: this.accounts.length });
                 
-                // Update available groups for dropdown (students only)
+                // Update available groups for dropdown
                 if (this.currentTab === 'students') {
                   this.updateAvailableGroups();
+                } else if (this.currentTab === 'staff') {
+                  this.updateAvailableStaffGroups();
                 }
               } else {
                 throw new Error(data.message || 'Failed to load accounts');
@@ -1128,6 +1165,12 @@
             this.allSelected = false;
             this.editingAccount = null;
             this.currentPage = 1;
+            // Clear search and filters when switching tabs
+            this.searchQuery = '';
+            this.selectedYearGroup = '';
+            this.selectedGroup = '';
+            this.selectedStaffGroup = '';
+            debugLog('Tab switched, filters cleared', { newTab: tab });
             this.loadAccounts();
           },
           
@@ -1298,11 +1341,24 @@
                   </option>
                 </select>
                 
-                <!-- Search -->
+                <!-- Group filter (staff only) -->
+                <select 
+                  v-if="currentTab === 'staff'" 
+                  v-model="selectedStaffGroup" 
+                  @change="loadAccounts"
+                  class="am-select">
+                  <option value="">All Groups</option>
+                  <option v-for="group in availableStaffGroups" :key="group" :value="group">
+                    {{ group }}
+                  </option>
+                </select>
+                
+                <!-- Search (auto-search on typing) -->
                 <div class="am-search-box">
                   <input 
                     type="text" 
                     v-model="searchQuery"
+                    @input="debouncedSearch"
                     @keyup.enter="loadAccounts"
                     placeholder="Search by name or email..."
                     class="am-search-input"
