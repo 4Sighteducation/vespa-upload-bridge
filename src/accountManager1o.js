@@ -162,6 +162,16 @@
             hoyYearSelections: [], // Selected years for HOY
             allStudentGroups: [], // All unique groups from students
             
+            // Group management
+            showGroupManagementModal: false,
+            schoolGroups: [], // Master list from school_groups table
+            newGroupName: '',
+            newGroupType: 'tutor_group',
+            editingGroup: null,
+            renameGroupName: '',
+            groupToDelete: null,
+            deleteGroupUsage: null,
+            
             // Messages
             message: null,
             messageType: null
@@ -797,25 +807,18 @@
           
           async loadAllStudentGroups() {
             try {
-              const emulatedSchoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
+              const schoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
                 ? this.selectedSchool.supabaseUuid
                 : this.schoolContext?.schoolId || null;
               
-              if (!emulatedSchoolId) {
+              if (!schoolId) {
                 debugLog('No school context for loading student groups');
                 return;
               }
               
-              // Load all students to extract unique groups
-              const params = new URLSearchParams({
-                accountType: 'student',
-                page: 1,
-                limit: 1000, // Load many to get all groups
-                emulatedSchoolId: emulatedSchoolId
-              });
-              
+              // Load from centralized school_groups table (source of truth!)
               const response = await fetch(
-                `${this.apiUrl}/api/v3/accounts?${params}`,
+                `${this.apiUrl}/api/v3/schools/${schoolId}/groups?groupType=tutor_group`,
                 {
                   method: 'GET',
                   headers: { 'Content-Type': 'application/json' }
@@ -825,15 +828,12 @@
               const data = await response.json();
               
               if (data.success) {
-                // Extract unique groups
-                const groups = [...new Set(
-                  (data.accounts || [])
-                    .map(s => s.tutorGroup)
-                    .filter(g => g && g !== '-' && g !== '')
-                )].sort();
+                // Extract just the group names
+                this.allStudentGroups = (data.groups || [])
+                  .map(g => g.group_name)
+                  .sort();
                 
-                this.allStudentGroups = groups;
-                debugLog('Loaded all student groups', groups);
+                debugLog('Loaded all student groups from school_groups', this.allStudentGroups);
               }
               
             } catch (error) {
@@ -974,6 +974,234 @@
             this.roleEditingStaff = null;
             this.tutorGroupSelections = [];
             this.hoyYearSelections = [];
+          },
+          
+          // ========== GROUP MANAGEMENT ==========
+          
+          async openGroupManagement() {
+            this.showGroupManagementModal = true;
+            await this.loadSchoolGroups();
+          },
+          
+          async loadSchoolGroups() {
+            try {
+              const schoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
+                ? this.selectedSchool.supabaseUuid
+                : this.schoolContext?.schoolId;
+              
+              if (!schoolId) {
+                this.showMessage('No school context available', 'error');
+                return;
+              }
+              
+              const response = await fetch(
+                `${this.apiUrl}/api/v3/schools/${schoolId}/groups`,
+                {
+                  method: 'GET',
+                  headers: { 'Content-Type': 'application/json' }
+                }
+              );
+              
+              const data = await response.json();
+              
+              if (data.success) {
+                this.schoolGroups = data.groups || [];
+                debugLog('Loaded school groups', this.schoolGroups);
+              }
+              
+            } catch (error) {
+              console.error('Load groups error:', error);
+              this.showMessage('Failed to load groups', 'error');
+            }
+          },
+          
+          async addNewGroup() {
+            if (!this.newGroupName.trim()) {
+              this.showMessage('Please enter a group name', 'warning');
+              return;
+            }
+            
+            this.loading = true;
+            
+            try {
+              const schoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
+                ? this.selectedSchool.supabaseUuid
+                : this.schoolContext?.schoolId;
+              
+              const response = await fetch(
+                `${this.apiUrl}/api/v3/schools/${schoolId}/groups`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    groupName: this.newGroupName.trim(),
+                    groupType: this.newGroupType,
+                    createdBy: this.userEmail
+                  })
+                }
+              );
+              
+              const data = await response.json();
+              
+              if (data.success) {
+                this.showMessage(`✅ Group "${this.newGroupName}" added!`, 'success');
+                this.newGroupName = '';
+                await this.loadSchoolGroups();
+              } else {
+                throw new Error(data.message || 'Failed to add group');
+              }
+              
+            } catch (error) {
+              console.error('Add group error:', error);
+              this.showMessage('Failed to add group: ' + error.message, 'error');
+            } finally {
+              this.loading = false;
+            }
+          },
+          
+          startRenameGroup(group) {
+            this.editingGroup = group;
+            this.renameGroupName = group.group_name;
+          },
+          
+          cancelRenameGroup() {
+            this.editingGroup = null;
+            this.renameGroupName = '';
+          },
+          
+          async confirmRenameGroup() {
+            if (!this.renameGroupName.trim() || !this.editingGroup) return;
+            
+            this.loading = true;
+            
+            try {
+              const schoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
+                ? this.selectedSchool.supabaseUuid
+                : this.schoolContext?.schoolId;
+              
+              const response = await fetch(
+                `${this.apiUrl}/api/v3/schools/${schoolId}/groups/${this.editingGroup.id}`,
+                {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    newGroupName: this.renameGroupName.trim()
+                  })
+                }
+              );
+              
+              const data = await response.json();
+              
+              if (data.success) {
+                this.showMessage(`✅ Group renamed to "${this.renameGroupName}"`, 'success');
+                this.cancelRenameGroup();
+                await this.loadSchoolGroups();
+              } else {
+                throw new Error(data.message || 'Failed to rename group');
+              }
+              
+            } catch (error) {
+              console.error('Rename group error:', error);
+              this.showMessage('Failed to rename group: ' + error.message, 'error');
+            } finally {
+              this.loading = false;
+            }
+          },
+          
+          async checkGroupUsageAndDelete(group) {
+            this.groupToDelete = group;
+            this.loading = true;
+            
+            try {
+              const schoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
+                ? this.selectedSchool.supabaseUuid
+                : this.schoolContext?.schoolId;
+              
+              const response = await fetch(
+                `${this.apiUrl}/api/v3/schools/${schoolId}/groups/${group.id}/usage`,
+                {
+                  method: 'GET',
+                  headers: { 'Content-Type': 'application/json' }
+                }
+              );
+              
+              const data = await response.json();
+              
+              if (data.success) {
+                this.deleteGroupUsage = data;
+                
+                // If no usage, delete immediately
+                if (data.totalUsage === 0) {
+                  await this.confirmDeleteGroup();
+                } else {
+                  // Show confirmation with usage count
+                  const confirmMsg = `⚠️ Delete group "${group.group_name}"?\n\n` +
+                    `This will affect:\n` +
+                    `• ${data.studentCount} student(s)\n` +
+                    `• ${data.staffCount} staff member(s)\n\n` +
+                    `Their group will be cleared. Continue?`;
+                  
+                  if (confirm(confirmMsg)) {
+                    await this.confirmDeleteGroup();
+                  } else {
+                    this.groupToDelete = null;
+                    this.deleteGroupUsage = null;
+                  }
+                }
+              }
+              
+            } catch (error) {
+              console.error('Check group usage error:', error);
+              this.showMessage('Failed to check group usage', 'error');
+            } finally {
+              this.loading = false;
+            }
+          },
+          
+          async confirmDeleteGroup() {
+            if (!this.groupToDelete) return;
+            
+            this.loading = true;
+            
+            try {
+              const schoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
+                ? this.selectedSchool.supabaseUuid
+                : this.schoolContext?.schoolId;
+              
+              const response = await fetch(
+                `${this.apiUrl}/api/v3/schools/${schoolId}/groups/${this.groupToDelete.id}`,
+                {
+                  method: 'DELETE',
+                  headers: { 'Content-Type': 'application/json' }
+                }
+              );
+              
+              const data = await response.json();
+              
+              if (data.success) {
+                this.showMessage(`✅ Group "${this.groupToDelete.group_name}" deleted`, 'success');
+                this.groupToDelete = null;
+                this.deleteGroupUsage = null;
+                await this.loadSchoolGroups();
+              } else {
+                throw new Error(data.message || 'Failed to delete group');
+              }
+              
+            } catch (error) {
+              console.error('Delete group error:', error);
+              this.showMessage('Failed to delete group: ' + error.message, 'error');
+            } finally {
+              this.loading = false;
+            }
+          },
+          
+          closeGroupManagement() {
+            this.showGroupManagementModal = false;
+            this.newGroupName = '';
+            this.editingGroup = null;
+            this.renameGroupName = '';
+            this.groupToDelete = null;
+            this.deleteGroupUsage = null;
           },
           
           // ========== EMAIL ACTIONS ==========
@@ -1527,6 +1755,15 @@
                     {{ school.name }}
                   </option>
                 </select>
+                
+                <!-- Group Management Button -->
+                <button 
+                  v-if="!hasSelectedAccounts && (selectedSchool || schoolContext)"
+                  @click="openGroupManagement" 
+                  class="am-button secondary"
+                  title="Manage school groups">
+                  ⚙️ Manage Groups
+                </button>
                 
                 <!-- Bulk selection info -->
                 <div v-if="hasSelectedAccounts" class="am-selection-info">
@@ -2323,6 +2560,192 @@
                     :disabled="hoyYearSelections.length === 0"
                     class="am-button primary">
                     Assign to {{ hoyYearSelections.length }} Year Group(s)
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Group Management Modal -->
+            <div v-if="showGroupManagementModal" class="am-modal-overlay" @click.self="closeGroupManagement">
+              <div class="am-modal">
+                <div class="am-modal-header">
+                  <h3>⚙️ Manage School Groups</h3>
+                  <button @click="closeGroupManagement" class="am-modal-close">✖</button>
+                </div>
+                
+                <div class="am-modal-body">
+                  <!-- Add New Group -->
+                  <div style="background: #f5f7fa; padding: 20px; border-radius: 8px; margin-bottom: 24px;">
+                    <h4 style="margin: 0 0 16px 0; color: #2a3c7a;">➕ Add New Group</h4>
+                    <div style="display: flex; gap: 12px; align-items: flex-end;">
+                      <div style="flex: 1;">
+                        <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: 13px;">Group Name:</label>
+                        <input 
+                          v-model="newGroupName"
+                          @keyup.enter="addNewGroup"
+                          placeholder="e.g., 12A, L.Durant, Intervention 1"
+                          class="am-input-inline"
+                          style="width: 100%; padding: 10px;" />
+                      </div>
+                      <div style="width: 180px;">
+                        <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: 13px;">Type:</label>
+                        <select v-model="newGroupType" class="am-select-inline" style="width: 100%; padding: 10px;">
+                          <option value="tutor_group">Tutor Group</option>
+                          <option value="year_group">Year Group</option>
+                          <option value="department">Department</option>
+                        </select>
+                      </div>
+                      <button @click="addNewGroup" class="am-button primary" style="white-space: nowrap;">
+                        Add Group
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <!-- Tutor Groups -->
+                  <div class="am-connection-section">
+                    <h4>👨‍🏫 Tutor Groups ({{ schoolGroups.filter(g => g.group_type === 'tutor_group').length }})</h4>
+                    <div class="am-connection-list" style="max-height: 200px; overflow-y: auto;">
+                      <div 
+                        v-for="group in schoolGroups.filter(g => g.group_type === 'tutor_group')"
+                        :key="group.id"
+                        class="am-connection-item">
+                        <!-- Rename Mode -->
+                        <div v-if="editingGroup && editingGroup.id === group.id" style="display: flex; gap: 8px; flex: 1; align-items: center;">
+                          <input 
+                            v-model="renameGroupName"
+                            @keyup.enter="confirmRenameGroup"
+                            class="am-input-inline"
+                            style="flex: 1; padding: 6px;" />
+                          <button @click="confirmRenameGroup" class="am-button-icon-small" style="background: #28a745; color: white;">
+                            ✓
+                          </button>
+                          <button @click="cancelRenameGroup" class="am-button-icon-small danger">
+                            ✖
+                          </button>
+                        </div>
+                        <!-- View Mode -->
+                        <div v-else style="display: flex; gap: 8px; flex: 1; align-items: center; justify-content: space-between;">
+                          <span style="font-weight: 500;">{{ group.group_name }}</span>
+                          <div style="display: flex; gap: 4px;">
+                            <button 
+                              @click="startRenameGroup(group)"
+                              class="am-button-icon-small"
+                              title="Rename group">
+                              ✏️
+                            </button>
+                            <button 
+                              @click="checkGroupUsageAndDelete(group)"
+                              class="am-button-icon-small danger"
+                              title="Delete group">
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div v-if="schoolGroups.filter(g => g.group_type === 'tutor_group').length === 0" class="am-empty">
+                        No tutor groups. Add one above!
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Year Groups -->
+                  <div class="am-connection-section">
+                    <h4>🎓 Year Groups ({{ schoolGroups.filter(g => g.group_type === 'year_group').length }})</h4>
+                    <div class="am-connection-list" style="max-height: 200px; overflow-y: auto;">
+                      <div 
+                        v-for="group in schoolGroups.filter(g => g.group_type === 'year_group')"
+                        :key="group.id"
+                        class="am-connection-item">
+                        <!-- Rename Mode -->
+                        <div v-if="editingGroup && editingGroup.id === group.id" style="display: flex; gap: 8px; flex: 1; align-items: center;">
+                          <input 
+                            v-model="renameGroupName"
+                            @keyup.enter="confirmRenameGroup"
+                            class="am-input-inline"
+                            style="flex: 1; padding: 6px;" />
+                          <button @click="confirmRenameGroup" class="am-button-icon-small" style="background: #28a745; color: white;">
+                            ✓
+                          </button>
+                          <button @click="cancelRenameGroup" class="am-button-icon-small danger">
+                            ✖
+                          </button>
+                        </div>
+                        <!-- View Mode -->
+                        <div v-else style="display: flex; gap: 8px; flex: 1; align-items: center; justify-content: space-between;">
+                          <span style="font-weight: 500;">Year {{ group.group_name }}</span>
+                          <div style="display: flex; gap: 4px;">
+                            <button 
+                              @click="startRenameGroup(group)"
+                              class="am-button-icon-small"
+                              title="Rename year group">
+                              ✏️
+                            </button>
+                            <button 
+                              @click="checkGroupUsageAndDelete(group)"
+                              class="am-button-icon-small danger"
+                              title="Delete year group">
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div v-if="schoolGroups.filter(g => g.group_type === 'year_group').length === 0" class="am-empty">
+                        No year groups. Add one above!
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Departments -->
+                  <div class="am-connection-section">
+                    <h4>📚 Departments ({{ schoolGroups.filter(g => g.group_type === 'department').length }})</h4>
+                    <div class="am-connection-list" style="max-height: 200px; overflow-y: auto;">
+                      <div 
+                        v-for="group in schoolGroups.filter(g => g.group_type === 'department')"
+                        :key="group.id"
+                        class="am-connection-item">
+                        <!-- Rename Mode -->
+                        <div v-if="editingGroup && editingGroup.id === group.id" style="display: flex; gap: 8px; flex: 1; align-items: center;">
+                          <input 
+                            v-model="renameGroupName"
+                            @keyup.enter="confirmRenameGroup"
+                            class="am-input-inline"
+                            style="flex: 1; padding: 6px;" />
+                          <button @click="confirmRenameGroup" class="am-button-icon-small" style="background: #28a745; color: white;">
+                            ✓
+                          </button>
+                          <button @click="cancelRenameGroup" class="am-button-icon-small danger">
+                            ✖
+                          </button>
+                        </div>
+                        <!-- View Mode -->
+                        <div v-else style="display: flex; gap: 8px; flex: 1; align-items: center; justify-content: space-between;">
+                          <span style="font-weight: 500;">{{ group.group_name }}</span>
+                          <div style="display: flex; gap: 4px;">
+                            <button 
+                              @click="startRenameGroup(group)"
+                              class="am-button-icon-small"
+                              title="Rename department">
+                              ✏️
+                            </button>
+                            <button 
+                              @click="checkGroupUsageAndDelete(group)"
+                              class="am-button-icon-small danger"
+                              title="Delete department">
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div v-if="schoolGroups.filter(g => g.group_type === 'department').length === 0" class="am-empty">
+                        No departments. Add one above!
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="am-modal-footer">
+                  <button @click="closeGroupManagement" class="am-button primary">
+                    Done
                   </button>
                 </div>
               </div>
