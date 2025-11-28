@@ -689,23 +689,33 @@
           // ========== EMAIL ACTIONS ==========
           
           async resetPassword(account) {
-            if (!confirm(`Send password reset email to ${account.email}?`)) return;
+            if (!confirm(`Send password reset email to ${account.email}?\n\nA new temporary password will be generated and sent.`)) return;
             
             this.loading = true;
+            this.loadingText = 'Sending password reset...';
             
             try {
+              // Get emulated school ID if applicable
+              const emulatedSchoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
+                ? this.selectedSchool.supabaseUuid
+                : this.schoolContext?.schoolId || null;
+              
               const response = await fetch(
                 `${this.apiUrl}/api/v3/accounts/${encodeURIComponent(account.email)}/reset-password`,
                 {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' }
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    accountType: this.currentTab === 'students' ? 'student' : 'staff',
+                    emulatedSchoolId: emulatedSchoolId
+                  })
                 }
               );
               
               const data = await response.json();
               
               if (data.success) {
-                this.showMessage('Password reset email sent!', 'success');
+                this.showMessage('✅ Password reset email sent with new temporary password!', 'success');
               } else {
                 throw new Error(data.message || 'Failed to send password reset');
               }
@@ -719,11 +729,17 @@
           },
           
           async resendWelcome(account) {
-            if (!confirm(`Resend welcome email to ${account.email}?`)) return;
+            if (!confirm(`Resend welcome email to ${account.email}?\n\nA new temporary password will be generated and sent.`)) return;
             
             this.loading = true;
+            this.loadingText = 'Sending welcome email...';
             
             try {
+              // Get emulated school ID if applicable
+              const emulatedSchoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
+                ? this.selectedSchool.supabaseUuid
+                : this.schoolContext?.schoolId || null;
+              
               const response = await fetch(
                 `${this.apiUrl}/api/v3/accounts/${encodeURIComponent(account.email)}/resend-welcome`,
                 {
@@ -733,7 +749,8 @@
                     accountType: this.currentTab === 'students' ? 'student' : 'staff',
                     firstName: account.firstName,
                     lastName: account.lastName,
-                    schoolName: account.schoolName
+                    schoolName: account.schoolName,
+                    emulatedSchoolId: emulatedSchoolId
                   })
                 }
               );
@@ -741,7 +758,7 @@
               const data = await response.json();
               
               if (data.success) {
-                this.showMessage('Welcome email sent!', 'success');
+                this.showMessage('✅ Welcome email sent with new temporary password!', 'success');
               } else {
                 throw new Error(data.message || 'Failed to send welcome email');
               }
