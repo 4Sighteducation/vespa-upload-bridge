@@ -1632,7 +1632,7 @@
                   userEmail: this.userEmail
                 },
                 emulatedSchool: {
-                  customerId: this.selectedSchool.knackId,
+                  customerId: this.selectedSchool.id,
                   customerName: this.selectedSchool.name,
                   admins: [] // Could fetch from API if needed
                 }
@@ -1661,8 +1661,8 @@
           async loadManualAddOptions() {
             try {
               // Try multiple possible property names for Knack customer ID
-              const customerId = this.isSuperUser && this.selectedSchool?.knackId
-                ? this.selectedSchool.knackId
+              const customerId = this.isSuperUser && this.selectedSchool?.id
+                ? this.selectedSchool.id
                 : (this.schoolContext?.customerId || this.schoolContext?.knackCustomerId || this.schoolContext?.knackId);
               
               if (!customerId) {
@@ -1842,8 +1842,8 @@
           async generateStudentQR() {
             try {
               // Get customer ID - try multiple property names
-              const customerId = this.isSuperUser && this.selectedSchool?.knackId
-                ? this.selectedSchool.knackId
+              const customerId = this.isSuperUser && this.selectedSchool?.id
+                ? this.selectedSchool.id
                 : (this.schoolContext?.customerId || this.schoolContext?.knackCustomerId || this.schoolContext?.knackId);
               
               if (!customerId) {
@@ -1895,8 +1895,8 @@
           async generateStaffQR() {
             try {
               // Get customer ID - try multiple property names
-              const customerId = this.isSuperUser && this.selectedSchool?.knackId
-                ? this.selectedSchool.knackId
+              const customerId = this.isSuperUser && this.selectedSchool?.id
+                ? this.selectedSchool.id
                 : (this.schoolContext?.customerId || this.schoolContext?.knackCustomerId || this.schoolContext?.knackId);
               
               if (!customerId) {
