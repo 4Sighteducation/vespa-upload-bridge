@@ -4011,14 +4011,66 @@
                   </div>
                   
                   <!-- Validation Results -->
-                  <div v-if="csvValidationResults" style="margin: 20px 0; padding: 15px; border-radius: 6px;"
-                    :style="{ background: (csvValidationResults.success || csvValidationResults.isValid) ? '#d4edda' : '#f8d7da' }">
-                    <div style="font-weight: 600; margin-bottom: 8px;">
-                      {{ (csvValidationResults.success || csvValidationResults.isValid) ? '✅ Validation Passed' : '❌ Validation Failed' }}
+                  <div v-if="csvValidationResults" style="margin: 20px 0;">
+                    <!-- Success -->
+                    <div v-if="csvValidationResults.success || csvValidationResults.isValid" 
+                      style="padding: 15px; border-radius: 8px; background: #d4edda; border-left: 4px solid #28a745;">
+                      <div style="font-weight: 600; margin-bottom: 8px; color: #155724; font-size: 16px;">
+                        ✅ Validation Passed
+                      </div>
+                      <div style="color: #155724;">
+                        <strong>Total Rows:</strong> {{ csvData?.length || 0 }}
+                      </div>
+                      <div style="margin-top: 8px; padding: 10px; background: rgba(255,255,255,0.7); border-radius: 4px; color: #155724;">
+                        🎉 Your CSV is ready to upload! Click "Upload & Process" below.
+                      </div>
                     </div>
-                    <div>Total Rows: {{ csvData?.length || 0 }}</div>
-                    <div v-if="csvValidationResults.errors && csvValidationResults.errors.length > 0">
-                      Errors: {{ csvValidationResults.errors.length }}
+                    
+                    <!-- Failure -->
+                    <div v-else style="padding: 15px; border-radius: 8px; background: #f8d7da; border-left: 4px solid #dc3545;">
+                      <div style="font-weight: 600; margin-bottom: 12px; color: #721c24; font-size: 16px;">
+                        ❌ Validation Failed
+                      </div>
+                      <div style="color: #721c24; margin-bottom: 12px;">
+                        <strong>Total Rows:</strong> {{ csvData?.length || 0 }}<br>
+                        <strong>Errors Found:</strong> {{ csvValidationResults.errors?.length || 0 }}
+                      </div>
+                      
+                      <!-- Detailed Error List -->
+                      <div v-if="csvValidationResults.errors && csvValidationResults.errors.length > 0" 
+                        style="max-height: 300px; overflow-y: auto; background: white; padding: 12px; border-radius: 6px; margin-top: 12px;">
+                        <div style="font-weight: 600; margin-bottom: 12px; color: #721c24; border-bottom: 2px solid #dc3545; padding-bottom: 8px;">
+                          📋 Issues Found:
+                        </div>
+                        <div 
+                          v-for="(error, index) in csvValidationResults.errors" 
+                          :key="index"
+                          style="padding: 10px; margin-bottom: 8px; background: #fff3cd; border-left: 3px solid #ffc107; border-radius: 4px;">
+                          <div style="font-weight: 600; color: #856404; margin-bottom: 4px;">
+                            {{ error.row ? 'Row ' + error.row : 'General Error' }}
+                            <span v-if="error.email" style="font-weight: normal;"> - {{ error.email }}</span>
+                          </div>
+                          <div style="color: #721c24; font-size: 14px; line-height: 1.5;">
+                            {{ error.message || error.error || error }}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <!-- Help Text -->
+                      <div style="margin-top: 12px; padding: 12px; background: rgba(255,255,255,0.7); border-radius: 4px; color: #721c24; font-size: 13px;">
+                        <strong>💡 How to fix:</strong><br>
+                        <span v-if="csvUploadType === 'staff'">
+                          • Ensure all rows have: Title, First Name, Last Name, Email Address, Staff Type<br>
+                          • Email addresses must be valid (contain @)<br>
+                          • Staff Type must be: admin, tut, hoy, hod, sub, or gen
+                        </span>
+                        <span v-else>
+                          • Ensure all rows have: Firstname, Lastname, Student Email, Year Gp, Level<br>
+                          • Email addresses must be valid (contain @)<br>
+                          • Year Gp must be 7-13<br>
+                          • Level must be "Level 2" or "Level 3"
+                        </span>
+                      </div>
                     </div>
                   </div>
                   

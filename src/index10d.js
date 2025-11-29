@@ -3630,99 +3630,135 @@ A123459,sdavis@school.edu,6.5,Biology,Chemistry,Psychology,,`;
       // Log the raw error data for debugging
       debugLog("Raw validation errors:", errors, 'warn');
       
+      // Add summary box at top
+      const summaryDiv = document.createElement('div');
+      summaryDiv.style.cssText = 'margin-bottom: 20px; padding: 16px; background: linear-gradient(135deg, #fff3cd 0%, #ffe6a0 100%); border-left: 4px solid #ffc107; border-radius: 8px;';
+      summaryDiv.innerHTML = `
+        <div style="display: flex; align-items: flex-start; gap: 12px;">
+          <div style="font-size: 28px; line-height: 1;">⚠️</div>
+          <div style="flex: 1;">
+            <div style="font-weight: 700; color: #856404; font-size: 16px; margin-bottom: 8px;">
+              Found ${errors.length} Issue${errors.length > 1 ? 's' : ''} in Your CSV
+            </div>
+            <div style="color: #856404; font-size: 14px; line-height: 1.6;">
+              ${uploadType === 'staff' 
+                ? '<strong>Staff CSV Requirements:</strong><br>✓ Email Address (must contain @)<br>✓ First Name and Last Name<br>✓ Staff Type (admin, tut, hoy, hod, sub, or gen)'
+                : '<strong>Student CSV Requirements:</strong><br>✓ Student Email (must contain @)<br>✓ Firstname and Lastname<br>✓ Year Gp (7-13)<br>✓ Level (Level 2 or Level 3)'
+              }
+            </div>
+          </div>
+        </div>
+      `;
+      errorsContainer.appendChild(summaryDiv);
+      
+      // Display individual errors
       errors.forEach((error, index) => {
         const errorDiv = document.createElement('div');
         errorDiv.className = 'vespa-error-item';
+        errorDiv.style.cssText = 'margin-bottom: 12px; padding: 14px; background: white; border-left: 3px solid #dc3545; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);';
         
-        // Try to extract data from various error formats
-        // Sometimes we get raw strings, sometimes objects
-        let errorType = 'Validation Error';
+        // Extract error details from various formats
         let errorRow = '';
         let errorField = '';
         let errorMessage = '';
-        let errorData = '';
+        let errorEmail = '';
         
         if (typeof error === 'string') {
-          // Handle string errors - improve clarity for common issues
           errorMessage = error;
-          
-          // Parse row number from error string if present
           const rowMatch = error.match(/Row (\d+):/);
-          if (rowMatch) {
-            errorRow = rowMatch[1];
-          }
-          
-          // Enhance error message clarity
-          if (error.includes('semicolon') || error.includes(';')) {
-            errorType = 'Email Separator Error';
-            // Highlight the issue more clearly
-            errorMessage = errorMessage
-              .replace(/;/g, '<span style="color: red; font-weight: bold;">;</span>')
-              .replace('semicolons', '<span style="color: red; font-weight: bold;">semicolons</span>')
-              .replace('commas', '<span style="color: green; font-weight: bold;">commas</span>');
-          }
+          if (rowMatch) errorRow = rowMatch[1];
         } else {
-          // Handle object errors with different possible structures
           errorRow = error.row || '';
-          errorType = error.type || 'Validation Error';
-          errorField = error.field || '';
-          errorMessage = error.message || error.error || 'Unknown error';
-          
-          // Enhance error message clarity for semicolon issues
-          if (errorMessage.includes('semicolon') || errorMessage.includes(';')) {
-            errorType = 'Email Separator Error';
-            errorMessage = errorMessage
-              .replace(/;/g, '<span style="color: red; font-weight: bold;">;</span>')
-              .replace('semicolons', '<span style="color: red; font-weight: bold;">semicolons</span>')
-              .replace('commas', '<span style="color: green; font-weight: bold;">commas</span>');
-          }
-          
-          // If we have data that failed validation, show it
-          if (error.data) {
-            errorData = typeof error.data === 'object' ? 
-              JSON.stringify(error.data) : error.data;
-          }
+          errorField = error.field || error.column || '';
+          errorMessage = error.message || error.error || 'Unknown validation issue';
+          errorEmail = error.email || error.data?.['Email Address'] || error.data?.['Student Email'] || '';
         }
         
-        // Special handling for 'unknown error' to give more context
-        if (errorMessage === 'Unknown error' || !errorMessage) {
-          errorMessage = `Unspecified validation error. This might be related to:
-            <ul>
-              <li>Staff Type format - must use commas between multiple types (e.g., "tut,sub" not "tut sub")</li>
-              <li>Email format - must be a valid email address</li>
-              <li>Missing required fields - First Name, Last Name, Email Address, Staff Type are required</li>
-              <li>For KS5 Subjects: Unrecognized subject name or incorrect prefix.</li>
-            </ul>
-            Row ${errorRow || index + 1} in the preview table may contain the issue.`;
+        // Make error messages more user-friendly
+        let friendlyMessage = errorMessage;
+        let helpText = '';
+        
+        // Missing email
+        if (errorMessage.includes('Email') && (errorMessage.includes('required') || errorMessage.includes('missing'))) {
+          friendlyMessage = '📧 Email address is missing';
+          helpText = 'Every record must have a valid email address containing the @ symbol.';
+        }
+        // Invalid email format
+        else if (errorMessage.includes('valid email') || errorMessage.includes('must contain @')) {
+          friendlyMessage = '📧 Email address is invalid';
+          helpText = 'Email must be in format: name@domain.com';
+        }
+        // Missing required field
+        else if (errorMessage.includes('required') || errorMessage.includes('missing')) {
+          friendlyMessage = `📝 Required field "${errorField || 'unknown'}" is missing`;
+          helpText = 'Check that all required columns have values for this row.';
+        }
+        // Staff type issues
+        else if (errorMessage.includes('Staff Type')) {
+          friendlyMessage = '👔 Staff Type issue';
+          helpText = 'Staff Type must be one of: admin, tut, hoy, hod, sub, gen (comma-separated for multiple).';
+        }
+        // Year group issues
+        else if (errorMessage.includes('Year') && errorMessage.includes('7-13')) {
+          friendlyMessage = '📚 Year Group must be 7-13';
+          helpText = 'Year Gp column must contain a number between 7 and 13.';
+        }
+        // Level issues
+        else if (errorMessage.includes('Level')) {
+          friendlyMessage = '📊 Level must be "Level 2" or "Level 3"';
+          helpText = 'The Level column must contain exactly "Level 2" or "Level 3".';
+        }
+        // Semicolon separator error
+        else if (errorMessage.includes('semicolon')) {
+          friendlyMessage = '⚠️ Use commas (,) not semicolons (;) to separate multiple items';
+          helpText = 'For Staff Type, Tutors, Subject Teachers: use commas. Example: "tut,admin" or "john@school.com,jane@school.com"';
         }
         
         let errorContent = `
-          <div class="vespa-error-title">Row ${errorRow || index + 1}: ${errorType}</div>
-          <div class="vespa-error-details">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+            <div style="font-weight: 700; color: #dc3545; font-size: 15px;">
+              Row ${errorRow || index + 1}${errorEmail ? ' - ' + errorEmail : ''}
+            </div>
+            ${errorField ? '<div style="background: #ffc107; color: #000; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;">Field: ' + errorField + '</div>' : ''}
+          </div>
+          <div style="color: #721c24; font-size: 14px; margin-bottom: 8px; line-height: 1.5;">
+            ${friendlyMessage}
+          </div>
+          ${helpText ? '<div style="color: #666; font-size: 13px; font-style: italic; padding: 8px; background: #f8f9fa; border-radius: 4px; margin-top: 8px;">💡 ' + helpText + '</div>' : ''}
         `;
-        
-        if (errorField) {
-          errorContent += `<div class="vespa-error-field">Field: ${errorField}</div>`;
-        }
-        // If error.column is present (from new subject validation), use it instead of/in addition to errorField
-        // However, the new subject errors already populate 'field' with the column name.
-
-        errorContent += `<div class="vespa-error-message">${errorMessage}</div>`;
-        
-        if (errorData) {
-          errorContent += `<div class="vespa-error-data">Data: ${errorData}</div>`;
-        }
-        
-        errorContent += '</div>';
         
         errorDiv.innerHTML = errorContent;
         errorsContainer.appendChild(errorDiv);
       });
+      
+      // Add bottom help section
+      const helpDiv = document.createElement('div');
+      helpDiv.style.cssText = 'margin-top: 20px; padding: 16px; background: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 8px;';
+      helpDiv.innerHTML = `
+        <div style="font-weight: 600; color: #1976d2; margin-bottom: 8px;">🔧 How to Fix These Errors:</div>
+        <ol style="margin: 8px 0 0 20px; padding: 0; color: #1976d2; font-size: 14px; line-height: 1.8;">
+          <li>Open your CSV file in Excel or Google Sheets</li>
+          <li>Fix the issues listed above for each row</li>
+          <li>Save the file (make sure it's saved as CSV format)</li>
+          <li>Upload the corrected file here</li>
+        </ol>
+      `;
+      errorsContainer.appendChild(helpDiv);
+      
     } else {
       // No errors
       const messageDiv = document.createElement('div');
       messageDiv.className = 'vespa-success-message';
-      messageDiv.innerHTML = `<span style="color: #2e7d32">✓ No validation errors found</span>`;
+      messageDiv.style.cssText = 'padding: 20px; background: #d4edda; border-left: 4px solid #28a745; border-radius: 8px; color: #155724; font-size: 16px;';
+      messageDiv.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="font-size: 32px;">✅</div>
+          <div>
+            <div style="font-weight: 700; margin-bottom: 4px;">Validation Passed!</div>
+            <div style="font-size: 14px;">Your CSV is ready to process. Click "Process Data" to continue.</div>
+          </div>
+        </div>
+      `;
       errorsContainer.appendChild(messageDiv);
     }
   }
