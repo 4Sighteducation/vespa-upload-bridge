@@ -22,7 +22,7 @@
 (function() {
   'use strict';
   
-  const VERSION = '2b';
+  const VERSION = '2a';
   const DEBUG_MODE = true;
   
   function debugLog(message, data) {
@@ -2178,19 +2178,18 @@
               const warningMessage = this.currentTab === 'students'
                 ? `⚠️ PERMANENTLY DELETE ${count} STUDENTS?\n\n` +
                   `This will PERMANENTLY delete:\n` +
-                  `• ${count} student accounts (login access)\n` +
-                  `• ALL VESPA results (Object_10/vespa_results)\n` +
-                  `• ALL questionnaires (Object_29/vespa_questionnaires)\n` +
-                  `• Student master records (Object_6/vespa_students)\n` +
-                  `• Supabase and Knack records\n\n` +
+                  `• ${count} student account(s) (login access)\n` +
+                  `• ALL VESPA results\n` +
+                  `• ALL questionnaires\n` +
+                  `• Student master records\n` +
+                  `• All connections to staff\n\n` +
                   `⚠️ THIS CANNOT BE UNDONE ⚠️\n\n` +
                   `Type "DELETE ${count} STUDENTS" to confirm:`
                 : `⚠️ PERMANENTLY DELETE ${count} STAFF MEMBERS?\n\n` +
                   `This will PERMANENTLY delete:\n` +
-                  `• ${count} staff accounts (login access)\n` +
+                  `• ${count} staff account(s) (login access)\n` +
                   `• All role assignments\n` +
-                  `• All student connections\n` +
-                  `• Supabase and Knack records\n\n` +
+                  `• All connections to students\n\n` +
                   `⚠️ THIS CANNOT BE UNDONE ⚠️\n\n` +
                   `Type "DELETE ${count} STAFF" to confirm:`;
               
@@ -2666,10 +2665,10 @@
                 `Name: ${account.firstName} ${account.lastName}\n\n` +
                 `This will PERMANENTLY delete:\n` +
                 `✓ Student account (login access)\n` +
-                `✓ ALL VESPA results (Object_10/vespa_results)\n` +
-                `✓ ALL questionnaires (Object_29/vespa_questionnaires)\n` +
-                `✓ Student master record (Object_6/vespa_students)\n` +
-                `✓ Supabase and Knack records\n\n` +
+                `✓ ALL VESPA results\n` +
+                `✓ ALL questionnaires\n` +
+                `✓ Student master records\n` +
+                `✓ All connections to staff\n\n` +
                 `⚠️ THIS CANNOT BE UNDONE ⚠️\n\n` +
                 `Type "DELETE" to confirm:`
               : `⚠️ PERMANENTLY DELETE STAFF MEMBER?\n\n` +
@@ -2678,8 +2677,7 @@
                 `This will PERMANENTLY delete:\n` +
                 `✓ Staff account (login access)\n` +
                 `✓ All role assignments\n` +
-                `✓ Connections to students\n` +
-                `✓ Supabase and Knack records\n\n` +
+                `✓ All connections to students\n\n` +
                 `⚠️ THIS CANNOT BE UNDONE ⚠️\n\n` +
                 `Type "DELETE" to confirm:`;
             
@@ -3978,6 +3976,22 @@
                 <div class="am-modal-body">
                   <div class="am-modal-description">
                     Upload multiple {{ csvUploadType }} accounts via CSV file. The same validation and processing as the main upload system.
+                  </div>
+                  
+                  <!-- Staff-First Advisory (Students Only) -->
+                  <div v-if="csvUploadType === 'students'" style="margin: 20px 0; padding: 16px; background: linear-gradient(135deg, #fff9e6 0%, #fff3cd 100%); border-left: 4px solid #ffc107; border-radius: 8px;">
+                    <div style="display: flex; align-items: flex-start; gap: 12px;">
+                      <div style="font-size: 28px; line-height: 1;">💡</div>
+                      <div style="flex: 1;">
+                        <div style="font-weight: 700; color: #856404; font-size: 15px; margin-bottom: 8px;">📋 Best Practice: Upload Staff First</div>
+                        <div style="color: #856404; font-size: 14px; line-height: 1.6;">
+                          <strong>Recommended workflow:</strong><br>
+                          1️⃣ Upload staff accounts first<br>
+                          2️⃣ Then upload students (connections will work properly)<br><br>
+                          <em style="font-size: 13px;">ℹ️ Students can be uploaded before staff, but you'll need to connect them later using tutor group assignments or the Account Manager.</em>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   
                   <!-- File Selection -->

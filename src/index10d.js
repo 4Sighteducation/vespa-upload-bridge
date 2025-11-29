@@ -916,9 +916,9 @@ function initializeUploadInterface(container) {
         <div class="vespa-header-actions">
           <button id="select-percentile-button" class="vespa-button secondary small-button">Target: ${selectedPercentileName}</button>
           <button id="universal-password-button" class="vespa-button secondary small-button" style="display: none;">Set Universal Password</button>
+          <button id="self-registration-button" class="vespa-button secondary small-button">📱 Generate Student QR Code</button>
+          <button id="staff-registration-button" class="vespa-button secondary small-button">👥 Generate Staff QR Code</button>
           ${isSuperUser ? `
-            <button id="self-registration-button" class="vespa-button secondary small-button">📱 Generate Student QR Code</button>
-            <button id="staff-registration-button" class="vespa-button secondary small-button">👥 Generate Staff QR Code</button>
             <button id="header-emulation-button" class="vespa-button secondary small-button">🏢 Emulation Settings</button>
           ` : ''}
         </div>
@@ -979,85 +979,74 @@ function initializeUploadInterface(container) {
   document.getElementById('select-percentile-button').addEventListener('click', showPercentileModal);
   document.getElementById('universal-password-button').addEventListener('click', showUniversalPasswordModal);
   
-  // Add super user only buttons
-  if (isSuperUser) {
-    debugLog("Super user detected, looking for self-registration button", null, 'info');
+  // Add event listeners for QR generation buttons (available to all users now)
+  debugLog("Setting up QR generation buttons", null, 'info');
+  
+  const selfRegBtn = document.getElementById('self-registration-button');
+  if (selfRegBtn) {
+    debugLog("Self-registration button found in DOM");
     
-    // Debug: Check if buttons exist in DOM
-    const allButtons = document.querySelectorAll('.vespa-button');
-    debugLog(`Found ${allButtons.length} buttons with class 'vespa-button'`, null, 'info');
-    
-    const selfRegBtn = document.getElementById('self-registration-button');
-    if (selfRegBtn) {
-      debugLog("Self-registration button found in DOM", {
-        id: selfRegBtn.id,
-        className: selfRegBtn.className,
-        textContent: selfRegBtn.textContent,
-        disabled: selfRegBtn.disabled,
-        style: selfRegBtn.style.cssText
-      }, 'info');
+    selfRegBtn.addEventListener('click', function(e) {
+      debugLog("Self-registration button clicked", null, 'info');
+      e.preventDefault();
+      e.stopPropagation();
       
-      // Add a visual indicator that the button is ready
-      selfRegBtn.style.border = '2px solid #007bff';
-      
-      debugLog("Attaching click handler to self-registration button", null, 'info');
-      selfRegBtn.addEventListener('click', function(e) {
-        debugLog("Self-registration button clicked", null, 'info');
-        e.preventDefault();
-        e.stopPropagation();
-        
-        try {
-          if (typeof showSelfRegistrationModal === 'function') {
-            showSelfRegistrationModal();
-          } else if (typeof window.showSelfRegistrationModal === 'function') {
-            window.showSelfRegistrationModal();
-          } else {
-            debugLog("showSelfRegistrationModal function not found!", null, 'error');
-            showError('Unable to open registration modal. Please refresh the page and try again.');
-          }
-        } catch (error) {
-          debugLog("Error calling showSelfRegistrationModal:", error, 'error');
-          showError('An error occurred. Please try again.');
+      try {
+        if (typeof showSelfRegistrationModal === 'function') {
+          showSelfRegistrationModal();
+        } else if (typeof window.showSelfRegistrationModal === 'function') {
+          window.showSelfRegistrationModal();
+        } else {
+          debugLog("showSelfRegistrationModal function not found!", null, 'error');
+          showError('Unable to open registration modal. Please refresh the page and try again.');
         }
-      });
-    } else {
-      debugLog("Self-registration button not found in DOM", null, 'error');
-    }
-    
-    // Add event listener for staff registration button
-    const staffRegBtn = document.getElementById('staff-registration-button');
-    if (staffRegBtn) {
-      debugLog("Adding event listener to staff registration button", null, 'info');
-      staffRegBtn.addEventListener('click', function(e) {
-        debugLog("Staff registration button clicked", null, 'info');
-        e.preventDefault();
-        e.stopPropagation();
-        
-        // Check if we're emulating a school
+      } catch (error) {
+        debugLog("Error calling showSelfRegistrationModal:", error, 'error');
+        showError('An error occurred. Please try again.');
+      }
+    });
+  } else {
+    debugLog("Self-registration button not found in DOM", null, 'error');
+  }
+  
+  // Add event listener for staff registration button (all users)
+  const staffRegBtn = document.getElementById('staff-registration-button');
+  if (staffRegBtn) {
+    debugLog("Adding event listener to staff registration button", null, 'info');
+    staffRegBtn.addEventListener('click', function(e) {
+      debugLog("Staff registration button clicked", null, 'info');
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // For super users, require emulation. For staff admins, use their own context
+      if (isSuperUser) {
         const emulationState = getEmulationState();
         if (!emulationState || !emulationState.school) {
           showError('Please select a school to emulate first using the Emulation Settings button.');
           return;
         }
-        
-        try {
-          if (typeof showStaffSelfRegistrationModal === 'function') {
-            showStaffSelfRegistrationModal();
-          } else if (typeof window.showStaffSelfRegistrationModal === 'function') {
-            window.showStaffSelfRegistrationModal();
-          } else {
-            debugLog("showStaffSelfRegistrationModal function not found!", null, 'error');
-            showError('Unable to open staff registration modal. Please refresh the page and try again.');
-          }
-        } catch (error) {
-          debugLog("Error calling showStaffSelfRegistrationModal:", error, 'error');
-          showError('An error occurred. Please try again.');
+      }
+      
+      try {
+        if (typeof showStaffSelfRegistrationModal === 'function') {
+          showStaffSelfRegistrationModal();
+        } else if (typeof window.showStaffSelfRegistrationModal === 'function') {
+          window.showStaffSelfRegistrationModal();
+        } else {
+          debugLog("showStaffSelfRegistrationModal function not found!", null, 'error');
+          showError('Unable to open staff registration modal. Please refresh the page and try again.');
         }
-      });
-    } else {
-      debugLog("Staff registration button not found in DOM", null, 'warn');
-    }
-    
+      } catch (error) {
+        debugLog("Error calling showStaffSelfRegistrationModal:", error, 'error');
+        showError('An error occurred. Please try again.');
+      }
+    });
+  } else {
+    debugLog("Staff registration button not found in DOM", null, 'warn');
+  }
+  
+  // Add super user only buttons
+  if (isSuperUser) {
     const emulationBtn = document.getElementById('header-emulation-button');
     if (emulationBtn) {
       debugLog("Attaching click handler to emulation button", null, 'info');
@@ -1830,6 +1819,20 @@ function renderSelectSchoolStep() {
       <h2>Upload CSV File</h2>
       <p>Select a CSV file containing your ${uploadType} data.</p>
       
+      ${uploadType === 'student-onboard' ? `
+        <div class="vespa-info-box" style="background: linear-gradient(135deg, #fff9e6 0%, #fff3cd 100%); border-left: 4px solid #ffc107; margin-bottom: 20px;">
+          <div class="vespa-info-icon" style="font-size: 24px;">💡</div>
+          <div class="vespa-info-content">
+            <strong style="color: #856404; font-size: 15px;">📋 Recommended Workflow:</strong>
+            <div style="margin-top: 8px; color: #856404; line-height: 1.6;">
+              <strong>1️⃣ Upload Staff First</strong> → Ensures all connections work properly<br>
+              <strong>2️⃣ Upload Students Second</strong> → Staff will auto-connect via tutor groups<br><br>
+              <em style="font-size: 13px;">ℹ️ Students can be uploaded before staff, but connections to specific staff members will need to be added later using the Account Manager or via tutor group assignments.</em>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+      
       <div class="vespa-upload-container">
         <div class="vespa-file-input">
           <input type="file" id="csv-file" accept=".csv">
@@ -2197,6 +2200,9 @@ function renderSelectSchoolStep() {
    * @returns {string} HTML for the staff manual entry form
    */
   function renderStaffManualEntryForm() {
+    // Load dropdown options when form is rendered
+    setTimeout(() => loadStudentFormOptions(), 100);
+    
     return `
       <h2>Add Staff Member</h2>
       <p>Enter the details for a single staff member.</p>
@@ -2248,8 +2254,11 @@ function renderSelectSchoolStep() {
             </select>
           </div>
           <div class="vespa-form-group">
-            <label for="staff-group">Group (Optional)</label>
-            <input type="text" id="staff-group" name="group" placeholder="e.g., 12A">
+            <label for="staff-group">Tutor Group (Optional)</label>
+            <select id="staff-group" name="group">
+              <option value="">Loading groups...</option>
+            </select>
+            <small>Groups from school database</small>
           </div>
         </div>
         
@@ -2348,8 +2357,11 @@ function renderSelectSchoolStep() {
             </select>
           </div>
           <div class="vespa-form-group">
-            <label for="student-group">Group (Optional)</label>
-            <input type="text" id="student-group" name="group" placeholder="e.g., 12B">
+            <label for="student-group">Tutor Group (Optional)</label>
+            <select id="student-group" name="group">
+              <option value="">Loading groups...</option>
+            </select>
+            <small>Groups from school database</small>
           </div>
         </div>
         
@@ -4577,6 +4589,29 @@ function bindStepEvents() {
             teachersSelect.appendChild(option);
           });
         }
+        
+        // Populate groups dropdown (for both student and staff forms)
+        const studentGroupSelect = document.getElementById('student-group');
+        const staffGroupSelect = document.getElementById('staff-group');
+        
+        if (response.options.groups) {
+          const groupsHtml = '<option value="">-- None Selected --</option>' + 
+            response.options.groups.map(group => `<option value="${group}">${group}</option>`).join('');
+          
+          if (studentGroupSelect) {
+            studentGroupSelect.innerHTML = groupsHtml;
+            debugLog("Populated student group dropdown with", response.options.groups.length + " groups");
+          }
+          
+          if (staffGroupSelect) {
+            staffGroupSelect.innerHTML = groupsHtml;
+            debugLog("Populated staff group dropdown with", response.options.groups.length + " groups");
+          }
+        } else {
+          // No groups available - show empty state
+          if (studentGroupSelect) studentGroupSelect.innerHTML = '<option value="">-- No groups available --</option>';
+          if (staffGroupSelect) staffGroupSelect.innerHTML = '<option value="">-- No groups available --</option>';
+        }
       }
     } catch (error) {
       debugLog("Error loading form options:", error, 'error');
@@ -5333,19 +5368,21 @@ function bindStepEvents() {
   }
 
   /**
-   * Shows the self-registration QR code generation modal (Super Users only).
+   * Shows the self-registration QR code generation modal (All users).
    */
   function showSelfRegistrationModal() {
     debugLog("showSelfRegistrationModal called", null, 'info');
     
     try {
-      debugLog("Opening self-registration modal for super user");
+      const isSuperUser = VESPA_UPLOAD_CONFIG && VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID;
+      debugLog("Opening self-registration modal", { isSuperUser });
       
-      const modalContent = `
-      <div class="vespa-self-registration-content">
-        <h3>Generate Student Registration QR Code</h3>
-        <p>Create a QR code for students to self-register during webinars or events.</p>
-        
+      // For staff admins, use their own customer ID. For super users, let them select.
+      let schoolSelectionHtml = '';
+      
+      if (isSuperUser) {
+        // Super users select from dropdown
+        schoolSelectionHtml = `
         <div class="vespa-school-selection" style="margin: 20px 0;">
           <label for="qr-school-search" style="display: block; font-weight: bold; margin-bottom: 10px;">
             Select School/Customer <span style="color: red;">*</span>
@@ -5362,7 +5399,23 @@ function bindStepEvents() {
           <select id="qr-school-select" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
             <option value="">-- Loading schools... --</option>
           </select>
-        </div>
+        </div>`;
+      } else {
+        // Staff admins see their school info (read-only)
+        const schoolName = userContext?.schoolName || 'Your School';
+        schoolSelectionHtml = `
+        <div class="vespa-school-info" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+          <h4 style="margin: 0 0 8px 0;">School:</h4>
+          <div style="font-size: 16px; font-weight: 600; color: #2a3c7a;">🏫 ${schoolName}</div>
+        </div>`;
+      }
+      
+      const modalContent = `
+      <div class="vespa-self-registration-content">
+        <h3>Generate Student Registration QR Code</h3>
+        <p>Create a QR code for students to self-register during webinars or events.</p>
+        
+        ${schoolSelectionHtml}
         
         <div id="qr-school-details" style="display: none; background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
           <h4 style="margin-top: 0;">Selected School Details</h4>
@@ -5428,23 +5481,47 @@ function bindStepEvents() {
 
     showModal('Generate Student Registration QR Code', modalContent);
 
-    // Load schools for dropdown
-    loadSchoolsForQRGeneration();
-
-    // Add event listeners
-    document.getElementById('qr-school-select').addEventListener('change', handleQRSchoolSelection);
-    document.getElementById('qr-logo-url').addEventListener('input', handleLogoPreview);
-    
-    // Add search functionality
-    document.getElementById('qr-school-search').addEventListener('input', handleQRSchoolSearch);
-    
-    document.getElementById('generate-registration-link-btn').addEventListener('click', async () => {
-      const schoolSelect = document.getElementById('qr-school-select');
-      const customerId = schoolSelect.value;
+    // Load schools for dropdown (super users only)
+    if (isSuperUser) {
+      loadSchoolsForQRGeneration();
       
-      if (!customerId) {
-        showError('Please select a school first');
-        return;
+      // Add event listeners for super user controls
+      const schoolSelect = document.getElementById('qr-school-select');
+      const schoolSearch = document.getElementById('qr-school-search');
+      
+      if (schoolSelect) schoolSelect.addEventListener('change', handleQRSchoolSelection);
+      if (schoolSearch) schoolSearch.addEventListener('input', handleQRSchoolSearch);
+    } else {
+      // For staff admins, enable the generate button immediately
+      const generateBtn = document.getElementById('generate-registration-link-btn');
+      if (generateBtn) generateBtn.disabled = false;
+    }
+
+    // Add logo preview listener (all users)
+    const logoInput = document.getElementById('qr-logo-url');
+    if (logoInput) logoInput.addEventListener('input', handleLogoPreview);
+    
+    // Generate button click handler
+    document.getElementById('generate-registration-link-btn').addEventListener('click', async () => {
+      let customerId = null;
+      
+      if (isSuperUser) {
+        // Super users select from dropdown
+        const schoolSelect = document.getElementById('qr-school-select');
+        customerId = schoolSelect?.value;
+        
+        if (!customerId) {
+          showError('Please select a school first');
+          return;
+        }
+      } else {
+        // Staff admins use their own customer ID
+        customerId = userContext?.customerId;
+        
+        if (!customerId) {
+          showError('Unable to determine your school. Please refresh and try again.');
+          return;
+        }
       }
       
       const logoUrl = document.getElementById('qr-logo-url').value.trim();
@@ -5475,20 +5552,41 @@ function bindStepEvents() {
   }
   
   /**
-   * Shows the staff self-registration QR code generation modal (Super Users only).
+   * Shows the staff self-registration QR code generation modal (All users).
    */
   function showStaffSelfRegistrationModal() {
     debugLog("showStaffSelfRegistrationModal called", null, 'info');
     
     try {
-      // Check if we're emulating a school
-      const emulationState = getEmulationState();
-      if (!emulationState || !emulationState.school) {
-        showError('Please select a school to emulate first using the Emulation Settings button.');
-        return;
+      const isSuperUser = VESPA_UPLOAD_CONFIG && VESPA_UPLOAD_CONFIG.userRole === SUPER_USER_ROLE_ID;
+      
+      // Determine school context
+      let customerId = null;
+      let schoolName = 'Your School';
+      let admins = [];
+      
+      if (isSuperUser) {
+        // Super users must have emulation state
+        const emulationState = getEmulationState();
+        if (!emulationState || !emulationState.school) {
+          showError('Please select a school to emulate first using the Emulation Settings button.');
+          return;
+        }
+        customerId = emulationState.school.id;
+        schoolName = emulationState.school.name;
+        admins = emulationState.admins || [];
+      } else {
+        // Staff admins use their own context
+        customerId = userContext?.customerId;
+        schoolName = userContext?.schoolName || 'Your School';
+        
+        if (!customerId) {
+          showError('Unable to determine your school. Please refresh and try again.');
+          return;
+        }
       }
       
-      debugLog("Opening staff self-registration modal for emulated school", emulationState.school);
+      debugLog("Opening staff self-registration modal", { isSuperUser, customerId, schoolName });
       
       const modalContent = `
       <div class="vespa-staff-registration-content">
@@ -5496,14 +5594,14 @@ function bindStepEvents() {
         <p>Create a QR code for staff members to self-register at your school.</p>
         
         <div class="vespa-school-info" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
-          <h4 style="margin-bottom: 10px;">Selected School:</h4>
-          <div><strong>${emulationState.school.name}</strong></div>
-          <div style="color: #666; font-size: 14px; margin-top: 5px;">Customer ID: ${emulationState.school.id}</div>
-          ${emulationState.admins && emulationState.admins.length > 0 ? `
+          <h4 style="margin-bottom: 10px;">School:</h4>
+          <div><strong>🏫 ${schoolName}</strong></div>
+          <div style="color: #666; font-size: 14px; margin-top: 5px;">Customer ID: ${customerId}</div>
+          ${admins && admins.length > 0 ? `
             <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #dee2e6;">
               <strong>Staff Admins:</strong>
               <ul style="margin: 5px 0 0 20px; padding: 0;">
-                ${emulationState.admins.map(admin => `<li>${admin.name} (${admin.email})</li>`).join('')}
+                ${admins.map(admin => `<li>${admin.name} (${admin.email})</li>`).join('')}
               </ul>
             </div>
           ` : ''}
@@ -5565,6 +5663,9 @@ function bindStepEvents() {
     // Add event listeners
     document.getElementById('staff-qr-logo-url').addEventListener('input', handleStaffLogoPreview);
     
+    // Store context in closure for event handler
+    const contextForGeneration = { customerId, schoolName, admins };
+    
     document.getElementById('generate-staff-registration-link-btn').addEventListener('click', async () => {
       const logoUrl = document.getElementById('staff-qr-logo-url').value.trim();
       const requireSchoolEmail = document.getElementById('staff-require-school-email').checked;
@@ -5575,15 +5676,15 @@ function bindStepEvents() {
       
       // Generate the staff registration link
       await generateStaffRegistrationLink({
-        customerId: emulationState.school.id,
-        customerName: emulationState.school.name,
+        customerId: contextForGeneration.customerId,
+        customerName: contextForGeneration.schoolName,
         logoUrl,
         requireSchoolEmail,
         autoApprove,
         includeRoles,
         expiresIn,
         customMessage,
-        adminIds: emulationState.admins ? emulationState.admins.map(a => a.id) : []
+        adminIds: contextForGeneration.admins ? contextForGeneration.admins.map(a => a.id) : []
       });
     });
     
