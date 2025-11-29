@@ -22,7 +22,7 @@
 (function() {
   'use strict';
   
-  const VERSION = '1t';
+  const VERSION = '2c';
   const DEBUG_MODE = true;
   
   function debugLog(message, data) {
@@ -174,6 +174,43 @@
             groupToDelete: null,
             deleteGroupUsage: null,
             
+            // CSV Upload
+            showCSVUploadModal: false,
+            csvUploadType: 'students', // 'students' or 'staff'
+            selectedCSVFile: null,
+            csvData: null,
+            csvValidationResults: null,
+            csvUploading: false,
+            csvJobId: null,
+            
+            // Manual Add
+            showManualAddModal: false,
+            manualAddType: 'students', // 'students' or 'staff'
+            manualAddForm: {
+              // Staff fields
+              title: '',
+              firstName: '',
+              lastName: '',
+              email: '',
+              staffTypes: [],
+              yearGroup: '',
+              group: '',
+              subject: '',
+              
+              // Student fields
+              upn: '',
+              gender: '',
+              dob: '',
+              level: '',
+              tutors: [],
+              headOfYear: '',
+              subjectTeachers: []
+            },
+            manualAddSubmitting: false,
+            
+            // QR Generation
+            showQRModal: false,
+            
             // Messages
             message: null,
             messageType: null
@@ -191,6 +228,15 @@
           
           yearGroups() {
             return ['7', '8', '9', '10', '11', '12', '13'];
+          },
+          
+          canSubmitManualAdd() {
+            const form = this.manualAddForm;
+            if (this.manualAddType === 'staff') {
+              return form.title && form.firstName && form.lastName && form.email && form.staffTypes.length > 0;
+            } else {
+              return form.firstName && form.lastName && form.email && form.yearGroup && form.level;
+            }
           }
         },
         
@@ -222,6 +268,7 @@
               const userId = userAttrs.id;
               
               debugLog('User attributes', { email: this.userEmail, id: userId });
+              debugLog('Full Knack user attributes', userAttrs);
               
               // Call auth check endpoint
               const response = await fetch(
@@ -237,6 +284,19 @@
               if (data.success) {
                 this.isSuperUser = data.isSuperUser;
                 this.schoolContext = data.schoolContext;
+                
+                // CRITICAL FIX: Extract customerId directly from Knack if not in backend response
+                // This matches the working approach from index10d.js
+                if (!this.isSuperUser && this.schoolContext && !this.schoolContext.customerId && !this.schoolContext.knackCustomerId) {
+                  debugLog('Backend did not provide customerId, extracting from Knack field_122...');
+                  
+                  if (userAttrs.values?.field_122_raw && userAttrs.values.field_122_raw.length > 0) {
+                    this.schoolContext.customerId = userAttrs.values.field_122_raw[0].id;
+                    this.schoolContext.customerName = this.schoolContext.customerName || userAttrs.values.field_122_raw[0].identifier;
+                    debugLog('Extracted customerId from Knack field_122_raw:', this.schoolContext.customerId);
+                  }
+                }
+                
                 this.authChecked = true;
                 
                 debugLog('Auth check complete', {
@@ -413,11 +473,15 @@
                 isSuperUser: this.isSuperUser
               });
               
+              // WORKAROUND: Staff search can only search email (names are in joined table)
+              // For staff, we'll fetch all and filter client-side
+              const isStaffSearch = this.currentTab === 'staff' && this.searchQuery;
+              
               const params = new URLSearchParams({
                 accountType: this.currentTab === 'students' ? 'student' : 'staff',
                 page: this.currentPage,
-                limit: this.pageSize,
-                search: this.searchQuery || ''
+                limit: isStaffSearch ? 200 : this.pageSize, // Fetch more for client-side filtering
+                search: isStaffSearch ? '' : (this.searchQuery || '') // Don't send search for staff (will crash)
               });
               
               // Add filters
@@ -454,8 +518,32 @@
               
               if (data.success) {
                 // Deduplicate accounts (strip HTML from emails)
-                this.accounts = this.deduplicateAccounts(data.accounts || []);
-                this.totalAccounts = data.total || 0;
+                let accounts = this.deduplicateAccounts(data.accounts || []);
+                
+                // CLIENT-SIDE FILTERING for staff name search (Supabase can't search joined tables)
+                if (isStaffSearch && this.searchQuery) {
+                  const searchLower = this.searchQuery.toLowerCase();
+                  accounts = accounts.filter(account => {
+                    const email = (account.email || '').toLowerCase();
+                    const firstName = (account.firstName || '').toLowerCase();
+                    const lastName = (account.lastName || '').toLowerCase();
+                    const fullName = (account.fullName || '').toLowerCase();
+                    
+                    return email.includes(searchLower) || 
+                           firstName.includes(searchLower) || 
+                           lastName.includes(searchLower) ||
+                           fullName.includes(searchLower);
+                  });
+                  
+                  debugLog('Client-side filtered staff', { 
+                    original: data.accounts.length, 
+                    filtered: accounts.length,
+                    searchTerm: this.searchQuery
+                  });
+                }
+                
+                this.accounts = accounts;
+                this.totalAccounts = isStaffSearch ? accounts.length : (data.total || 0);
                 debugLog('Accounts loaded', { count: this.accounts.length });
                 
                 // Update available groups for dropdown
@@ -540,6 +628,98 @@
           cancelEdit() {
             this.editingAccount = null;
             this.editForm = {};
+          },
+          
+          async startEditStaffGroups(account) {
+            // Quick edit for staff tutor groups only
+            this.editingAccount = account;
+            this.editForm = {
+              tutorGroup: account.tutorGroup || ''
+            };
+            
+            // Load groups if not already loaded
+            if (this.allStudentGroups.length === 0) {
+              await this.loadAllStudentGroups();
+            }
+            
+            debugLog('Started editing staff groups', account);
+          },
+          
+          async quickSaveStaffGroups() {
+            if (!this.editingAccount) {
+              return;
+            }
+            
+            // Allow clearing groups (empty value)
+            if (!this.editForm.tutorGroup && !confirm('Clear all group assignments for this staff member?')) {
+              this.editingAccount = null;
+              this.editForm = {};
+              return;
+            }
+            
+            this.loading = true;
+            this.loadingText = 'Updating groups...';
+            
+            try {
+              const staffEmail = this.editingAccount.email;
+              const newGroups = this.editForm.tutorGroup.trim();
+              const roles = this.editingAccount.roles || [];
+              
+              // Determine if tutor or HOY
+              const isTutor = roles.includes('tutor');
+              const isHOY = roles.includes('head_of_year');
+              
+              if (!isTutor && !isHOY) {
+                throw new Error('Staff member must be a Tutor or Head of Year to have groups');
+              }
+              
+              // Build assignments
+              const assignments = {};
+              if (isTutor) {
+                assignments.tutor = newGroups.split(',').map(g => g.trim()).filter(Boolean);
+              }
+              if (isHOY) {
+                assignments.head_of_year = newGroups.split(',').map(g => g.trim()).filter(Boolean);
+              }
+              
+              // Submit via role assignment (uses worker)
+              const emulatedSchoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
+                ? this.selectedSchool.supabaseUuid
+                : this.schoolContext?.schoolId || null;
+              
+              const response = await fetch(
+                `${this.apiUrl}/api/v3/accounts/staff/${encodeURIComponent(staffEmail)}/roles`,
+                {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    roles: roles, // Keep existing roles
+                    assignments: assignments,
+                    emulatedSchoolId: emulatedSchoolId,
+                    userEmail: this.userEmail
+                  })
+                }
+              );
+              
+              const data = await response.json();
+              
+              if (data.success) {
+                this.showMessage('✅ Groups updated! Processing in background...', 'success');
+                this.editingAccount = null;
+                this.editForm = {};
+                
+                // Reload after delay
+                setTimeout(() => this.loadAccounts(), 3000);
+              } else {
+                throw new Error(data.message || 'Failed to update groups');
+              }
+              
+            } catch (error) {
+              console.error('Quick save staff groups error:', error);
+              this.showMessage('Failed to update groups: ' + error.message, 'error');
+            } finally {
+              this.loading = false;
+            }
           },
           
           async saveEdit() {
@@ -1256,6 +1436,653 @@
             this.deleteGroupUsage = null;
           },
           
+          // ========== CSV UPLOAD ==========
+          
+          openCSVUploadModal() {
+            this.showCSVUploadModal = true;
+            this.csvUploadType = this.currentTab === 'students' ? 'students' : 'staff';
+            this.selectedCSVFile = null;
+            this.csvData = null;
+            this.csvValidationResults = null;
+          },
+          
+          handleCSVFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+              this.selectedCSVFile = file;
+              debugLog('CSV file selected', { name: file.name, size: file.size });
+            }
+          },
+          
+          async parseCSVFile(file) {
+            return new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              
+              reader.onload = (event) => {
+                try {
+                  const csvText = event.target.result;
+                  const rows = [];
+                  let currentRow = [];
+                  let inQuotes = false;
+                  let value = "";
+                  
+                  // Robust CSV parsing
+                  for (let i = 0; i < csvText.length; i++) {
+                    const char = csvText[i];
+                    
+                    if (char === '"') {
+                      if (inQuotes && i + 1 < csvText.length && csvText[i+1] === '"') {
+                        value += '"';
+                        i++;
+                      } else {
+                        inQuotes = !inQuotes;
+                      }
+                    } else if (char === ',' && !inQuotes) {
+                      currentRow.push(value);
+                      value = "";
+                    } else if ((char === '\r' || char === '\n') && !inQuotes) {
+                      if (csvText[i] === '\r' && csvText[i+1] === '\n') i++;
+                      currentRow.push(value);
+                      if (currentRow.some(cell => cell.trim() !== "")) {
+                        rows.push(currentRow);
+                      }
+                      currentRow = [];
+                      value = "";
+                    } else {
+                      value += char;
+                    }
+                  }
+                  
+                  currentRow.push(value);
+                  if (currentRow.some(cell => cell.trim() !== "")) {
+                    rows.push(currentRow);
+                  }
+                  
+                  if (rows.length === 0) {
+                    reject(new Error('CSV file is empty'));
+                    return;
+                  }
+                  
+                  const headers = rows[0].map(h => h.trim());
+                  const data = rows.slice(1).map(row => {
+                    const obj = {};
+                    headers.forEach((header, index) => {
+                      obj[header] = index < row.length ? row[index].trim() : '';
+                    });
+                    return obj;
+                  });
+                  
+                  resolve(data);
+                } catch (error) {
+                  reject(error);
+                }
+              };
+              
+              reader.onerror = () => reject(new Error('Error reading file'));
+              reader.readAsText(file);
+            });
+          },
+          
+          async validateCSV() {
+            if (!this.selectedCSVFile) {
+              this.showMessage('Please select a CSV file', 'error');
+              return;
+            }
+            
+            this.loading = true;
+            this.loadingText = 'Validating CSV...';
+            
+            try {
+              // Parse CSV
+              this.csvData = await this.parseCSVFile(this.selectedCSVFile);
+              debugLog('CSV parsed', { rows: this.csvData.length });
+              
+              // Call validation endpoint
+              const endpoint = this.csvUploadType === 'students' 
+                ? 'students/onboard/validate'
+                : 'staff/validate';
+              
+              const response = await fetch(
+                `${this.apiUrl}/api/${endpoint}`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    csvData: this.csvData,
+                    uploaderContext: this.getUploaderContext()
+                  })
+                }
+              );
+              
+              const data = await response.json();
+              
+              if (data.success || data.isValid) {
+                this.csvValidationResults = data;
+                this.showMessage(`Validation passed: ${this.csvData.length} rows ready`, 'success');
+              } else {
+                this.csvValidationResults = data;
+                this.showMessage(`Validation failed: ${data.errors?.length || 0} errors found`, 'error');
+              }
+              
+            } catch (error) {
+              console.error('CSV validation error:', error);
+              this.showMessage('CSV validation failed: ' + error.message, 'error');
+            } finally {
+              this.loading = false;
+            }
+          },
+          
+          async submitCSVUpload() {
+            if (!this.csvValidationResults || (!this.csvValidationResults.success && !this.csvValidationResults.isValid)) {
+              this.showMessage('Please validate CSV first', 'error');
+              return;
+            }
+            
+            this.csvUploading = true;
+            this.loading = true;
+            this.loadingText = 'Submitting CSV for processing...';
+            
+            try {
+              const endpoint = this.csvUploadType === 'students'
+                ? 'students/onboard/process'
+                : 'staff/process';
+              
+              const response = await fetch(
+                `${this.apiUrl}/api/${endpoint}`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    csvData: this.csvData,
+                    options: {
+                      sendNotifications: true,
+                      notificationEmail: this.userEmail
+                    },
+                    context: this.getUploaderContext()
+                  })
+                }
+              );
+              
+              const data = await response.json();
+              
+              if (data.success && data.jobId) {
+                this.csvJobId = data.jobId;
+                this.showMessage(`Upload queued successfully! Job ID: ${data.jobId}. You'll receive an email when complete.`, 'success');
+                
+                // Add to active jobs for tracking (CSV uploads have email notification)
+                this.activeJobs.push({
+                  jobId: data.jobId,
+                  type: 'csv-upload', // Special type for CSV uploads
+                  action: this.csvUploadType === 'students' ? 'Student Upload' : 'Staff Upload',
+                  total: this.csvData.length,
+                  current: 0,
+                  status: 'Queued - Processing in background...',
+                  description: `${this.csvUploadType === 'students' ? 'Student' : 'Staff'} CSV Upload`,
+                  startTime: Date.now(),
+                  emailNotification: true // Flag to show email notification message
+                });
+                
+                // Start polling if not already running
+                if (!this.jobPollingInterval) {
+                  this.startJobPolling();
+                }
+                
+                // Close modal and reload
+                this.closeCSVUploadModal();
+                setTimeout(() => this.loadAccounts(), 5000);
+              } else {
+                throw new Error(data.message || 'Upload failed');
+              }
+              
+            } catch (error) {
+              console.error('CSV upload error:', error);
+              this.showMessage('Upload failed: ' + error.message, 'error');
+            } finally {
+              this.csvUploading = false;
+              this.loading = false;
+            }
+          },
+          
+          closeCSVUploadModal() {
+            this.showCSVUploadModal = false;
+            this.selectedCSVFile = null;
+            this.csvData = null;
+            this.csvValidationResults = null;
+            this.csvUploading = false;
+          },
+          
+          getUploaderContext() {
+            // Build context similar to upload system
+            const isEmulating = this.isSuperUser && this.selectedSchool;
+            
+            if (isEmulating) {
+              return {
+                userId: Knack.getUserAttributes().id,
+                userEmail: this.userEmail,
+                isEmulating: true,
+                loggedInUser: {
+                  userId: Knack.getUserAttributes().id,
+                  userEmail: this.userEmail
+                },
+                emulatedSchool: {
+                  customerId: this.selectedSchool.id,
+                  customerName: this.selectedSchool.name,
+                  admins: [] // Could fetch from API if needed
+                }
+              };
+            } else {
+              return {
+                userId: Knack.getUserAttributes().id,
+                userEmail: this.userEmail,
+                isEmulating: false,
+                customerId: this.schoolContext?.customerId || this.schoolContext?.knackCustomerId || this.schoolContext?.knackId
+              };
+            }
+          },
+          
+          // ========== MANUAL ADD ==========
+          
+          async openManualAddModal() {
+            this.showManualAddModal = true;
+            this.manualAddType = this.currentTab === 'students' ? 'students' : 'staff';
+            this.resetManualAddForm();
+            
+            // Load dropdown options
+            await this.loadManualAddOptions();
+          },
+          
+          async loadManualAddOptions() {
+            try {
+              // SUPABASE-FIRST: Try schoolId (Supabase UUID) first, then customerId (Knack ID)
+              const customerId = this.isSuperUser && this.selectedSchool?.id
+                ? this.selectedSchool.id
+                : (this.schoolContext?.customerId || this.schoolContext?.knackCustomerId || this.schoolContext?.knackId);
+              
+              const schoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
+                ? this.selectedSchool.supabaseUuid
+                : this.schoolContext?.schoolId;
+              
+              if (!customerId && !schoolId) {
+                console.error('No customerId or schoolId available for loadManualAddOptions');
+                console.error('schoolContext:', this.schoolContext);
+                console.error('selectedSchool:', this.selectedSchool);
+                console.error('isSuperUser:', this.isSuperUser);
+                return;
+              }
+              
+              debugLog('Loading manual add options', { customerId, schoolId });
+              
+              // Build query params - prefer customerId if available, otherwise use schoolId
+              const params = new URLSearchParams();
+              if (customerId) params.append('customerId', customerId);
+              if (schoolId) params.append('schoolId', schoolId);
+              
+              const response = await fetch(
+                `${this.apiUrl}/api/validation/get-form-options?${params}`,
+                {
+                  method: 'GET',
+                  headers: { 'Content-Type': 'application/json' }
+                }
+              );
+              
+              const data = await response.json();
+              
+              debugLog('get-form-options response', data);
+              
+              if (data.success && data.options) {
+                // The API returns { name, email } format - normalize it
+                this.availableStaff = {
+                  tutors: (data.options.tutors || []).map(t => ({
+                    ...t,
+                    name: t.name || t.fullName || t.email,
+                    email: t.email
+                  })),
+                  headsOfYear: (data.options.headsOfYear || []).map(h => ({
+                    ...h,
+                    name: h.name || h.fullName || h.email,
+                    email: h.email
+                  })),
+                  subjectTeachers: (data.options.subjectTeachers || []).map(st => ({
+                    ...st,
+                    name: st.name || st.fullName || st.email,
+                    email: st.email,
+                    subject: st.subject
+                  })),
+                  staffAdmins: []
+                };
+                this.availableGroups = data.options.groups || [];
+                
+                debugLog('Manual add options loaded', {
+                  tutors: this.availableStaff.tutors.length,
+                  headsOfYear: this.availableStaff.headsOfYear.length,
+                  subjectTeachers: this.availableStaff.subjectTeachers.length,
+                  groups: this.availableGroups.length
+                });
+              } else {
+                console.error('get-form-options failed', data);
+              }
+              
+            } catch (error) {
+              console.error('Error loading manual add options:', error);
+            }
+          },
+          
+          async submitManualAdd() {
+            this.manualAddSubmitting = true;
+            this.loading = true;
+            this.loadingText = `Adding ${this.manualAddType === 'students' ? 'student' : 'staff member'}...`;
+            
+            try {
+              const form = this.manualAddForm;
+              let csvData = {};
+              
+              if (this.manualAddType === 'staff') {
+                csvData = {
+                  'Title': form.title,
+                  'First Name': form.firstName,
+                  'Last Name': form.lastName,
+                  'Email Address': form.email,
+                  'Staff Type': form.staffTypes.join(','),
+                  'Year Group': form.yearGroup,
+                  'Group': form.group,
+                  'Subject': form.subject
+                };
+              } else {
+                csvData = {
+                  'UPN': form.upn,
+                  'Firstname': form.firstName,
+                  'Lastname': form.lastName,
+                  'Student Email': form.email,
+                  'Gender': form.gender,
+                  'DOB': form.dob,
+                  'Group': form.group,
+                  'Year Gp': form.yearGroup,
+                  'Level': form.level,
+                  'Tutors': form.tutors.join(','),
+                  'Head of Year': form.headOfYear,
+                  'Subject Teachers': form.subjectTeachers.join(',')
+                };
+              }
+              
+              const endpoint = this.manualAddType === 'staff'
+                ? 'staff/process'
+                : 'students/onboard/process';
+              
+              const response = await fetch(
+                `${this.apiUrl}/api/${endpoint}`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    csvData: [csvData],
+                    options: {
+                      sendNotifications: true,
+                      notificationEmail: this.userEmail,
+                      manualEntry: true
+                    },
+                    context: this.getUploaderContext()
+                  })
+                }
+              );
+              
+              const data = await response.json();
+              
+              if (data.success) {
+                this.showMessage(`${this.manualAddType === 'staff' ? 'Staff member' : 'Student'} added successfully!`, 'success');
+                this.closeManualAddModal();
+                
+                // Reload accounts
+                setTimeout(() => this.loadAccounts(), 2000);
+              } else {
+                throw new Error(data.message || 'Failed to add account');
+              }
+              
+            } catch (error) {
+              console.error('Manual add error:', error);
+              this.showMessage('Failed to add account: ' + error.message, 'error');
+            } finally {
+              this.manualAddSubmitting = false;
+              this.loading = false;
+            }
+          },
+          
+          closeManualAddModal() {
+            this.showManualAddModal = false;
+            this.resetManualAddForm();
+          },
+          
+          resetManualAddForm() {
+            this.manualAddForm = {
+              title: '',
+              firstName: '',
+              lastName: '',
+              email: '',
+              staffTypes: [],
+              yearGroup: '',
+              group: '',
+              subject: '',
+              upn: '',
+              gender: '',
+              dob: '',
+              level: '',
+              tutors: [],
+              headOfYear: '',
+              subjectTeachers: []
+            };
+          },
+          
+          // ========== QR GENERATION ==========
+          
+          openQRGenerationModal() {
+            this.showQRModal = true;
+          },
+          
+          closeQRModal() {
+            this.showQRModal = false;
+          },
+          
+          async generateStudentQR() {
+            try {
+              // Get customer ID - try multiple property names
+              const customerId = this.isSuperUser && this.selectedSchool?.id
+                ? this.selectedSchool.id
+                : (this.schoolContext?.customerId || this.schoolContext?.knackCustomerId || this.schoolContext?.knackId);
+              
+              // Note: QR generation endpoint still requires Knack customerId
+              // Backend will need to be updated to accept schoolId if we want full Supabase migration
+              if (!customerId) {
+                console.error('Unable to determine school for QR generation');
+                console.error('schoolContext:', this.schoolContext);
+                console.error('selectedSchool:', this.selectedSchool);
+                this.showMessage('Unable to determine school. QR generation requires Knack customer ID.', 'error');
+                return;
+              }
+              
+              this.loading = true;
+              this.loadingText = 'Generating QR code...';
+              
+              const response = await fetch(
+                `${this.apiUrl}/api/self-registration/generate-link`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    customerId,
+                    requireSchoolEmail: true,
+                    autoApprove: true,
+                    expiresIn: 365,
+                    webinarMode: false
+                  })
+                }
+              );
+              
+              const data = await response.json();
+              
+              if (data.success) {
+                // Load QR code library
+                await this.loadQRCodeLibrary();
+                
+                // Show QR in modal
+                this.showQRResult(data, 'student');
+              } else {
+                throw new Error(data.message || 'Failed to generate QR');
+              }
+              
+            } catch (error) {
+              console.error('QR generation error:', error);
+              this.showMessage('Failed to generate QR code: ' + error.message, 'error');
+            } finally {
+              this.loading = false;
+            }
+          },
+          
+          async generateStaffQR() {
+            try {
+              // Get customer ID - try multiple property names
+              const customerId = this.isSuperUser && this.selectedSchool?.id
+                ? this.selectedSchool.id
+                : (this.schoolContext?.customerId || this.schoolContext?.knackCustomerId || this.schoolContext?.knackId);
+              
+              if (!customerId) {
+                console.error('Unable to determine school for staff QR generation');
+                console.error('schoolContext:', this.schoolContext);
+                console.error('selectedSchool:', this.selectedSchool);
+                this.showMessage('Unable to determine school. Please refresh.', 'error');
+                return;
+              }
+              
+              this.loading = true;
+              this.loadingText = 'Generating staff QR code...';
+              
+              const response = await fetch(
+                `${this.apiUrl}/api/staff-registration/generate-link`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    customerId,
+                    customerName: this.isSuperUser && this.selectedSchool?.name
+                      ? this.selectedSchool.name
+                      : this.schoolContext?.customerName || 'Your School',
+                    requireSchoolEmail: true,
+                    autoApprove: true,
+                    includeRoles: true,
+                    expiresIn: 30,
+                    adminIds: []
+                  })
+                }
+              );
+              
+              const data = await response.json();
+              
+              if (data.success) {
+                await this.loadQRCodeLibrary();
+                this.showQRResult(data, 'staff');
+              } else {
+                throw new Error(data.message || 'Failed to generate QR');
+              }
+              
+            } catch (error) {
+              console.error('Staff QR generation error:', error);
+              this.showMessage('Failed to generate staff QR: ' + error.message, 'error');
+            } finally {
+              this.loading = false;
+            }
+          },
+          
+          async loadQRCodeLibrary() {
+            if (typeof QRCode !== 'undefined') return;
+            
+            return new Promise((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+              script.onload = resolve;
+              script.onerror = reject;
+              document.head.appendChild(script);
+            });
+          },
+          
+          showQRResult(data, type) {
+            const schoolName = this.isSuperUser && this.selectedSchool?.name
+              ? this.selectedSchool.name
+              : this.schoolContext?.customerName || 'Your School';
+            
+            const title = type === 'student' ? 'Student Registration QR Code' : 'Staff Registration QR Code';
+            const icon = type === 'student' ? '🎓' : '👥';
+            
+            // Create modal HTML
+            const modalHtml = `
+              <div style="text-align: center;">
+                <h4 style="margin: 0 0 20px 0; color: #2a3c7a; font-size: 20px;">
+                  ${icon} QR Code Generated Successfully!
+                </h4>
+                
+                <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 20px;">
+                  <strong>School:</strong> ${schoolName}
+                </div>
+                
+                <div id="qr-code-display" style="display: inline-block; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 20px;"></div>
+                
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: left;">
+                  <div style="font-weight: 600; margin-bottom: 8px;">Registration URL:</div>
+                  <div style="word-break: break-all; font-family: monospace; font-size: 12px; padding: 12px; background: white; border: 1px solid #dee2e6; border-radius: 4px;">
+                    ${data.registrationUrl}
+                  </div>
+                  <button onclick="navigator.clipboard.writeText('${data.registrationUrl}').then(() => alert('Copied!'))" 
+                    class="am-button secondary" style="margin-top: 10px; width: 100%;">
+                    📋 Copy Link
+                  </button>
+                </div>
+                
+                <div style="background: #e3f2fd; padding: 12px; border-radius: 6px; border-left: 4px solid #2196f3; text-align: left; font-size: 13px;">
+                  <div style="font-weight: 600; color: #1976d2; margin-bottom: 6px;">Details:</div>
+                  <div>Valid until: ${new Date(data.expiresAt).toLocaleDateString()}</div>
+                  <div>Link ID: ${data.linkId}</div>
+                </div>
+              </div>
+            `;
+            
+            this.closeQRModal();
+            this.$nextTick(() => {
+              // Use native modal since we need to inject QR code
+              const backdrop = document.createElement('div');
+              backdrop.className = 'am-modal-overlay';
+              backdrop.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 99999;';
+              
+              const modalDiv = document.createElement('div');
+              modalDiv.className = 'am-modal';
+              modalDiv.style.cssText = 'background: white; border-radius: 12px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto;';
+              
+              modalDiv.innerHTML = `
+                <div class="am-modal-header" style="background: linear-gradient(135deg, #2a3c7a 0%, #079baa 100%); color: white; padding: 24px; border-radius: 12px 12px 0 0;">
+                  <h3 style="margin: 0; font-size: 24px;">${title}</h3>
+                  <button onclick="this.closest('.am-modal-overlay').remove()" class="am-modal-close" style="color: white; font-size: 28px;">✖</button>
+                </div>
+                <div class="am-modal-body" style="padding: 32px;">
+                  ${modalHtml}
+                </div>
+                <div class="am-modal-footer" style="padding: 20px; background: #f5f7fa; border-top: 1px solid #e0e0e0;">
+                  <button onclick="this.closest('.am-modal-overlay').remove()" class="am-button primary">Close</button>
+                </div>
+              `;
+              
+              backdrop.appendChild(modalDiv);
+              document.body.appendChild(backdrop);
+              
+              // Generate QR code
+              setTimeout(() => {
+                new QRCode(document.getElementById('qr-code-display'), {
+                  text: data.registrationUrl,
+                  width: 256,
+                  height: 256,
+                  colorDark: "#000000",
+                  colorLight: "#ffffff",
+                  correctLevel: QRCode.CorrectLevel.H
+                });
+              }, 100);
+            });
+          },
+          
           // ========== EMAIL ACTIONS ==========
           
           async resetPassword(account) {
@@ -1376,12 +2203,52 @@
             }
             
             const count = this.selectedAccounts.length;
+            const accountTypeName = this.currentTab === 'students' ? 'student' : 'staff';
+            const isDelete = action === 'delete';
+            
+            // Enhanced confirmation for delete
+            if (isDelete) {
+              const warningMessage = this.currentTab === 'students'
+                ? `⚠️ PERMANENTLY DELETE ${count} STUDENTS?\n\n` +
+                  `This will PERMANENTLY delete:\n` +
+                  `• ${count} student account(s) (login access)\n` +
+                  `• ALL VESPA results\n` +
+                  `• ALL questionnaires\n` +
+                  `• Student master records\n` +
+                  `• All connections to staff\n\n` +
+                  `⚠️ THIS CANNOT BE UNDONE ⚠️\n\n` +
+                  `Type "DELETE ${count} STUDENTS" to confirm:`
+                : `⚠️ PERMANENTLY DELETE ${count} STAFF MEMBERS?\n\n` +
+                  `This will PERMANENTLY delete:\n` +
+                  `• ${count} staff account(s) (login access)\n` +
+                  `• All role assignments\n` +
+                  `• All connections to students\n\n` +
+                  `⚠️ THIS CANNOT BE UNDONE ⚠️\n\n` +
+                  `Type "DELETE ${count} STAFF" to confirm:`;
+              
+              const expectedConfirmation = this.currentTab === 'students' 
+                ? `DELETE ${count} STUDENTS`
+                : `DELETE ${count} STAFF`;
+              
+              const userConfirmation = prompt(warningMessage);
+              
+              if (userConfirmation !== expectedConfirmation) {
+                if (userConfirmation !== null) {
+                  this.showMessage(`Deletion cancelled. Must type "${expectedConfirmation}" exactly.`, 'info');
+                }
+                return;
+              }
+              
+              // Use background queue for bulk delete
+              await this.executeBulkDelete();
+              return;
+            }
+            
+            // Non-delete actions (reset-password, resend-welcome)
             const confirmMessage = action === 'reset-password'
               ? `Send password reset emails to ${count} account(s)?`
               : action === 'resend-welcome'
               ? `Resend welcome emails to ${count} account(s)?`
-              : action === 'delete'
-              ? `Delete ${count} account(s)? This cannot be undone.`
               : `Execute action on ${count} account(s)?`;
             
             if (!confirm(confirmMessage)) return;
@@ -1407,8 +2274,6 @@
                     await this.resetPassword(account);
                   } else if (action === 'resend-welcome') {
                     await this.resendWelcome(account);
-                  } else if (action === 'delete') {
-                    await this.deleteAccount(account);
                   }
                   successCount++;
                 } catch (err) {
@@ -1441,6 +2306,70 @@
               this.bulkOperationInProgress = false;
               this.bulkProgress = { current: 0, total: 0, status: '' };
               this.showBulkMenu = false;
+            }
+          },
+          
+          // NEW: Execute bulk delete via background queue
+          async executeBulkDelete() {
+            const count = this.selectedAccounts.length;
+            
+            try {
+              const emulatedSchoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
+                ? this.selectedSchool.supabaseUuid
+                : this.schoolContext?.schoolId || null;
+              
+              // Submit to background queue
+              const response = await fetch(
+                `${this.apiUrl}/api/v3/accounts/bulk-delete`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    emails: this.selectedAccounts,
+                    accountType: this.currentTab === 'students' ? 'student' : 'staff',
+                    emulatedSchoolId: emulatedSchoolId,
+                    userEmail: this.userEmail
+                  })
+                }
+              );
+              
+              const data = await response.json();
+              
+              if (data.success) {
+                // Add to active jobs for tracking
+                this.activeJobs.push({
+                  jobId: data.jobId,
+                  type: 'bulk-delete',
+                  action: 'delete',
+                  accountType: this.currentTab === 'students' ? 'Students' : 'Staff',
+                  total: count,
+                  current: 0,
+                  status: 'Queued...',
+                  startTime: Date.now()
+                });
+                
+                this.showMessage(
+                  `🗑️ Bulk deletion queued! Processing ${count} ${this.currentTab} in background...`,
+                  'success'
+                );
+                
+                // Start polling if not already running
+                if (!this.jobPollingInterval) {
+                  this.startJobPolling();
+                }
+                
+                // Clear selection
+                this.selectedAccounts = [];
+                this.allSelected = false;
+                this.showBulkMenu = false;
+                
+              } else {
+                throw new Error(data.message || 'Failed to submit bulk deletion');
+              }
+              
+            } catch (error) {
+              console.error('Bulk deletion submission error:', error);
+              this.showMessage('Failed to submit bulk deletion: ' + error.message, 'error');
             }
           },
           
@@ -1713,6 +2642,37 @@
                 const job = this.activeJobs[i];
                 
                 try {
+                  // CSV uploads (staff/student) use different queues without status endpoint
+                  if (job.type === 'csv-upload') {
+                    // Update status based on elapsed time
+                    const elapsed = Math.floor((Date.now() - job.startTime) / 1000);
+                    const minutes = Math.floor(elapsed / 60);
+                    const seconds = elapsed % 60;
+                    
+                    if (elapsed < 30) {
+                      job.status = `Processing ${job.total} records... (${seconds}s elapsed)`;
+                      job.current = Math.min(Math.floor((elapsed / 30) * job.total), job.total - 1);
+                    } else if (elapsed < 120) {
+                      job.status = `Still processing... (${minutes}m ${seconds}s elapsed)`;
+                      job.current = Math.min(Math.floor((elapsed / 120) * job.total), job.total - 1);
+                    } else {
+                      // After 2 minutes, assume complete
+                      job.status = 'Completed - Check your email for results';
+                      job.current = job.total;
+                      
+                      // Auto-remove after showing "completed" for 10 seconds
+                      setTimeout(() => {
+                        const idx = this.activeJobs.indexOf(job);
+                        if (idx > -1) {
+                          this.activeJobs.splice(idx, 1);
+                          this.showMessage('✅ CSV upload processed. Refresh the page to see new accounts.', 'success');
+                        }
+                      }, 10000);
+                    }
+                    continue;
+                  }
+                  
+                  // Bulk operations (connection updates, role assignments) have status endpoint
                   const response = await fetch(
                     `${this.apiUrl}/api/v3/bulk/status/${job.jobId}`,
                     { headers: { 'Content-Type': 'application/json' } }
@@ -1731,7 +2691,7 @@
                     if (data.completed) {
                       const result = data.result || {};
                       this.showMessage(
-                        `✅ Bulk ${job.action} completed: ${result.successful || 0} success, ${result.failed || 0} failed`,
+                        `✅ ${job.type} completed: ${result.successful || 0} success, ${result.failed || 0} failed`,
                         result.failed === 0 ? 'success' : 'warning'
                       );
                       
@@ -1743,7 +2703,7 @@
                       
                     } else if (data.failed) {
                       this.showMessage(
-                        `❌ Bulk ${job.action} failed: ${data.failedReason || 'Unknown error'}`,
+                        `❌ ${job.type} failed: ${data.failedReason || 'Unknown error'}`,
                         'error'
                       );
                       this.activeJobs.splice(i, 1);
@@ -1753,15 +2713,49 @@
                   console.error('Job polling error:', error);
                 }
               }
-            }, 2000); // Poll every 2 seconds
+            }, 5000); // Poll every 5 seconds
           },
           
           // ========== DELETE ==========
           
           async deleteAccount(account) {
-            if (!confirm(`Delete account ${account.email}? This will mark it as deleted.`)) return;
+            const accountTypeName = this.currentTab === 'students' ? 'student' : 'staff member';
+            const isStudent = this.currentTab === 'students';
+            
+            // Comprehensive warning message
+            const warningMessage = isStudent 
+              ? `⚠️ PERMANENTLY DELETE STUDENT?\n\n` +
+                `Email: ${account.email}\n` +
+                `Name: ${account.firstName} ${account.lastName}\n\n` +
+                `This will PERMANENTLY delete:\n` +
+                `✓ Student account (login access)\n` +
+                `✓ ALL VESPA results\n` +
+                `✓ ALL questionnaires\n` +
+                `✓ Student master records\n` +
+                `✓ All connections to staff\n\n` +
+                `⚠️ THIS CANNOT BE UNDONE ⚠️\n\n` +
+                `Type "DELETE" to confirm:`
+              : `⚠️ PERMANENTLY DELETE STAFF MEMBER?\n\n` +
+                `Email: ${account.email}\n` +
+                `Name: ${account.firstName} ${account.lastName}\n\n` +
+                `This will PERMANENTLY delete:\n` +
+                `✓ Staff account (login access)\n` +
+                `✓ All role assignments\n` +
+                `✓ All connections to students\n\n` +
+                `⚠️ THIS CANNOT BE UNDONE ⚠️\n\n` +
+                `Type "DELETE" to confirm:`;
+            
+            const userConfirmation = prompt(warningMessage);
+            
+            if (userConfirmation !== 'DELETE') {
+              if (userConfirmation !== null) {
+                this.showMessage('Deletion cancelled. Must type "DELETE" exactly.', 'info');
+              }
+              return;
+            }
             
             this.loading = true;
+            this.loadingText = `Permanently deleting ${accountTypeName}...`;
             
             try {
               const response = await fetch(
@@ -1770,7 +2764,10 @@
                   method: 'DELETE',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                    accountType: this.currentTab === 'students' ? 'student' : 'staff'
+                    accountType: this.currentTab === 'students' ? 'student' : 'staff',
+                    emulatedSchoolId: this.isSuperUser && this.selectedSchool?.supabaseUuid
+                      ? this.selectedSchool.supabaseUuid
+                      : this.schoolContext?.schoolId
                   })
                 }
               );
@@ -1778,7 +2775,7 @@
               const data = await response.json();
               
               if (data.success) {
-                this.showMessage('Account deleted successfully!', 'success');
+                this.showMessage(`✅ Account permanently deleted: ${account.email}`, 'success');
                 await this.loadAccounts();
               } else {
                 throw new Error(data.message || 'Delete failed');
@@ -1836,17 +2833,28 @@
             
             <!-- Background Job Tracker (Non-blocking) -->
             <div v-if="activeJobs.length > 0" class="am-job-tracker">
-              <div v-for="job in activeJobs" :key="job.jobId" class="am-job-card">
+              <div v-for="job in activeJobs" :key="job.jobId" class="am-job-card" :class="{ 'am-job-csv': job.type === 'csv-upload' }">
                 <div class="am-job-header">
                   <span class="am-job-title">
-                    {{ job.action === 'add' ? '➕' : '➖' }} {{ job.connectionType }}
+                    <!-- CSV Upload Jobs -->
+                    <template v-if="job.type === 'csv-upload'">
+                      {{ job.action === 'Student Upload' ? '🎓' : '👨‍🏫' }} {{ job.action }}
+                    </template>
+                    <!-- Bulk Operation Jobs -->
+                    <template v-else>
+                      {{ job.action === 'add' ? '➕' : job.action === 'delete' ? '🗑️' : '➖' }} 
+                      {{ job.connectionType || job.accountType || job.type }}
+                    </template>
                   </span>
-                  <span class="am-job-count">{{ job.current }}/{{ job.total }}</span>
+                  <span class="am-job-count">{{ job.current || 0 }}/{{ job.total || 0 }}</span>
                 </div>
                 <div class="am-job-progress-bar">
-                  <div class="am-job-progress-fill" :style="{ width: (job.current / job.total * 100) + '%' }"></div>
+                  <div class="am-job-progress-fill" :style="{ width: ((job.current || 0) / (job.total || 1) * 100) + '%' }"></div>
                 </div>
-                <div class="am-job-status">{{ job.status }}</div>
+                <div class="am-job-status">{{ job.status || 'Processing...' }}</div>
+                <div v-if="job.emailNotification" class="am-job-email-notice">
+                  📧 You'll receive an email when complete
+                </div>
               </div>
             </div>
             
@@ -1865,6 +2873,34 @@
                     🏫 {{ schoolContext.customerName }}
                   </span>
                 </div>
+              </div>
+              
+              <!-- Quick Action Buttons in Header -->
+              <div class="am-header-actions" v-if="(selectedSchool || (!isSuperUser && schoolContext))">
+                <button 
+                  @click="openGroupManagement" 
+                  class="am-button-header"
+                  title="Manage school groups">
+                  ⚙️ Manage Groups
+                </button>
+                <button 
+                  @click="openCSVUploadModal" 
+                  class="am-button-header"
+                  title="Upload staff or students via CSV">
+                  📤 Upload CSV
+                </button>
+                <button 
+                  @click="openManualAddModal" 
+                  class="am-button-header"
+                  title="Add individual account">
+                  ➕ Add Account
+                </button>
+                <button 
+                  @click="openQRGenerationModal" 
+                  class="am-button-header"
+                  title="Generate QR codes for self-registration">
+                  📱 Generate QR
+                </button>
               </div>
             </div>
             
@@ -1911,18 +2947,9 @@
                   </option>
                 </select>
                 
-                <!-- Group Management Button (only when a specific school is selected) -->
-                <button 
-                  v-if="!hasSelectedAccounts && (selectedSchool || (!isSuperUser && schoolContext))"
-                  @click="openGroupManagement" 
-                  class="am-button secondary"
-                  title="Manage school groups">
-                  ⚙️ Manage Groups
-                </button>
-                
                 <!-- Message for super user when no school selected -->
                 <div v-if="!hasSelectedAccounts && isSuperUser && !selectedSchool" style="padding: 10px 16px; background: #fff3cd; border-radius: 8px; color: #856404; font-size: 14px; font-weight: 500;">
-                  ℹ️ Select a school to manage groups
+                  ℹ️ Select a school to use upload features (see blue header above)
                 </div>
                 
                 <!-- Bulk selection info -->
@@ -1989,16 +3016,13 @@
                     </div>
                     
                     <div class="am-dropdown-section">
-                      <div class="am-dropdown-label">📝 Update Actions</div>
-                      <button @click="openBulkGroupUpdate" class="am-dropdown-item">
-                        🏷️ Update Department
-                      </button>
-                    </div>
-                    
-                    <div class="am-dropdown-section">
                       <button @click="executeBulkAction('delete')" class="am-dropdown-item danger">
                         🗑️ Delete Selected
                       </button>
+                    </div>
+                    
+                    <div class="am-dropdown-info" style="padding: 12px 16px; background: #f5f7fa; font-size: 12px; color: #666;">
+                      💡 To manage staff groups, use the 👔 Edit Roles button
                     </div>
                   </div>
                 </div>
@@ -2211,20 +3235,17 @@
                       <!-- Email -->
                       <td class="am-td-email">{{ account.email }}</td>
                       
-                      <!-- Subject/Department -->
+                      <!-- Subject -->
                       <td class="am-td-editable" @dblclick="startEdit(account)">
                         <span v-if="editingAccount?.email !== account.email">
                           {{ account.subject || '-' }}
                         </span>
-                        <select 
+                        <input 
                           v-else 
                           v-model="editForm.subject" 
-                          class="am-select-inline">
-                          <option value="">-</option>
-                          <option v-for="dept in availableStaffGroups" :key="dept" :value="dept">
-                            {{ dept }}
-                          </option>
-                        </select>
+                          placeholder="Subject"
+                          class="am-input-inline"
+                        />
                       </td>
                       
                       <!-- Roles -->
@@ -2239,8 +3260,22 @@
                         </div>
                       </td>
                       
-                      <!-- Group -->
-                      <td>{{ account.tutorGroup || account.department || '-' }}</td>
+                      <!-- Group (editable for tutors/HOYs) -->
+                      <td class="am-td-editable" @dblclick="account.roles?.includes('tutor') || account.roles?.includes('head_of_year') ? startEditStaffGroups(account) : null">
+                        <span v-if="editingAccount?.email !== account.email || (!account.roles?.includes('tutor') && !account.roles?.includes('head_of_year'))">
+                          {{ account.tutorGroup || '-' }}
+                        </span>
+                        <select 
+                          v-else-if="editingAccount?.email === account.email"
+                          v-model="editForm.tutorGroup" 
+                          class="am-select-inline"
+                          @change="quickSaveStaffGroups">
+                          <option value="">-</option>
+                          <option v-for="group in allStudentGroups" :key="group" :value="group">
+                            {{ group }}
+                          </option>
+                        </select>
+                      </td>
                     </template>
                     
                     <!-- Actions -->
@@ -3005,6 +4040,425 @@
               </div>
             </div>
             
+            <!-- CSV Upload Modal -->
+            <div v-if="showCSVUploadModal" class="am-modal-overlay" @click.self="closeCSVUploadModal">
+              <div class="am-modal">
+                <div class="am-modal-header">
+                  <h3>📤 CSV Upload - {{ csvUploadType === 'students' ? 'Students' : 'Staff' }}</h3>
+                  <button @click="closeCSVUploadModal" class="am-modal-close">✖</button>
+                </div>
+                
+                <div class="am-modal-body">
+                  <div class="am-modal-description">
+                    Upload multiple {{ csvUploadType }} accounts via CSV file. The same validation and processing as the main upload system.
+                  </div>
+                  
+                  <!-- Staff-First Advisory (Students Only) -->
+                  <div v-if="csvUploadType === 'students'" style="margin: 20px 0; padding: 16px; background: linear-gradient(135deg, #fff9e6 0%, #fff3cd 100%); border-left: 4px solid #ffc107; border-radius: 8px;">
+                    <div style="display: flex; align-items: flex-start; gap: 12px;">
+                      <div style="font-size: 28px; line-height: 1;">💡</div>
+                      <div style="flex: 1;">
+                        <div style="font-weight: 700; color: #856404; font-size: 15px; margin-bottom: 8px;">📋 Best Practice: Upload Staff First</div>
+                        <div style="color: #856404; font-size: 14px; line-height: 1.6;">
+                          <strong>Recommended workflow:</strong><br>
+                          1️⃣ Upload staff accounts first<br>
+                          2️⃣ Then upload students (connections will work properly)<br><br>
+                          <em style="font-size: 13px;">ℹ️ Students can be uploaded before staff, but you'll need to connect them later using tutor group assignments or the Account Manager.</em>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- File Selection -->
+                  <div style="margin: 20px 0;">
+                    <label style="display: block; margin-bottom: 10px; font-weight: 600;">
+                      Select CSV File:
+                    </label>
+                    <input 
+                      type="file" 
+                      accept=".csv"
+                      @change="handleCSVFileSelect"
+                      style="padding: 10px; border: 1px solid #ddd; border-radius: 6px; width: 100%;" />
+                    
+                    <div v-if="selectedCSVFile" style="margin-top: 10px; padding: 10px; background: #e3f2fd; border-radius: 6px;">
+                      <strong>Selected:</strong> {{ selectedCSVFile.name }} ({{ (selectedCSVFile.size / 1024).toFixed(1) }} KB)
+                    </div>
+                  </div>
+                  
+                  <!-- Validation Results -->
+                  <div v-if="csvValidationResults" style="margin: 20px 0;">
+                    <!-- Success -->
+                    <div v-if="csvValidationResults.success || csvValidationResults.isValid" 
+                      style="padding: 15px; border-radius: 8px; background: #d4edda; border-left: 4px solid #28a745;">
+                      <div style="font-weight: 600; margin-bottom: 8px; color: #155724; font-size: 16px;">
+                        ✅ Validation Passed
+                      </div>
+                      <div style="color: #155724;">
+                        <strong>Total Rows:</strong> {{ csvData?.length || 0 }}
+                      </div>
+                      <div style="margin-top: 8px; padding: 10px; background: rgba(255,255,255,0.7); border-radius: 4px; color: #155724;">
+                        🎉 Your CSV is ready to upload! Click "Upload & Process" below.
+                      </div>
+                    </div>
+                    
+                    <!-- Failure -->
+                    <div v-else style="padding: 15px; border-radius: 8px; background: #f8d7da; border-left: 4px solid #dc3545;">
+                      <div style="font-weight: 600; margin-bottom: 12px; color: #721c24; font-size: 16px;">
+                        ❌ Validation Failed
+                      </div>
+                      <div style="color: #721c24; margin-bottom: 12px;">
+                        <strong>Total Rows:</strong> {{ csvData?.length || 0 }}<br>
+                        <strong>Errors Found:</strong> {{ csvValidationResults.errors?.length || 0 }}
+                      </div>
+                      
+                      <!-- Detailed Error List -->
+                      <div v-if="csvValidationResults.errors && csvValidationResults.errors.length > 0" 
+                        style="max-height: 300px; overflow-y: auto; background: white; padding: 12px; border-radius: 6px; margin-top: 12px;">
+                        <div style="font-weight: 600; margin-bottom: 12px; color: #721c24; border-bottom: 2px solid #dc3545; padding-bottom: 8px;">
+                          📋 Issues Found:
+                        </div>
+                        <div 
+                          v-for="(error, index) in csvValidationResults.errors" 
+                          :key="index"
+                          style="padding: 10px; margin-bottom: 8px; background: #fff3cd; border-left: 3px solid #ffc107; border-radius: 4px;">
+                          <div style="font-weight: 600; color: #856404; margin-bottom: 4px;">
+                            {{ error.row ? 'Row ' + error.row : 'General Error' }}
+                            <span v-if="error.email" style="font-weight: normal;"> - {{ error.email }}</span>
+                          </div>
+                          <div style="color: #721c24; font-size: 14px; line-height: 1.5;">
+                            {{ error.message || error.error || error }}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <!-- Help Text -->
+                      <div style="margin-top: 12px; padding: 12px; background: rgba(255,255,255,0.7); border-radius: 4px; color: #721c24; font-size: 13px;">
+                        <strong>💡 How to fix:</strong><br>
+                        <span v-if="csvUploadType === 'staff'">
+                          • Ensure all rows have: Title, First Name, Last Name, Email Address, Staff Type<br>
+                          • Email addresses must be valid (contain @)<br>
+                          • Staff Type must be: admin, tut, hoy, hod, sub, or gen
+                        </span>
+                        <span v-else>
+                          • Ensure all rows have: Firstname, Lastname, Student Email, Year Gp, Level<br>
+                          • Email addresses must be valid (contain @)<br>
+                          • Year Gp must be 7-13<br>
+                          • Level must be "Level 2" or "Level 3"
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Template Download -->
+                  <div style="margin: 20px 0; padding: 15px; background: #f5f7fa; border-radius: 6px;">
+                    <div style="font-weight: 600; margin-bottom: 8px;">Need a template?</div>
+                    <div style="font-size: 13px; color: #666; margin-bottom: 10px;">
+                      Download the {{ csvUploadType }} CSV template to see the required format.
+                    </div>
+                    <a 
+                      :href="csvUploadType === 'students' 
+                        ? 'data:text/csv;charset=utf-8,UPN,Firstname,Lastname,Student Email,Gender,DOB,Group,Year Gp,Level,Tutors,Head of Year,Subject Teachers\\n' 
+                        : 'data:text/csv;charset=utf-8,Title,First Name,Last Name,Email Address,Staff Type,Year Group,Group,Faculty/Dept,Subject\\n'"
+                      :download="csvUploadType === 'students' ? 'StudentData.csv' : 'staff_template.csv'"
+                      class="am-button secondary">
+                      📥 Download Template
+                    </a>
+                  </div>
+                </div>
+                
+                <div class="am-modal-footer">
+                  <button @click="closeCSVUploadModal" class="am-button secondary">
+                    Cancel
+                  </button>
+                  <button 
+                    v-if="!csvValidationResults"
+                    @click="validateCSV" 
+                    :disabled="!selectedCSVFile || csvUploading"
+                    class="am-button primary">
+                    Validate CSV
+                  </button>
+                  <button 
+                    v-if="csvValidationResults && (csvValidationResults.success || csvValidationResults.isValid)"
+                    @click="submitCSVUpload" 
+                    :disabled="csvUploading"
+                    class="am-button primary">
+                    {{ csvUploading ? 'Uploading...' : 'Upload & Process' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Manual Add Modal -->
+            <div v-if="showManualAddModal" class="am-modal-overlay" @click.self="closeManualAddModal">
+              <div class="am-modal am-modal-large">
+                <div class="am-modal-header" style="background: linear-gradient(135deg, #2a3c7a 0%, #079baa 100%); color: white; padding: 24px; border-radius: 12px 12px 0 0;">
+                  <h3 style="margin: 0; font-size: 24px; display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 32px;">{{ manualAddType === 'students' ? '🎓' : '👨‍🏫' }}</span>
+                    Add {{ manualAddType === 'students' ? 'Student' : 'Staff Member' }}
+                  </h3>
+                  <button @click="closeManualAddModal" class="am-modal-close" style="color: white; font-size: 28px; opacity: 0.9;">✖</button>
+                </div>
+                
+                <div class="am-modal-body" style="padding: 32px; max-height: 70vh; overflow-y: auto;">
+                  <!-- Staff Form -->
+                  <div v-if="manualAddType === 'staff'" style="background: #f8f9fa; padding: 24px; border-radius: 8px;">
+                    <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px;">
+                      <h4 style="margin: 0 0 16px 0; color: #2a3c7a; font-size: 16px; border-bottom: 2px solid #079baa; padding-bottom: 8px;">👤 Personal Information</h4>
+                      <div style="display: grid; grid-template-columns: 100px 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                        <div>
+                          <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">Title *</label>
+                          <input v-model="manualAddForm.title" placeholder="Mr/Ms/Dr" class="am-input-inline" required style="padding: 10px; font-size: 14px;" />
+                        </div>
+                        <div>
+                          <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">First Name *</label>
+                          <input v-model="manualAddForm.firstName" class="am-input-inline" required style="padding: 10px; font-size: 14px;" />
+                        </div>
+                        <div>
+                          <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">Last Name *</label>
+                          <input v-model="manualAddForm.lastName" class="am-input-inline" required style="padding: 10px; font-size: 14px;" />
+                        </div>
+                      </div>
+                      
+                      <div style="margin-bottom: 0;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">Email Address *</label>
+                        <input v-model="manualAddForm.email" type="email" class="am-input-inline" required style="padding: 10px; font-size: 14px;" />
+                      </div>
+                    </div>
+                    
+                    <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px;">
+                      <h4 style="margin: 0 0 16px 0; color: #2a3c7a; font-size: 16px; border-bottom: 2px solid #079baa; padding-bottom: 8px;">👔 Role & Assignment</h4>
+                      <div style="margin-bottom: 16px;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">Staff Type(s) *</label>
+                        <select v-model="manualAddForm.staffTypes" multiple class="am-select-inline" style="height: 140px; padding: 10px; font-size: 14px;">
+                          <option value="admin">👑 Staff Admin</option>
+                          <option value="tut">👨‍🏫 Tutor</option>
+                          <option value="hoy">🎓 Head of Year</option>
+                          <option value="hod">📚 Head of Department</option>
+                          <option value="sub">📖 Subject Teacher</option>
+                          <option value="gen">👤 General Staff</option>
+                        </select>
+                        <small style="color: #666; display: block; margin-top: 6px;">💡 Hold Ctrl/Cmd to select multiple roles</small>
+                      </div>
+                      
+                      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div>
+                          <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">Year Group</label>
+                          <select v-model="manualAddForm.yearGroup" class="am-select-inline" style="padding: 10px; font-size: 14px;">
+                            <option value="">-- Optional --</option>
+                            <option v-for="year in yearGroups" :key="year" :value="year">Year {{ year }}</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">Tutor Group</label>
+                          <select v-model="manualAddForm.group" class="am-select-inline" style="padding: 10px; font-size: 14px;">
+                            <option value="">-- Optional --</option>
+                            <option v-for="group in availableGroups" :key="group" :value="group">{{ group }}</option>
+                          </select>
+                          <small v-if="availableGroups.length === 0" style="color: #dc3545; display: block; margin-top: 4px;">⚠️ No groups available - will be added to school_groups table</small>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                      <h4 style="margin: 0 0 16px 0; color: #2a3c7a; font-size: 16px; border-bottom: 2px solid #079baa; padding-bottom: 8px;">📖 Teaching Details</h4>
+                      <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">Subject</label>
+                        <input v-model="manualAddForm.subject" placeholder="e.g., Physics, Mathematics, English" class="am-input-inline" style="padding: 10px; font-size: 14px;" />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Student Form -->
+                  <div v-if="manualAddType === 'students'" style="background: #f8f9fa; padding: 24px; border-radius: 8px;">
+                    <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px;">
+                      <h4 style="margin: 0 0 16px 0; color: #2a3c7a; font-size: 16px; border-bottom: 2px solid #079baa; padding-bottom: 8px;">👤 Personal Information</h4>
+                      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                        <div>
+                          <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">First Name *</label>
+                          <input v-model="manualAddForm.firstName" class="am-input-inline" required style="padding: 10px; font-size: 14px;" />
+                        </div>
+                        <div>
+                          <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">Last Name *</label>
+                          <input v-model="manualAddForm.lastName" class="am-input-inline" required style="padding: 10px; font-size: 14px;" />
+                        </div>
+                      </div>
+                      
+                      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div>
+                          <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">Email Address *</label>
+                          <input v-model="manualAddForm.email" type="email" class="am-input-inline" required style="padding: 10px; font-size: 14px;" />
+                        </div>
+                        <div>
+                          <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">UPN</label>
+                          <input v-model="manualAddForm.upn" placeholder="Auto-generated if blank" class="am-input-inline" style="padding: 10px; font-size: 14px;" />
+                          <small style="color: #666; display: block; margin-top: 4px;">Leave blank to auto-generate</small>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px;">
+                      <h4 style="margin: 0 0 16px 0; color: #2a3c7a; font-size: 16px; border-bottom: 2px solid #079baa; padding-bottom: 8px;">📚 Academic Details</h4>
+                      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                        <div>
+                          <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">Year Group *</label>
+                          <select v-model="manualAddForm.yearGroup" class="am-select-inline" required style="padding: 10px; font-size: 14px;">
+                            <option value="">-- Select --</option>
+                            <option v-for="year in yearGroups" :key="year" :value="year">Year {{ year }}</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">Level *</label>
+                          <select v-model="manualAddForm.level" class="am-select-inline" required style="padding: 10px; font-size: 14px;">
+                            <option value="">-- Select --</option>
+                            <option value="Level 2">📘 Level 2</option>
+                            <option value="Level 3">📗 Level 3</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">Tutor Group</label>
+                          <select v-model="manualAddForm.group" class="am-select-inline" style="padding: 10px; font-size: 14px;">
+                            <option value="">-- Optional --</option>
+                            <option v-for="group in availableGroups" :key="group" :value="group">{{ group }}</option>
+                          </select>
+                          <small v-if="availableGroups.length === 0" style="color: #dc3545; display: block; margin-top: 4px;">⚠️ Upload CSV first to populate groups</small>
+                        </div>
+                      </div>
+                      
+                      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div>
+                          <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">Gender</label>
+                          <select v-model="manualAddForm.gender" class="am-select-inline" style="padding: 10px; font-size: 14px;">
+                            <option value="">-- Optional --</option>
+                            <option value="Male">👨 Male</option>
+                            <option value="Female">👩 Female</option>
+                            <option value="Non-Binary">⚧ Non-Binary</option>
+                            <option value="Prefer Not to Say">🤐 Prefer Not to Say</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">Date of Birth</label>
+                          <input v-model="manualAddForm.dob" type="date" class="am-input-inline" style="padding: 10px; font-size: 14px;" />
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                      <h4 style="margin: 0 0 16px 0; color: #2a3c7a; font-size: 16px; border-bottom: 2px solid #079baa; padding-bottom: 8px;">🔗 Staff Connections</h4>
+                      <div style="margin-bottom: 16px;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">👨‍🏫 Tutors</label>
+                        <select v-model="manualAddForm.tutors" multiple class="am-select-inline" style="height: 120px; padding: 10px; font-size: 14px;">
+                          <option v-for="tutor in availableStaff.tutors" :key="tutor.email" :value="tutor.email">
+                            {{ tutor.name }} ({{ tutor.email }})
+                          </option>
+                        </select>
+                        <small style="color: #666; display: block; margin-top: 6px;">💡 Hold Ctrl/Cmd to select multiple tutors ({{ availableStaff.tutors.length }} available)</small>
+                      </div>
+                      
+                      <div style="margin-bottom: 16px;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">🎓 Head of Year</label>
+                        <select v-model="manualAddForm.headOfYear" class="am-select-inline" style="padding: 10px; font-size: 14px;">
+                          <option value="">-- Optional --</option>
+                          <option v-for="hoy in availableStaff.headsOfYear" :key="hoy.email" :value="hoy.email">
+                            {{ hoy.name }} ({{ hoy.email }})
+                          </option>
+                        </select>
+                        <small style="color: #666; display: block; margin-top: 4px;">{{ availableStaff.headsOfYear.length }} available</small>
+                      </div>
+                      
+                      <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">📖 Subject Teachers</label>
+                        <select v-model="manualAddForm.subjectTeachers" multiple class="am-select-inline" style="height: 120px; padding: 10px; font-size: 14px;">
+                          <option v-for="teacher in availableStaff.subjectTeachers" :key="teacher.email" :value="teacher.email">
+                            {{ teacher.name }}{{ teacher.subject ? ' - ' + teacher.subject : '' }}
+                          </option>
+                        </select>
+                        <small style="color: #666; display: block; margin-top: 6px;">💡 Hold Ctrl/Cmd to select multiple ({{ availableStaff.subjectTeachers.length }} available)</small>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div style="margin-top: 24px; padding: 16px; background: linear-gradient(135deg, #e3f2fd 0%, #e1f5fe 100%); border-left: 4px solid #2196f3; border-radius: 6px;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                      <span style="font-size: 24px;">🔐</span>
+                      <div>
+                        <div style="font-weight: 600; color: #1976d2; margin-bottom: 4px;">Auto-Generated Password</div>
+                        <div style="font-size: 13px; color: #666;">A secure temporary password will be created and sent via welcome email</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="am-modal-footer" style="background: #f5f7fa; padding: 20px 32px; border-top: 1px solid #e0e0e0;">
+                  <button @click="closeManualAddModal" class="am-button secondary" style="padding: 12px 24px; font-size: 14px;">
+                    Cancel
+                  </button>
+                  <button 
+                    @click="submitManualAdd" 
+                    :disabled="manualAddSubmitting || !canSubmitManualAdd"
+                    class="am-button primary"
+                    style="padding: 12px 32px; font-size: 14px; min-width: 140px;">
+                    {{ manualAddSubmitting ? '⏳ Adding...' : '✓ Add Account' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- QR Generation Modal -->
+            <div v-if="showQRModal" class="am-modal-overlay" @click.self="closeQRModal">
+              <div class="am-modal am-modal-small">
+                <div class="am-modal-header" style="background: linear-gradient(135deg, #2a3c7a 0%, #079baa 100%); color: white; padding: 24px; border-radius: 12px 12px 0 0;">
+                  <h3 style="margin: 0; font-size: 24px; display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 32px;">📱</span>
+                    Generate QR Code
+                  </h3>
+                  <button @click="closeQRModal" class="am-modal-close" style="color: white; font-size: 28px; opacity: 0.9;">✖</button>
+                </div>
+                
+                <div class="am-modal-body" style="padding: 32px;">
+                  <div style="margin-bottom: 24px; text-align: center;">
+                    <div style="font-size: 64px; margin-bottom: 16px;">🎯</div>
+                    <h4 style="font-size: 20px; color: #2a3c7a; margin-bottom: 12px;">Quick QR Generation</h4>
+                    <p style="color: #666; font-size: 15px; line-height: 1.6;">
+                      Generate QR codes for self-registration with default settings.
+                    </p>
+                  </div>
+                  
+                  <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <div style="font-weight: 600; margin-bottom: 12px; color: #333;">School:</div>
+                    <div style="font-size: 18px; color: #2a3c7a; font-weight: 600;">
+                      🏫 {{ isSuperUser && selectedSchool ? selectedSchool.name : schoolContext?.customerName || 'Your School' }}
+                    </div>
+                  </div>
+                  
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <button @click="generateStudentQR(); closeQRModal();" class="am-button primary" style="padding: 20px; font-size: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                      <span style="font-size: 48px;">🎓</span>
+                      <span>Student QR</span>
+                    </button>
+                    <button @click="generateStaffQR(); closeQRModal();" class="am-button primary" style="padding: 20px; font-size: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                      <span style="font-size: 48px;">👥</span>
+                      <span>Staff QR</span>
+                    </button>
+                  </div>
+                  
+                  <div style="margin-top: 24px; padding: 16px; background: #e3f2fd; border-radius: 6px; border-left: 4px solid #2196f3; font-size: 13px; text-align: left;">
+                    <div style="font-weight: 600; color: #1976d2; margin-bottom: 6px;">Default Settings:</div>
+                    <ul style="margin: 6px 0 0 20px; padding: 0; color: #666;">
+                      <li>Valid for 365 days (students) / 30 days (staff)</li>
+                      <li>School email required</li>
+                      <li>Auto-approve enabled</li>
+                    </ul>
+                  </div>
+                </div>
+                
+                <div class="am-modal-footer" style="background: #f5f7fa; padding: 20px 32px;">
+                  <button @click="closeQRModal" class="am-button secondary">
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+            
             <!-- Empty State -->
             <div v-if="accounts.length === 0 && !loading" class="am-empty-state">
               <span class="am-icon-large">🔍</span>
@@ -3163,6 +4617,38 @@
         .am-badge.school {
           background: linear-gradient(135deg, #079baa, #00e5db);
           color: white;
+        }
+        
+        /* Header Action Buttons */
+        .am-header-actions {
+          display: flex;
+          gap: 12px;
+          align-items: center;
+        }
+        
+        .am-button-header {
+          padding: 12px 20px;
+          background: rgba(255, 255, 255, 0.15);
+          border: 2px solid rgba(255, 255, 255, 0.3);
+          border-radius: 8px;
+          color: white;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          backdrop-filter: blur(10px);
+          white-space: nowrap;
+        }
+        
+        .am-button-header:hover {
+          background: rgba(255, 255, 255, 0.25);
+          border-color: rgba(255, 255, 255, 0.5);
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        .am-button-header:active {
+          transform: translateY(0);
         }
         
         /* ========== Messages ========== */
@@ -3693,6 +5179,10 @@
           max-width: 500px;
         }
         
+        .am-modal-large {
+          max-width: 900px;
+        }
+        
         .am-modal-description {
           color: #666;
           margin-bottom: 24px;
@@ -3975,6 +5465,22 @@
           white-space: nowrap;
         }
         
+        .am-job-email-notice {
+          font-size: 11px;
+          color: #079baa;
+          margin-top: 8px;
+          padding: 6px 8px;
+          background: rgba(7, 155, 170, 0.1);
+          border-radius: 4px;
+          font-weight: 600;
+          text-align: center;
+        }
+        
+        .am-job-csv {
+          border-left: 4px solid #ffc107;
+          background: linear-gradient(135deg, #fffbf0 0%, #fff8e1 100%);
+        }
+        
         /* ========== Responsive Design ========== */
         @media (max-width: 1200px) {
           .am-table {
@@ -4000,6 +5506,17 @@
           
           .am-header h1 {
             font-size: 24px;
+          }
+          
+          .am-header-actions {
+            flex-direction: column;
+            width: 100%;
+            gap: 8px;
+          }
+          
+          .am-button-header {
+            width: 100%;
+            justify-content: center;
           }
           
           .am-toolbar {
