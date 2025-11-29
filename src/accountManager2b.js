@@ -1581,12 +1581,17 @@
                 this.csvJobId = data.jobId;
                 this.showMessage(`Upload queued successfully! Job ID: ${data.jobId}. You'll receive an email when complete.`, 'success');
                 
-                // Add to active jobs for tracking
+                // Add to active jobs for tracking (CSV uploads have email notification)
                 this.activeJobs.push({
                   jobId: data.jobId,
-                  type: this.csvUploadType === 'students' ? 'Student Upload' : 'Staff Upload',
+                  type: 'csv-upload', // Special type for CSV uploads
+                  action: this.csvUploadType === 'students' ? 'Student Upload' : 'Staff Upload',
                   total: this.csvData.length,
-                  description: `${this.csvUploadType === 'students' ? 'Student' : 'Staff'} CSV Upload`
+                  current: 0,
+                  status: 'Queued - Processing in background...',
+                  description: `${this.csvUploadType === 'students' ? 'Student' : 'Staff'} CSV Upload`,
+                  startTime: Date.now(),
+                  emailNotification: true // Flag to show email notification message
                 });
                 
                 // Start polling if not already running
@@ -2609,6 +2614,37 @@
                 const job = this.activeJobs[i];
                 
                 try {
+                  // CSV uploads (staff/student) use different queues without status endpoint
+                  if (job.type === 'csv-upload') {
+                    // Update status based on elapsed time
+                    const elapsed = Math.floor((Date.now() - job.startTime) / 1000);
+                    const minutes = Math.floor(elapsed / 60);
+                    const seconds = elapsed % 60;
+                    
+                    if (elapsed < 30) {
+                      job.status = `Processing ${job.total} records... (${seconds}s elapsed)`;
+                      job.current = Math.min(Math.floor((elapsed / 30) * job.total), job.total - 1);
+                    } else if (elapsed < 120) {
+                      job.status = `Still processing... (${minutes}m ${seconds}s elapsed)`;
+                      job.current = Math.min(Math.floor((elapsed / 120) * job.total), job.total - 1);
+                    } else {
+                      // After 2 minutes, assume complete
+                      job.status = 'Completed - Check your email for results';
+                      job.current = job.total;
+                      
+                      // Auto-remove after showing "completed" for 10 seconds
+                      setTimeout(() => {
+                        const idx = this.activeJobs.indexOf(job);
+                        if (idx > -1) {
+                          this.activeJobs.splice(idx, 1);
+                          this.showMessage('✅ CSV upload processed. Refresh the page to see new accounts.', 'success');
+                        }
+                      }, 10000);
+                    }
+                    continue;
+                  }
+                  
+                  // Bulk operations (connection updates, role assignments) have status endpoint
                   const response = await fetch(
                     `${this.apiUrl}/api/v3/bulk/status/${job.jobId}`,
                     { headers: { 'Content-Type': 'application/json' } }
@@ -2627,7 +2663,7 @@
                     if (data.completed) {
                       const result = data.result || {};
                       this.showMessage(
-                        `✅ Bulk ${job.action} completed: ${result.successful || 0} success, ${result.failed || 0} failed`,
+                        `✅ ${job.type} completed: ${result.successful || 0} success, ${result.failed || 0} failed`,
                         result.failed === 0 ? 'success' : 'warning'
                       );
                       
@@ -2639,7 +2675,7 @@
                       
                     } else if (data.failed) {
                       this.showMessage(
-                        `❌ Bulk ${job.action} failed: ${data.failedReason || 'Unknown error'}`,
+                        `❌ ${job.type} failed: ${data.failedReason || 'Unknown error'}`,
                         'error'
                       );
                       this.activeJobs.splice(i, 1);
@@ -2649,7 +2685,7 @@
                   console.error('Job polling error:', error);
                 }
               }
-            }, 5000); // Poll every 5 seconds (reduced from 2s to avoid rate limiting)
+            }, 5000); // Poll every 5 seconds
           },
           
           // ========== DELETE ==========
@@ -2769,17 +2805,28 @@
             
             <!-- Background Job Tracker (Non-blocking) -->
             <div v-if="activeJobs.length > 0" class="am-job-tracker">
-              <div v-for="job in activeJobs" :key="job.jobId" class="am-job-card">
+              <div v-for="job in activeJobs" :key="job.jobId" class="am-job-card" :class="{ 'am-job-csv': job.type === 'csv-upload' }">
                 <div class="am-job-header">
                   <span class="am-job-title">
-                    {{ job.action === 'add' ? '➕' : '➖' }} {{ job.connectionType }}
+                    <!-- CSV Upload Jobs -->
+                    <template v-if="job.type === 'csv-upload'">
+                      {{ job.action === 'Student Upload' ? '🎓' : '👨‍🏫' }} {{ job.action }}
+                    </template>
+                    <!-- Bulk Operation Jobs -->
+                    <template v-else>
+                      {{ job.action === 'add' ? '➕' : job.action === 'delete' ? '🗑️' : '➖' }} 
+                      {{ job.connectionType || job.accountType || job.type }}
+                    </template>
                   </span>
-                  <span class="am-job-count">{{ job.current }}/{{ job.total }}</span>
+                  <span class="am-job-count">{{ job.current || 0 }}/{{ job.total || 0 }}</span>
                 </div>
                 <div class="am-job-progress-bar">
-                  <div class="am-job-progress-fill" :style="{ width: (job.current / job.total * 100) + '%' }"></div>
+                  <div class="am-job-progress-fill" :style="{ width: ((job.current || 0) / (job.total || 1) * 100) + '%' }"></div>
                 </div>
-                <div class="am-job-status">{{ job.status }}</div>
+                <div class="am-job-status">{{ job.status || 'Processing...' }}</div>
+                <div v-if="job.emailNotification" class="am-job-email-notice">
+                  📧 You'll receive an email when complete
+                </div>
               </div>
             </div>
             
@@ -5388,6 +5435,22 @@
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+        
+        .am-job-email-notice {
+          font-size: 11px;
+          color: #079baa;
+          margin-top: 8px;
+          padding: 6px 8px;
+          background: rgba(7, 155, 170, 0.1);
+          border-radius: 4px;
+          font-weight: 600;
+          text-align: center;
+        }
+        
+        .am-job-csv {
+          border-left: 4px solid #ffc107;
+          background: linear-gradient(135deg, #fffbf0 0%, #fff8e1 100%);
         }
         
         /* ========== Responsive Design ========== */
