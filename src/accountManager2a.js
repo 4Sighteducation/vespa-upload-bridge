@@ -2170,12 +2170,53 @@
             }
             
             const count = this.selectedAccounts.length;
+            const accountTypeName = this.currentTab === 'students' ? 'student' : 'staff';
+            const isDelete = action === 'delete';
+            
+            // Enhanced confirmation for delete
+            if (isDelete) {
+              const warningMessage = this.currentTab === 'students'
+                ? `⚠️ PERMANENTLY DELETE ${count} STUDENTS?\n\n` +
+                  `This will PERMANENTLY delete:\n` +
+                  `• ${count} student accounts (login access)\n` +
+                  `• ALL VESPA results (Object_10/vespa_results)\n` +
+                  `• ALL questionnaires (Object_29/vespa_questionnaires)\n` +
+                  `• Student master records (Object_6/vespa_students)\n` +
+                  `• Supabase and Knack records\n\n` +
+                  `⚠️ THIS CANNOT BE UNDONE ⚠️\n\n` +
+                  `Type "DELETE ${count} STUDENTS" to confirm:`
+                : `⚠️ PERMANENTLY DELETE ${count} STAFF MEMBERS?\n\n` +
+                  `This will PERMANENTLY delete:\n` +
+                  `• ${count} staff accounts (login access)\n` +
+                  `• All role assignments\n` +
+                  `• All student connections\n` +
+                  `• Supabase and Knack records\n\n` +
+                  `⚠️ THIS CANNOT BE UNDONE ⚠️\n\n` +
+                  `Type "DELETE ${count} STAFF" to confirm:`;
+              
+              const expectedConfirmation = this.currentTab === 'students' 
+                ? `DELETE ${count} STUDENTS`
+                : `DELETE ${count} STAFF`;
+              
+              const userConfirmation = prompt(warningMessage);
+              
+              if (userConfirmation !== expectedConfirmation) {
+                if (userConfirmation !== null) {
+                  this.showMessage(`Deletion cancelled. Must type "${expectedConfirmation}" exactly.`, 'info');
+                }
+                return;
+              }
+              
+              // Use background queue for bulk delete
+              await this.executeBulkDelete();
+              return;
+            }
+            
+            // Non-delete actions (reset-password, resend-welcome)
             const confirmMessage = action === 'reset-password'
               ? `Send password reset emails to ${count} account(s)?`
               : action === 'resend-welcome'
               ? `Resend welcome emails to ${count} account(s)?`
-              : action === 'delete'
-              ? `Delete ${count} account(s)? This cannot be undone.`
               : `Execute action on ${count} account(s)?`;
             
             if (!confirm(confirmMessage)) return;
@@ -2201,8 +2242,6 @@
                     await this.resetPassword(account);
                   } else if (action === 'resend-welcome') {
                     await this.resendWelcome(account);
-                  } else if (action === 'delete') {
-                    await this.deleteAccount(account);
                   }
                   successCount++;
                 } catch (err) {
@@ -2235,6 +2274,70 @@
               this.bulkOperationInProgress = false;
               this.bulkProgress = { current: 0, total: 0, status: '' };
               this.showBulkMenu = false;
+            }
+          },
+          
+          // NEW: Execute bulk delete via background queue
+          async executeBulkDelete() {
+            const count = this.selectedAccounts.length;
+            
+            try {
+              const emulatedSchoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
+                ? this.selectedSchool.supabaseUuid
+                : this.schoolContext?.schoolId || null;
+              
+              // Submit to background queue
+              const response = await fetch(
+                `${this.apiUrl}/api/v3/accounts/bulk-delete`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    emails: this.selectedAccounts,
+                    accountType: this.currentTab === 'students' ? 'student' : 'staff',
+                    emulatedSchoolId: emulatedSchoolId,
+                    userEmail: this.userEmail
+                  })
+                }
+              );
+              
+              const data = await response.json();
+              
+              if (data.success) {
+                // Add to active jobs for tracking
+                this.activeJobs.push({
+                  jobId: data.jobId,
+                  type: 'bulk-delete',
+                  action: 'delete',
+                  accountType: this.currentTab === 'students' ? 'Students' : 'Staff',
+                  total: count,
+                  current: 0,
+                  status: 'Queued...',
+                  startTime: Date.now()
+                });
+                
+                this.showMessage(
+                  `🗑️ Bulk deletion queued! Processing ${count} ${this.currentTab} in background...`,
+                  'success'
+                );
+                
+                // Start polling if not already running
+                if (!this.jobPollingInterval) {
+                  this.startJobPolling();
+                }
+                
+                // Clear selection
+                this.selectedAccounts = [];
+                this.allSelected = false;
+                this.showBulkMenu = false;
+                
+              } else {
+                throw new Error(data.message || 'Failed to submit bulk deletion');
+              }
+              
+            } catch (error) {
+              console.error('Bulk deletion submission error:', error);
+              this.showMessage('Failed to submit bulk deletion: ' + error.message, 'error');
             }
           },
           
@@ -2553,9 +2656,44 @@
           // ========== DELETE ==========
           
           async deleteAccount(account) {
-            if (!confirm(`Delete account ${account.email}? This will mark it as deleted.`)) return;
+            const accountTypeName = this.currentTab === 'students' ? 'student' : 'staff member';
+            const isStudent = this.currentTab === 'students';
+            
+            // Comprehensive warning message
+            const warningMessage = isStudent 
+              ? `⚠️ PERMANENTLY DELETE STUDENT?\n\n` +
+                `Email: ${account.email}\n` +
+                `Name: ${account.firstName} ${account.lastName}\n\n` +
+                `This will PERMANENTLY delete:\n` +
+                `✓ Student account (login access)\n` +
+                `✓ ALL VESPA results (Object_10/vespa_results)\n` +
+                `✓ ALL questionnaires (Object_29/vespa_questionnaires)\n` +
+                `✓ Student master record (Object_6/vespa_students)\n` +
+                `✓ Supabase and Knack records\n\n` +
+                `⚠️ THIS CANNOT BE UNDONE ⚠️\n\n` +
+                `Type "DELETE" to confirm:`
+              : `⚠️ PERMANENTLY DELETE STAFF MEMBER?\n\n` +
+                `Email: ${account.email}\n` +
+                `Name: ${account.firstName} ${account.lastName}\n\n` +
+                `This will PERMANENTLY delete:\n` +
+                `✓ Staff account (login access)\n` +
+                `✓ All role assignments\n` +
+                `✓ Connections to students\n` +
+                `✓ Supabase and Knack records\n\n` +
+                `⚠️ THIS CANNOT BE UNDONE ⚠️\n\n` +
+                `Type "DELETE" to confirm:`;
+            
+            const userConfirmation = prompt(warningMessage);
+            
+            if (userConfirmation !== 'DELETE') {
+              if (userConfirmation !== null) {
+                this.showMessage('Deletion cancelled. Must type "DELETE" exactly.', 'info');
+              }
+              return;
+            }
             
             this.loading = true;
+            this.loadingText = `Permanently deleting ${accountTypeName}...`;
             
             try {
               const response = await fetch(
@@ -2564,7 +2702,10 @@
                   method: 'DELETE',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                    accountType: this.currentTab === 'students' ? 'student' : 'staff'
+                    accountType: this.currentTab === 'students' ? 'student' : 'staff',
+                    emulatedSchoolId: this.isSuperUser && this.selectedSchool?.supabaseUuid
+                      ? this.selectedSchool.supabaseUuid
+                      : this.schoolContext?.schoolId
                   })
                 }
               );
@@ -2572,7 +2713,7 @@
               const data = await response.json();
               
               if (data.success) {
-                this.showMessage('Account deleted successfully!', 'success');
+                this.showMessage(`✅ Account permanently deleted: ${account.email}`, 'success');
                 await this.loadAccounts();
               } else {
                 throw new Error(data.message || 'Delete failed');
