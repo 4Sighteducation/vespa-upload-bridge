@@ -221,12 +221,39 @@
             
             // Add New School Form
             newSchoolForm: {
+              // Core (REQUIRED)
               name: '',
-              knackId: '', // Optional - if migrating existing Knack school
-              trustId: null, // Optional - link to trust
+              primaryContactName: '',
+              primaryContactEmail: '',
+              accountType: 'Coaching Portal', // Coaching Portal, Resource Portal, Staff/Student Training
+              orderDate: '', // Start date
+              
+              // Auto-calculated
+              renewalDate: '', // Will be orderDate + 1 year (auto-filled)
+              
+              // Optional - Contact Details
+              financeContactName: '',
+              financeContactEmail: '',
+              address: '',
+              phoneNumber: '',
+              centreNumber: '',
+              
+              // Optional - Configuration
+              studentAccountsLimit: 0,
+              staffAccountsLimit: 0,
+              logoUrl: '',
+              trustName: '',
+              
+              // Optional - Settings (Booleans)
               isAustralian: false,
-              status: 'active', // active, inactive, archived
-              useStandardYear: true
+              status: 'active',
+              useStandardYear: true,
+              
+              // Optional - Add-ons (Multiple checkboxes)
+              addons: [], // ['Staff Training', 'Student Training', 'Deep Dive Analysis', 'Support']
+              
+              // Migration mode
+              knackId: '' // Optional - for linking existing Knack schools
             },
             addingSchool: false,
             availableTrusts: [], // For trust dropdown
@@ -256,6 +283,29 @@
               return form.title && form.firstName && form.lastName && form.email && form.staffTypes.length > 0;
             } else {
               return form.firstName && form.lastName && form.email && form.yearGroup && form.level;
+            }
+          },
+          
+          canSubmitNewSchool() {
+            const form = this.newSchoolForm;
+            // Required: name, primary contact details, account type, order date
+            return form.name && form.primaryContactName && form.primaryContactEmail && 
+                   form.accountType && form.orderDate;
+          }
+        },
+        
+        watch: {
+          // Auto-calculate renewal date when order date changes
+          'newSchoolForm.orderDate'(newDate) {
+            if (newDate) {
+              const orderDate = new Date(newDate);
+              const renewalDate = new Date(orderDate);
+              renewalDate.setFullYear(renewalDate.getFullYear() + 1); // +1 year
+              this.newSchoolForm.renewalDate = renewalDate.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+              debugLog('Auto-calculated renewal date', { 
+                orderDate: newDate, 
+                renewalDate: this.newSchoolForm.renewalDate 
+              });
             }
           }
         },
@@ -1906,14 +1956,7 @@
           
           async openAddSchoolModal() {
             this.showAddSchoolModal = true;
-            this.newSchoolForm = {
-              name: '',
-              knackId: '',
-              trustId: null,
-              isAustralian: false,
-              status: 'active',
-              useStandardYear: true
-            };
+            this.resetSchoolForm();
             
             // Load trusts for dropdown (if needed)
             await this.loadAvailableTrusts();
@@ -1921,13 +1964,42 @@
           
           closeAddSchoolModal() {
             this.showAddSchoolModal = false;
+            this.resetSchoolForm();
+          },
+          
+          resetSchoolForm() {
             this.newSchoolForm = {
+              // Core (REQUIRED)
               name: '',
-              knackId: '',
-              trustId: null,
+              primaryContactName: '',
+              primaryContactEmail: '',
+              accountType: 'Coaching Portal',
+              orderDate: '',
+              renewalDate: '',
+              
+              // Optional - Contact Details
+              financeContactName: '',
+              financeContactEmail: '',
+              address: '',
+              phoneNumber: '',
+              centreNumber: '',
+              
+              // Optional - Configuration
+              studentAccountsLimit: 0,
+              staffAccountsLimit: 0,
+              logoUrl: '',
+              trustName: '',
+              
+              // Optional - Settings
               isAustralian: false,
               status: 'active',
-              useStandardYear: true
+              useStandardYear: true,
+              
+              // Optional - Add-ons
+              addons: [],
+              
+              // Migration mode
+              knackId: ''
             };
           },
           
@@ -2008,8 +2080,25 @@
           
           // Add new school to BOTH Knack and Supabase (dual write)
           async addNewSchool() {
+            // Validate required fields
             if (!this.newSchoolForm.name.trim()) {
               this.showMessage('School name is required', 'warning');
+              return;
+            }
+            if (!this.newSchoolForm.primaryContactName.trim()) {
+              this.showMessage('Primary contact name is required', 'warning');
+              return;
+            }
+            if (!this.newSchoolForm.primaryContactEmail.trim()) {
+              this.showMessage('Primary contact email is required', 'warning');
+              return;
+            }
+            if (!this.newSchoolForm.accountType) {
+              this.showMessage('Account type is required', 'warning');
+              return;
+            }
+            if (!this.newSchoolForm.orderDate) {
+              this.showMessage('Order date is required', 'warning');
               return;
             }
             
@@ -2027,19 +2116,43 @@
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                    // Core fields
+                    // Core fields (REQUIRED)
                     name: this.newSchoolForm.name.trim(),
-                    knackId: this.newSchoolForm.knackId.trim() || null, // For migration/linking
+                    primaryContactName: this.newSchoolForm.primaryContactName.trim(),
+                    primaryContactEmail: this.newSchoolForm.primaryContactEmail.trim(),
+                    accountType: this.newSchoolForm.accountType,
+                    orderDate: this.newSchoolForm.orderDate,
+                    renewalDate: this.newSchoolForm.renewalDate, // Auto-calculated
                     
-                    // Optional fields (match establishments table schema)
+                    // Contact details
+                    financeContactName: this.newSchoolForm.financeContactName.trim() || null,
+                    financeContactEmail: this.newSchoolForm.financeContactEmail.trim() || null,
+                    address: this.newSchoolForm.address.trim() || null,
+                    phoneNumber: this.newSchoolForm.phoneNumber.trim() || null,
+                    centreNumber: this.newSchoolForm.centreNumber.trim() || null,
+                    
+                    // Configuration
+                    studentAccountsLimit: parseInt(this.newSchoolForm.studentAccountsLimit) || 0,
+                    staffAccountsLimit: parseInt(this.newSchoolForm.staffAccountsLimit) || 0,
+                    logoUrl: this.newSchoolForm.logoUrl.trim() || null,
+                    trustName: this.newSchoolForm.trustName.trim() || null,
+                    
+                    // Settings
                     trustId: this.newSchoolForm.trustId || null,
                     isAustralian: this.newSchoolForm.isAustralian || false,
                     status: this.newSchoolForm.status || 'active',
-                    useStandardYear: this.newSchoolForm.useStandardYear !== false, // Default true
+                    useStandardYear: this.newSchoolForm.useStandardYear !== false,
+                    
+                    // Add-ons
+                    addons: this.newSchoolForm.addons || [],
+                    
+                    // Migration/linking
+                    knackId: this.newSchoolForm.knackId.trim() || null,
                     
                     // Meta
                     userEmail: this.userEmail,
-                    dualWrite: true // Write to BOTH systems
+                    dualWrite: true, // Write to BOTH systems
+                    createStaffAdmin: true // Auto-create Staff Admin account for primary contact
                   })
                 }
               );
@@ -2047,10 +2160,12 @@
               const data = await response.json();
               
               if (data.success) {
-                this.showMessage(
-                  `✅ ${this.newSchoolForm.name} created successfully in both Knack and Supabase!`,
-                  'success'
-                );
+                let message = `✅ ${this.newSchoolForm.name} created successfully!`;
+                if (data.staffAdminCreated) {
+                  message += ` Staff Admin account created for ${this.newSchoolForm.primaryContactEmail}.`;
+                }
+                
+                this.showMessage(message, 'success');
                 
                 // Close modal and refresh
                 this.closeAddSchoolModal();
@@ -4948,89 +5063,294 @@
             
             <!-- Add New School Modal -->
             <div v-if="showAddSchoolModal" class="am-modal-overlay" @click.self="closeAddSchoolModal">
-              <div class="am-modal am-modal-small">
+              <div class="am-modal am-modal-large">
                 <div class="am-modal-header" style="background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%); color: white; padding: 24px; border-radius: 12px 12px 0 0;">
                   <h3 style="margin: 0; font-size: 24px; display: flex; align-items: center; gap: 12px;">
-                    <span style="font-size: 32px;">➕</span>
-                    Add New School
+                    <span style="font-size: 32px;">🏫</span>
+                    Add New Establishment
                   </h3>
                   <button @click="closeAddSchoolModal" class="am-modal-close" style="color: white; font-size: 28px; opacity: 0.9;">✖</button>
                 </div>
                 
-                <div class="am-modal-body" style="padding: 32px;">
+                <div class="am-modal-body" style="padding: 32px; max-height: 75vh; overflow-y: auto;">
                   <!-- Dual Write Banner -->
                   <div style="background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); padding: 16px; border-radius: 8px; border-left: 4px solid #4caf50; margin-bottom: 24px;">
                     <div style="display: flex; align-items: center; gap: 12px;">
                       <span style="font-size: 28px;">✅</span>
-                      <div>
-                        <div style="font-weight: 700; color: #2e7d32; margin-bottom: 4px;">Dual Write Mode</div>
+                      <div style="flex: 1;">
+                        <div style="font-weight: 700; color: #2e7d32; margin-bottom: 4px;">Dual Write + Staff Admin Creation</div>
                         <div style="font-size: 13px; color: #1b5e20; line-height: 1.5;">
-                          This will create the school in <strong>both Knack and Supabase</strong> simultaneously.
-                          Perfect for new schools or crossover migrations!
+                          Creates school in <strong>both Knack and Supabase</strong>, plus auto-creates a Staff Admin account for the primary contact.
                         </div>
                       </div>
                     </div>
                   </div>
                   
-                  <!-- School Form -->
-                  <div class="am-form-group">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
-                      School Name <span style="color: #dc3545;">*</span>
-                    </label>
-                    <input 
-                      v-model="newSchoolForm.name"
-                      @keyup.enter="addNewSchool"
-                      placeholder="e.g., Kendal College"
-                      class="am-input-inline"
-                      style="width: 100%; padding: 12px; font-size: 14px;"
-                      required />
-                  </div>
-                  
-                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
-                    <div class="am-form-group">
+                  <!-- SECTION 1: Establishment Details -->
+                  <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 16px 0; color: #2a3c7a; font-size: 16px; border-bottom: 2px solid #079baa; padding-bottom: 8px;">🏫 Establishment Details</h4>
+                    
+                    <div class="am-form-group" style="margin-bottom: 16px;">
                       <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
-                        Trust (Optional)
+                        School Name <span style="color: #dc3545;">*</span>
                       </label>
-                      <select 
-                        v-model="newSchoolForm.trustId"
-                        class="am-select-inline"
-                        style="width: 100%; padding: 12px; font-size: 14px;">
-                        <option :value="null">-- No Trust --</option>
-                        <option v-for="trust in availableTrusts" :key="trust.id" :value="trust.id">
-                          {{ trust.name }}
-                        </option>
-                      </select>
+                      <input 
+                        v-model="newSchoolForm.name"
+                        placeholder="e.g., Kendal College"
+                        class="am-input-inline"
+                        style="width: 100%; padding: 12px; font-size: 14px;"
+                        required />
                     </div>
                     
-                    <div class="am-form-group">
-                      <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
-                        Status
-                      </label>
-                      <select 
-                        v-model="newSchoolForm.status"
-                        class="am-select-inline"
-                        style="width: 100%; padding: 12px; font-size: 14px;">
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                        <option value="archived">Archived</option>
-                      </select>
+                    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                      <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                          Address
+                        </label>
+                        <input 
+                          v-model="newSchoolForm.address"
+                          placeholder="School address"
+                          class="am-input-inline"
+                          style="width: 100%; padding: 12px; font-size: 14px;" />
+                      </div>
+                      <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                          Phone
+                        </label>
+                        <input 
+                          v-model="newSchoolForm.phoneNumber"
+                          placeholder="01234 567890"
+                          class="am-input-inline"
+                          style="width: 100%; padding: 12px; font-size: 14px;" />
+                      </div>
+                      <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                          Centre Number
+                        </label>
+                        <input 
+                          v-model="newSchoolForm.centreNumber"
+                          placeholder="e.g., 12345"
+                          class="am-input-inline"
+                          style="width: 100%; padding: 12px; font-size: 14px;" />
+                      </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                      <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                          Trust Name
+                        </label>
+                        <input 
+                          v-model="newSchoolForm.trustName"
+                          placeholder="Optional"
+                          class="am-input-inline"
+                          style="width: 100%; padding: 12px; font-size: 14px;" />
+                      </div>
+                      <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                          Logo URL
+                        </label>
+                        <input 
+                          v-model="newSchoolForm.logoUrl"
+                          placeholder="https://..."
+                          class="am-input-inline"
+                          style="width: 100%; padding: 12px; font-size: 14px;" />
+                      </div>
                     </div>
                   </div>
                   
-                  <!-- Additional Options -->
-                  <div style="background: #f5f7fa; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
-                    <div style="font-weight: 600; margin-bottom: 12px; font-size: 14px; color: #333;">
-                      Settings:
+                  <!-- SECTION 2: Primary Contact (Will become Staff Admin) -->
+                  <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px; border-left: 4px solid #4caf50;">
+                    <h4 style="margin: 0 0 8px 0; color: #2a3c7a; font-size: 16px; display: flex; align-items: center; gap: 8px;">
+                      👤 Primary Contact
+                      <span style="background: #4caf50; color: white; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase;">Staff Admin Account</span>
+                    </h4>
+                    <p style="margin: 0 0 16px 0; font-size: 13px; color: #666;">
+                      A Staff Admin account will be created for this person in both Knack and Supabase
+                    </p>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 16px;">
+                      <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                          Name <span style="color: #dc3545;">*</span>
+                        </label>
+                        <input 
+                          v-model="newSchoolForm.primaryContactName"
+                          placeholder="e.g., John Smith"
+                          class="am-input-inline"
+                          style="width: 100%; padding: 12px; font-size: 14px;"
+                          required />
+                      </div>
+                      <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                          Email Address <span style="color: #dc3545;">*</span>
+                        </label>
+                        <input 
+                          v-model="newSchoolForm.primaryContactEmail"
+                          type="email"
+                          placeholder="admin@school.ac.uk"
+                          class="am-input-inline"
+                          style="width: 100%; padding: 12px; font-size: 14px;"
+                          required />
+                      </div>
                     </div>
-                    <div style="display: flex; flex-direction: column; gap: 12px;">
-                      <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                        <input type="checkbox" v-model="newSchoolForm.isAustralian" class="am-checkbox" />
-                        <span style="font-size: 14px;">Australian School</span>
+                  </div>
+                  
+                  <!-- SECTION 3: Finance Contact (Optional) -->
+                  <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 16px 0; color: #2a3c7a; font-size: 16px; border-bottom: 2px solid #079baa; padding-bottom: 8px;">💼 Finance Contact (Optional)</h4>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 16px;">
+                      <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                          Name
+                        </label>
+                        <input 
+                          v-model="newSchoolForm.financeContactName"
+                          placeholder="Optional"
+                          class="am-input-inline"
+                          style="width: 100%; padding: 12px; font-size: 14px;" />
+                      </div>
+                      <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                          Email Address
+                        </label>
+                        <input 
+                          v-model="newSchoolForm.financeContactEmail"
+                          type="email"
+                          placeholder="finance@school.ac.uk"
+                          class="am-input-inline"
+                          style="width: 100%; padding: 12px; font-size: 14px;" />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- SECTION 4: Account Configuration -->
+                  <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 16px 0; color: #2a3c7a; font-size: 16px; border-bottom: 2px solid #079baa; padding-bottom: 8px;">⚙️ Account Configuration</h4>
+                    
+                    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                      <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                          Account Type <span style="color: #dc3545;">*</span>
+                        </label>
+                        <select 
+                          v-model="newSchoolForm.accountType"
+                          class="am-select-inline"
+                          style="width: 100%; padding: 12px; font-size: 14px;"
+                          required>
+                          <option value="Coaching Portal">🎓 Coaching Portal</option>
+                          <option value="Resource Portal">📚 Resource Portal</option>
+                          <option value="Staff/Student Training">👨‍🏫 Staff/Student Training</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                          Order Date <span style="color: #dc3545;">*</span>
+                        </label>
+                        <input 
+                          v-model="newSchoolForm.orderDate"
+                          type="date"
+                          class="am-input-inline"
+                          style="width: 100%; padding: 12px; font-size: 14px;"
+                          required />
+                      </div>
+                      <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                          Renewal Date
+                          <span v-if="newSchoolForm.renewalDate" style="color: #4caf50; font-weight: 700; margin-left: 4px;">✓</span>
+                        </label>
+                        <input 
+                          v-model="newSchoolForm.renewalDate"
+                          type="date"
+                          class="am-input-inline"
+                          style="width: 100%; padding: 12px; font-size: 14px; background: #f5f7fa;"
+                          readonly
+                          placeholder="Auto-calculated" />
+                        <small v-if="newSchoolForm.orderDate && newSchoolForm.renewalDate" style="display: block; margin-top: 4px; color: #4caf50; font-weight: 600;">
+                          +1 year from order date
+                        </small>
+                      </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                      <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                          Student Account Limit
+                        </label>
+                        <input 
+                          v-model.number="newSchoolForm.studentAccountsLimit"
+                          type="number"
+                          min="0"
+                          placeholder="0 = unlimited"
+                          class="am-input-inline"
+                          style="width: 100%; padding: 12px; font-size: 14px;" />
+                      </div>
+                      <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                          Staff Account Limit
+                        </label>
+                        <input 
+                          v-model.number="newSchoolForm.staffAccountsLimit"
+                          type="number"
+                          min="0"
+                          placeholder="0 = unlimited"
+                          class="am-input-inline"
+                          style="width: 100%; padding: 12px; font-size: 14px;" />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- SECTION 5: Add-ons (Checkboxes) -->
+                  <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 16px 0; color: #2a3c7a; font-size: 16px; border-bottom: 2px solid #079baa; padding-bottom: 8px;">📦 Add-ons (Optional)</h4>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                      <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 12px; background: #f5f7fa; border-radius: 6px; transition: all 0.2s;" :style="{ background: newSchoolForm.addons.includes('Staff Training') ? '#e3f2fd' : '#f5f7fa' }">
+                        <input type="checkbox" value="Staff Training" v-model="newSchoolForm.addons" class="am-checkbox" />
+                        <span style="font-weight: 600;">👨‍🏫 Staff Training</span>
                       </label>
-                      <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                      <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 12px; background: #f5f7fa; border-radius: 6px; transition: all 0.2s;" :style="{ background: newSchoolForm.addons.includes('Student Training') ? '#e3f2fd' : '#f5f7fa' }">
+                        <input type="checkbox" value="Student Training" v-model="newSchoolForm.addons" class="am-checkbox" />
+                        <span style="font-weight: 600;">🎓 Student Training</span>
+                      </label>
+                      <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 12px; background: #f5f7fa; border-radius: 6px; transition: all 0.2s;" :style="{ background: newSchoolForm.addons.includes('Deep Dive Analysis') ? '#e3f2fd' : '#f5f7fa' }">
+                        <input type="checkbox" value="Deep Dive Analysis" v-model="newSchoolForm.addons" class="am-checkbox" />
+                        <span style="font-weight: 600;">📊 Deep Dive Analysis</span>
+                      </label>
+                      <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 12px; background: #f5f7fa; border-radius: 6px; transition: all 0.2s;" :style="{ background: newSchoolForm.addons.includes('Support') ? '#e3f2fd' : '#f5f7fa' }">
+                        <input type="checkbox" value="Support" v-model="newSchoolForm.addons" class="am-checkbox" />
+                        <span style="font-weight: 600;">🆘 Support</span>
+                      </label>
+                    </div>
+                  </div>
+                  
+                  <!-- SECTION 6: Settings & Advanced -->
+                  <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 16px 0; color: #2a3c7a; font-size: 16px; border-bottom: 2px solid #079baa; padding-bottom: 8px;">🔧 Settings</h4>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+                      <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 12px; background: #f5f7fa; border-radius: 6px;">
                         <input type="checkbox" v-model="newSchoolForm.useStandardYear" class="am-checkbox" />
-                        <span style="font-size: 14px;">Use Standard Academic Year</span>
+                        <span style="font-weight: 600; font-size: 14px;">📅 Standard Academic Year</span>
                       </label>
+                      <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 12px; background: #f5f7fa; border-radius: 6px;">
+                        <input type="checkbox" v-model="newSchoolForm.isAustralian" class="am-checkbox" />
+                        <span style="font-weight: 600; font-size: 14px;">🇦🇺 Australian School</span>
+                      </label>
+                      <div>
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">
+                          Status
+                        </label>
+                        <select 
+                          v-model="newSchoolForm.status"
+                          class="am-select-inline"
+                          style="width: 100%; padding: 12px; font-size: 14px;">
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
+                          <option value="archived">Archived</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
                   
@@ -5041,7 +5361,7 @@
                       <span>Link Existing Knack School (Optional)</span>
                     </div>
                     <div style="font-size: 13px; color: #856404; margin-bottom: 10px; line-height: 1.5;">
-                      <strong>For crossover schools like Kendal:</strong> If this school already exists in Knack, enter its ID below to link the records. Leave blank for completely new schools.
+                      <strong>For crossover schools like Kendal:</strong> If this school already exists in Knack, enter its Object_2 ID below. Leave blank for completely new schools.
                     </div>
                     <input 
                       v-model="newSchoolForm.knackId"
@@ -5052,13 +5372,13 @@
                   
                   <!-- Info Box -->
                   <div style="background: #e3f2fd; padding: 14px; border-radius: 6px; border-left: 4px solid #2196f3; font-size: 13px; color: #0d47a1;">
-                    <div style="font-weight: 600; margin-bottom: 6px;">ℹ️ Dual Write Process:</div>
-                    <ol style="margin: 6px 0 0 20px; padding: 0; line-height: 1.6;">
-                      <li>School created in <strong>Knack Object_1</strong> (or linked if ID provided)</li>
-                      <li>School created in <strong>Supabase establishments</strong> table</li>
-                      <li>Records linked via <code>knack_id</code> field</li>
+                    <div style="font-weight: 600; margin-bottom: 6px;">ℹ️ What Happens Next:</div>
+                    <ol style="margin: 6px 0 0 20px; padding: 0; line-height: 1.8;">
+                      <li>School created in <strong>Knack Object_2</strong> and <strong>Supabase establishments</strong></li>
+                      <li>Staff Admin account created for {{ newSchoolForm.primaryContactEmail || 'primary contact' }}</li>
+                      <li>Welcome email sent with login credentials</li>
                       <li>School appears in dropdown immediately</li>
-                      <li>Ready for student/staff uploads to both systems</li>
+                      <li>Ready to upload students and staff!</li>
                     </ol>
                   </div>
                 </div>
@@ -5069,10 +5389,10 @@
                   </button>
                   <button 
                     @click="addNewSchool" 
-                    :disabled="addingSchool || !newSchoolForm.name.trim()"
+                    :disabled="addingSchool || !canSubmitNewSchool"
                     class="am-button primary"
                     style="background: linear-gradient(135deg, #4caf50, #66bb6a); padding: 12px 32px;">
-                    {{ addingSchool ? '⏳ Creating...' : '✅ Create School' }}
+                    {{ addingSchool ? '⏳ Creating...' : '✅ Create Establishment' }}
                   </button>
                 </div>
               </div>
