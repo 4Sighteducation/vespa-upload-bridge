@@ -675,9 +675,9 @@
                 accentColor: '#06206e', // Dark blue for accents
                 primaryRow: [
                     { label: 'Home', icon: 'fa-home', href: '#landing-page/', scene: 'scene_1210' },
-                    { label: 'VESPA Questionnaire', icon: 'fa-question-circle', href: '#add-q', scene: 'scene_358' },
-                    { label: 'Coaching Report', icon: 'fa-comments', href: '#vespa-results', scene: 'scene_43' },
-                    { label: 'My Activities', icon: 'fa-book', href: '#my-vespa-activities', scene: 'scene_1258' }
+                    { label: 'VESPA Questionnaire', icon: 'fa-question-circle', href: '#vespaquestionnaire', scene: 'scene_1282' },
+                    { label: 'Coaching Report', icon: 'fa-comments', href: '#vespa-coaching-report/', scene: 'scene_1284' },
+                    { label: 'My Activities', icon: 'fa-book', href: '#vespa-activities', scene: 'scene_1288' }
                 ],
                 secondaryRow: [], // Will be filled conditionally with productivity buttons
                 utilityButtons: [
@@ -692,7 +692,7 @@
                 accentColor: '#06206e',
                 primaryRow: [
                     { label: 'Home', icon: 'fa-home', href: '#resources-homepage/', scene: 'scene_1278' }, // Using correct Knack slug
-                    { label: 'Resources', icon: 'fa-folder-open', href: '#tutor-activities/resources-levels/', scene: 'scene_481' },
+                    { label: 'Resources', icon: 'fa-folder-open', href: '#curriculum-resources/', scene: 'scene_481' },
                     { label: 'Worksheets', icon: 'fa-files-o', href: '#worksheets/', scene: 'scene_1169' },
                     { label: 'Curriculum', icon: 'fa-calendar', href: '#suggested-curriculum2/', scene: 'scene_1234' }
                 ],
@@ -712,13 +712,13 @@
                 accentColor: '#06206e',
                 primaryRow: [
                     { label: 'Home', icon: 'fa-home', href: '#staff-landing-page/', scene: 'scene_1215' },
-                    { label: 'Coaching', icon: 'fa-comments', href: '#mygroup-vespa-results2/', scene: 'scene_1095' },
+                    { label: 'Coaching', icon: 'fa-comments', href: '#staffoverview', scene: 'scene_1286' },
                     { label: 'Results', icon: 'fa-bar-chart', href: '#vesparesults', scene: 'scene_1270' },
-                    { label: 'Activities', icon: 'fa-book', href: '#activity-manage', scene: 'scene_1256' },
+                    { label: 'Activities', icon: 'fa-book', href: '#activity-dashboarwd', scene: 'scene_1290' },
                     { label: 'Study Plans', icon: 'fa-graduation-cap', href: '#student-revision', scene: 'scene_855' }
                 ],
                 secondaryRow: [
-                    { label: 'Resources', icon: 'fa-folder-open', href: '#tutor-activities/resources-levels', scene: 'scene_481' },
+                    { label: 'Resources', icon: 'fa-folder-open', href: '#curriculum-resources/', scene: 'scene_481' },
                     { label: 'Worksheets', icon: 'fa-files-o', href: '#worksheets', scene: 'scene_1169' },
                     { label: 'Videos', icon: 'fa-book-open', href: '#vespa-videos', scene: 'scene_1266' },
                     { label: 'Curriculum', icon: 'fa-calendar', href: '#suggested-curriculum2/', scene: 'scene_1234' }
@@ -738,7 +738,7 @@
                 primaryRow: [
                     { label: 'Home', icon: 'fa-home', href: '#resources-homepage/', scene: 'scene_1278' }, // Using correct Knack slug
                     { label: 'Manage', icon: 'fa-users-cog', href: '#resource-staff-management/', scene: 'scene_1272', isManagement: true },
-                    { label: 'Resources', icon: 'fa-folder-open', href: '#tutor-activities/resources-levels/', scene: 'scene_481' },
+                    { label: 'Resources', icon: 'fa-folder-open', href: '#curriculum-resources/', scene: 'scene_481' },
                     { label: 'Worksheets', icon: 'fa-files-o', href: '#worksheets/', scene: 'scene_1169' }
                 ],
                 secondaryRow: [
@@ -758,15 +758,15 @@
                 accentColor: '#06206e',
                 primaryRow: [
                     { label: 'Home', icon: 'fa-home', href: '#staff-landing-page/', scene: 'scene_1215' },
-                    { label: 'Manage', icon: 'fa-cog', href: '#upload-manager', scene: 'scene_1212', isManagement: true },
-                    { label: 'Coaching', icon: 'fa-comments', href: '#admin-coaching', scene: 'scene_1014', isManagement: true },
+                    { label: 'Manage', icon: 'fa-users-cog', href: '#vespa-account-management', scene: 'scene_1292', isManagement: true },
+                    { label: 'Coaching', icon: 'fa-comments', href: '#staffoverview', scene: 'scene_1286', isManagement: true },
                     { label: 'Print Reports', icon: 'fa-print', href: '#report-printing', scene: 'scene_1227', isManagement: true },
                     { label: 'Dashboard', icon: 'fa-tachometer-alt', href: '#dashboard', scene: 'scene_1225', isManagement: true },
                     { label: 'Curriculum', icon: 'fa-calendar', href: '#suggested-curriculum2', scene: 'scene_1234', isManagement: true },
                 ],
                 secondaryRow: [
                     { label: 'Results', icon: 'fa-bar-chart', href: '#vesparesults', scene: 'scene_1270' },
-                    { label: 'Resources', icon: 'fa-folder-open', href: '#tutor-activities/resources-levels/', scene: 'scene_481' },
+                    { label: 'Resources', icon: 'fa-folder-open', href: '#curriculum-resources/', scene: 'scene_481' },
                     { label: 'Worksheets', icon: 'fa-files-o', href: '#worksheets', scene: 'scene_1169' },
                     { label: 'Videos', icon: 'fa-book-open', href: '#vespa-videos/', scene: 'scene_1266' },
                     { label: 'Newsletter', icon: 'fa-newspaper-o', href: '#vespa-newsletter/', scene: 'scene_1214' },
@@ -784,7 +784,7 @@
                 accentColor: '#079baa', // Teal accent
                 primaryRow: [
                     { label: 'Home', icon: 'fa-home', href: '#oversight-page/', scene: 'scene_1268' },
-                    { label: 'Upload Manager', icon: 'fa-upload', href: '#upload-manager', scene: 'scene_1212', isManagement: true },
+                    { label: 'Account Manager', icon: 'fa-users-cog', href: '#vespa-account-management', scene: 'scene_1292', isManagement: true },
                     { label: 'Dashboard', icon: 'fa-tachometer-alt', href: '#dashboard', scene: 'scene_1225', isManagement: true },
                     { label: 'CRM', icon: 'fa-users', href: '#vespa-customers/', scene: 'scene_1226', isManagement: true }
                 ],
@@ -909,6 +909,10 @@
                 `;
             }).join('');
             
+            // Add Welsh/English toggle button (for breadcrumb row)
+            const savedLang = localStorage.getItem('vespaPreferredLanguage');
+            const isWelsh = savedLang === 'cy';
+            
             return `
                 <div id="vespaGeneralHeader" class="vespa-general-header-enhanced ${userType}">
                     <div class="header-content">
@@ -937,11 +941,67 @@
                             <i class="fa fa-arrow-left"></i>
                             Back to Home
                         </a>
+                        <div class="breadcrumb-actions">
+                            <button class="breadcrumb-language-toggle" 
+                                    id="languageToggleBtn"
+                                    title="${isWelsh ? 'Switch to English' : 'Newid i Gymraeg (Switch to Welsh)'}">
+                                <i class="fa fa-language"></i>
+                                <span class="language-label">${isWelsh ? 'English' : 'Cymraeg'}</span>
+                            </button>
+                        </div>
                     </div>
                     ` : ''}
                 </div>
                 <div class="mobile-nav-overlay"></div>
                 <style>
+                    /* Hide Google Translate container visually but keep in DOM */
+                    #google_translate_element {
+                        position: absolute !important;
+                        left: -9999px !important;
+                        top: -9999px !important;
+                        width: 1px !important;
+                        height: 1px !important;
+                        overflow: hidden !important;
+                        opacity: 0 !important;
+                        pointer-events: none !important;
+                        z-index: -1 !important;
+                    }
+                    
+                    /* AGGRESSIVE: Force hide Google Translate banner */
+                    .goog-te-banner-frame,
+                    .goog-te-banner-frame.skiptranslate,
+                    body > .skiptranslate:first-child,
+                    iframe.goog-te-banner-frame {
+                        display: none !important;
+                        visibility: hidden !important;
+                        height: 0 !important;
+                        width: 0 !important;
+                        position: absolute !important;
+                        top: -9999px !important;
+                        left: -9999px !important;
+                    }
+                    
+                    /* Fix body positioning that Google adds */
+                    body,
+                    body.translated-ltr,
+                    body.translated-rtl {
+                        top: 0 !important;
+                        position: relative !important;
+                        margin-top: 0 !important;
+                    }
+                    
+                    html {
+                        top: 0 !important;
+                        position: relative !important;
+                    }
+                    
+                    /* Hide Google tooltips */
+                    #goog-gt-tt,
+                    .goog-tooltip,
+                    .goog-te-balloon-frame {
+                        display: none !important;
+                    }
+                    
                     /* Hide entire Knack header */
                     .knHeader {
                         display: none !important;
@@ -1314,8 +1374,12 @@
                     /* Enhanced Breadcrumb Styles */
                     .header-breadcrumb {
                         background: linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.05) 100%);
-                        padding: 10px 0;
+                        padding: 10px 24px;
                         border-bottom: 1px solid rgba(255,255,255,0.08);
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        gap: 20px;
                     }
                     
                     .breadcrumb-back {
@@ -1326,11 +1390,15 @@
                         text-decoration: none;
                         font-size: 13px;
                         font-weight: 600;
-                        padding: 6px 24px;
-                        max-width: 1920px;
-                        margin: 0 auto;
+                        padding: 6px 0;
                         transition: all 0.3s ease;
                         position: relative;
+                    }
+                    
+                    .breadcrumb-actions {
+                        display: flex;
+                        align-items: center;
+                        gap: 12px;
                     }
                     
                     .breadcrumb-back::before {
@@ -1362,6 +1430,40 @@
                     
                     .breadcrumb-back:hover i {
                         transform: translateX(-2px);
+                    }
+                    
+                    /* Breadcrumb Language Toggle Styling */
+                    .breadcrumb-language-toggle {
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 8px;
+                        padding: 8px 16px;
+                        background: linear-gradient(135deg, rgba(123,216,208,0.35) 0%, rgba(7,155,170,0.25) 100%);
+                        border: 2px solid rgba(123,216,208,0.35);
+                        border-radius: 8px;
+                        color: white;
+                        font-size: 13px;
+                        font-weight: 600;
+                        cursor: pointer;
+                        transition: all 0.3s ease;
+                        box-shadow: 0 2px 8px rgba(123,216,208,0.25);
+                        text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+                        letter-spacing: 0.3px;
+                    }
+                    
+                    .breadcrumb-language-toggle:hover {
+                        background: linear-gradient(135deg, rgba(123,216,208,0.45) 0%, rgba(7,155,170,0.35) 100%);
+                        border-color: rgba(123,216,208,0.45);
+                        transform: translateY(-1px);
+                        box-shadow: 0 4px 12px rgba(123,216,208,0.35);
+                    }
+                    
+                    .breadcrumb-language-toggle i {
+                        font-size: 16px;
+                    }
+                    
+                    .breadcrumb-language-toggle .language-label {
+                        font-size: 13px;
                     }
                     
                     /* Adjust body for enhanced header with dynamic height */
@@ -1473,7 +1575,7 @@
                         }
                     }
                     
-                    /* Mobile Styles with Slide-out Menu */
+                    /* Mobile Styles with Improved Menu */
                     @media (max-width: 768px) {
                         .header-primary-row {
                             height: 60px;
@@ -1497,70 +1599,146 @@
                             font-weight: 600;
                         }
                         
-                        /* Mobile Navigation Drawer */
+                        /* Hide desktop navigation on mobile */
                         .header-navigation.primary-nav,
                         .header-utility {
-                            position: fixed;
-                            top: 60px;
-                            right: -320px;
-                            width: 320px;
-                            max-height: calc(100vh - 60px);
-                            background: linear-gradient(135deg, ${navConfig.color} 0%, ${navConfig.accentColor || navConfig.color} 100%);
-                            display: flex;
-                            flex-direction: column;
-                            justify-content: flex-start;
-                            padding: 20px 16px;
-                            gap: 10px;
-                            transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-                            box-shadow: -4px 0 20px rgba(0,0,0,0.3);
-                            overflow-y: auto;
-                            z-index: 9998;
-                            backdrop-filter: blur(10px);
+                            display: none;
                         }
                         
-                        .header-navigation.mobile-open,
-                        .header-utility.mobile-open {
+                        /* Mobile Menu Container */
+                        .mobile-menu-container {
+                            position: fixed;
+                            top: 0;
+                            right: -320px;
+                            width: 320px;
+                            height: 100vh;
+                            background: linear-gradient(135deg, ${navConfig.color} 0%, ${navConfig.accentColor || navConfig.color} 100%);
+                            box-shadow: -4px 0 20px rgba(0,0,0,0.3);
+                            transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                            z-index: 9998;
+                            overflow-y: auto;
+                        }
+                        
+                        .mobile-menu-container.mobile-open {
                             right: 0;
                         }
                         
-                        /* Mobile Button Styles with Better Contrast and Larger Text */
-                        .header-nav-button,
-                        .header-nav-button.secondary-button,
-                        .header-utility-button {
-                            width: 100%;
-                            justify-content: flex-start;
-                            padding: 14px 18px;
-                            font-size: 16px;
-                            min-height: 52px;
-                            background: rgba(255,255,255,0.2);
-                            backdrop-filter: blur(8px);
-                            border: 2px solid rgba(255,255,255,0.3);
-                            box-shadow: 0 2px 8px rgba(0,0,0,0.15),
-                                        inset 0 1px 0 rgba(255,255,255,0.15);
+                        .mobile-menu-content {
+                            padding: 0;
+                            height: 100%;
+                            display: flex;
+                            flex-direction: column;
                         }
                         
-                        .header-nav-button:hover,
-                        .header-nav-button.secondary-button:hover,
-                        .header-utility-button:hover {
-                            background: rgba(255,255,255,0.28);
-                            transform: translateX(4px);
-                            border-color: rgba(255,255,255,0.4);
-                            box-shadow: 0 4px 12px rgba(0,0,0,0.2),
-                                        inset 0 1px 2px rgba(255,255,255,0.2);
+                        .mobile-menu-header {
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            padding: 16px 20px;
+                            background: rgba(0,0,0,0.1);
+                            border-bottom: 1px solid rgba(255,255,255,0.1);
                         }
                         
-                        .header-nav-button span,
-                        .header-utility-button .utility-label {
-                            display: inline;
-                            font-size: 16px;
+                        .mobile-menu-title {
+                            font-size: 18px;
+                            font-weight: 700;
+                            color: white;
+                        }
+                        
+                        .mobile-menu-close {
+                            background: transparent;
+                            border: none;
+                            color: white;
+                            font-size: 24px;
+                            cursor: pointer;
+                            padding: 4px 8px;
+                            transition: transform 0.2s ease;
+                        }
+                        
+                        .mobile-menu-close:hover {
+                            transform: scale(1.1);
+                        }
+                        
+                        .mobile-menu-sections {
+                            flex: 1;
+                            padding: 20px 0;
+                            overflow-y: auto;
+                        }
+                        
+                        .mobile-menu-section {
+                            margin-bottom: 24px;
+                            padding: 0 20px;
+                        }
+                        
+                        .mobile-menu-section h3 {
+                            color: rgba(255,255,255,0.7);
+                            font-size: 12px;
                             font-weight: 600;
+                            text-transform: uppercase;
+                            letter-spacing: 1px;
+                            margin: 0 0 12px 0;
+                            padding-bottom: 8px;
+                            border-bottom: 1px solid rgba(255,255,255,0.1);
                         }
                         
-                        .header-nav-button i,
-                        .header-utility-button i {
-                            font-size: 20px;
-                            width: 30px;
+                        .mobile-menu-item {
+                            display: flex;
+                            align-items: center;
+                            gap: 16px;
+                            padding: 14px 16px;
+                            margin-bottom: 6px;
+                            background: rgba(255,255,255,0.1);
+                            border: 1px solid rgba(255,255,255,0.15);
+                            border-radius: 8px;
+                            color: white;
+                            text-decoration: none;
+                            font-size: 16px;
+                            font-weight: 500;
+                            transition: all 0.2s ease;
+                        }
+                        
+                        .mobile-menu-item:hover,
+                        .mobile-menu-item:active {
+                            background: rgba(255,255,255,0.2);
+                            transform: translateX(4px);
+                            border-color: rgba(255,255,255,0.25);
+                        }
+                        
+                        .mobile-menu-item i {
+                            font-size: 18px;
+                            width: 24px;
                             text-align: center;
+                            flex-shrink: 0;
+                        }
+                        
+                        .mobile-menu-item span {
+                            flex: 1;
+                        }
+                        
+                        .mobile-menu-utilities {
+                            border-top: 1px solid rgba(255,255,255,0.1);
+                            padding-top: 20px;
+                        }
+                        
+                        .mobile-utility-item.logout-item {
+                            background: rgba(220,53,69,0.2);
+                            border-color: rgba(220,53,69,0.3);
+                        }
+                        
+                        .mobile-utility-item.logout-item:hover {
+                            background: rgba(220,53,69,0.3);
+                            border-color: rgba(220,53,69,0.4);
+                        }
+                        
+                        .mobile-language-toggle {
+                            background: rgba(123,216,208,0.2) !important;
+                            border-color: rgba(123,216,208,0.3) !important;
+                            cursor: pointer;
+                        }
+                        
+                        .mobile-language-toggle:hover {
+                            background: rgba(123,216,208,0.3) !important;
+                            border-color: rgba(123,216,208,0.4) !important;
                         }
                         
                         .mobile-menu-toggle {
@@ -1600,12 +1778,27 @@
                         }
                         
                         .header-breadcrumb {
-                            padding: 8px 0;
+                            padding: 8px 16px;
+                            flex-wrap: wrap;
+                            gap: 12px;
                         }
                         
                         .breadcrumb-back {
                             font-size: 12px;
-                            padding: 6px 16px;
+                            padding: 6px 0;
+                        }
+                        
+                        .breadcrumb-language-toggle {
+                            padding: 6px 12px;
+                            font-size: 12px;
+                        }
+                        
+                        .breadcrumb-language-toggle i {
+                            font-size: 14px;
+                        }
+                        
+                        .breadcrumb-language-toggle .language-label {
+                            font-size: 12px;
                         }
                     }
                     
@@ -1763,6 +1956,14 @@
         
         // Function to inject the header
         function injectHeader() {
+            // FIRST: Ensure Google Translate container exists (persistent, outside header)
+            if (!document.getElementById('google_translate_element')) {
+                log('Creating persistent Google Translate container');
+                const translateContainer = document.createElement('div');
+                translateContainer.id = 'google_translate_element';
+                document.body.insertBefore(translateContainer, document.body.firstChild);
+            }
+            
             // Check if header already exists
             if (document.getElementById('vespaGeneralHeader')) {
                 log('Header already exists, checking if it should be removed');
@@ -1827,12 +2028,463 @@
             });
         }
         
+        // Create mobile menu with all navigation items
+        function createMobileMenu() {
+            const navConfig = navigationConfig[getUserType()];
+            const visibilityPrefs = getVisibilityPreferences();
+            
+            // Get saved language for toggle button
+            const savedLang = localStorage.getItem('vespaPreferredLanguage');
+            
+            // Add productivity buttons for students if enabled
+            let secondaryItems = navConfig.secondaryRow || [];
+            if (getUserType() === 'student') {
+                secondaryItems = getProductivityButtons(visibilityPrefs.showProductivityHub);
+            }
+            
+            const mobileMenuHTML = `
+                <div class="mobile-menu-container">
+                    <div class="mobile-menu-content">
+                        <div class="mobile-menu-header">
+                            <span class="mobile-menu-title">${navConfig.brand}</span>
+                            <button class="mobile-menu-close">
+                                <i class="fa fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="mobile-menu-sections">
+                            <div class="mobile-menu-section">
+                                <h3>Main Navigation</h3>
+                                ${navConfig.primaryRow.map(item => `
+                                    <a href="${item.href}" 
+                                       class="mobile-menu-item" 
+                                       data-scene="${item.scene}">
+                                        <i class="fa ${item.icon}"></i>
+                                        <span>${item.label}</span>
+                                    </a>
+                                `).join('')}
+                            </div>
+                            ${secondaryItems.length > 0 ? `
+                                <div class="mobile-menu-section">
+                                    <h3>${getUserType() === 'student' ? 'Productivity Hub' : 'Resources'}</h3>
+                                    ${secondaryItems.map(item => `
+                                        <a href="${item.href}" 
+                                           class="mobile-menu-item" 
+                                           data-scene="${item.scene}">
+                                            <i class="fa ${item.icon}"></i>
+                                            <span>${item.label}</span>
+                                        </a>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                            <div class="mobile-menu-section mobile-menu-utilities">
+                                <h3>Account</h3>
+                                <!-- Language Toggle in Mobile Menu -->
+                                <button class="mobile-menu-item mobile-language-toggle" id="mobileLanguageToggle">
+                                    <i class="fa fa-language"></i>
+                                    <span>${savedLang === 'cy' ? 'Switch to English' : 'Newid i Gymraeg'}</span>
+                                </button>
+                                ${navConfig.utilityButtons.map(item => {
+                                    // Skip logout button in emulator mode
+                                    if (item.isLogout && window._isStudentEmulatorMode) {
+                                        return '';
+                                    }
+                                    
+                                    let dataAttrs = '';
+                                    if (item.isLogout) dataAttrs = 'data-logout="true"';
+                                    if (item.isRefresh) dataAttrs = 'data-refresh="true"';
+                                    
+                                    return `
+                                        <a href="${item.href}" 
+                                           class="mobile-menu-item mobile-utility-item ${item.isLogout ? 'logout-item' : ''}" 
+                                           data-scene="${item.scene}"
+                                           ${dataAttrs}>
+                                            <i class="fa ${item.icon}"></i>
+                                            <span>${item.label}</span>
+                                        </a>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Create container element
+            const container = document.createElement('div');
+            container.innerHTML = mobileMenuHTML;
+            const mobileMenu = container.firstElementChild;
+            
+            // Setup close button
+            const closeBtn = mobileMenu.querySelector('.mobile-menu-close');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', function() {
+                    mobileMenu.classList.remove('mobile-open');
+                    document.querySelector('.mobile-nav-overlay').classList.remove('active');
+                    const mobileToggle = document.querySelector('.mobile-menu-toggle');
+                    if (mobileToggle) {
+                        mobileToggle.querySelector('i').className = 'fa fa-bars';
+                    }
+                });
+            }
+            
+            // Setup navigation for menu items
+            const menuItems = mobileMenu.querySelectorAll('.mobile-menu-item:not(.mobile-language-toggle)');
+            menuItems.forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    // Close mobile menu
+                    mobileMenu.classList.remove('mobile-open');
+                    document.querySelector('.mobile-nav-overlay').classList.remove('active');
+                    const mobileToggle = document.querySelector('.mobile-menu-toggle');
+                    if (mobileToggle) {
+                        mobileToggle.querySelector('i').className = 'fa fa-bars';
+                    }
+                    
+                    // Handle navigation (reuse existing navigation logic)
+                    handleNavigationClick.call(this, e);
+                });
+            });
+            
+            // Setup mobile language toggle
+            const mobileLanguageToggle = mobileMenu.querySelector('#mobileLanguageToggle');
+            if (mobileLanguageToggle) {
+                mobileLanguageToggle.addEventListener('click', async function(e) {
+                    e.preventDefault();
+                    
+                    const selector = document.querySelector('.goog-te-combo');
+                    if (!selector) {
+                        // Lazy load Google Translate
+                        if (typeof window.initializeGoogleTranslate === 'function') {
+                            const span = mobileLanguageToggle.querySelector('span');
+                            if (span) span.textContent = 'Loading...';
+                            
+                            const success = await window.initializeGoogleTranslate();
+                            
+                            if (success) {
+                                const selectorNow = document.querySelector('.goog-te-combo');
+                                if (selectorNow) {
+                                    localStorage.setItem('vespaPreferredLanguage', 'cy');
+                                    selectorNow.value = 'cy';
+                                    const evt = document.createEvent('HTMLEvents');
+                                    evt.initEvent('change', false, true);
+                                    selectorNow.dispatchEvent(evt);
+                                    
+                                    // Update both buttons using central function
+                                    if (window.updateLanguageButton) {
+                                        window.updateLanguageButton('cy');
+                                    }
+                                }
+                            }
+                        }
+                        return;
+                    }
+                    
+                    const currentLang = selector.value || localStorage.getItem('vespaPreferredLanguage') || 'en';
+                    const newLang = currentLang === 'cy' ? 'en' : 'cy';
+                    
+                    // Update localStorage (don't block loading, just set preference)
+                    if (newLang === 'en') {
+                        localStorage.removeItem('vespaPreferredLanguage');
+                    } else {
+                        localStorage.setItem('vespaPreferredLanguage', newLang);
+                    }
+                    
+                    // SIMPLE FIX: Always reset to English first, THEN go to target
+                    console.log('[General Header] Mobile - Force reset to English, then switch to:', newLang);
+                    
+                    // Step 1: Reset to English
+                    selector.value = 'en';
+                    const resetEvt = document.createEvent('HTMLEvents');
+                    resetEvt.initEvent('change', false, true);
+                    selector.dispatchEvent(resetEvt);
+                    
+                    // Step 2: Change to target language after brief delay
+                    setTimeout(() => {
+                        console.log('[General Header] Mobile - Now switching to:', newLang);
+                        selector.value = newLang;
+                        
+                        const evt = document.createEvent('HTMLEvents');
+                        evt.initEvent('change', false, true);
+                        selector.dispatchEvent(evt);
+                        
+                        selector.dispatchEvent(new Event('change', { bubbles: true }));
+                        if (typeof $ !== 'undefined') {
+                            $(selector).trigger('change');
+                        }
+                        
+                        console.log('[General Header] Mobile - Translation complete! Final value:', selector.value);
+                        
+                        // Update both buttons using central function
+                        if (window.updateLanguageButton) {
+                            window.updateLanguageButton(newLang);
+                        }
+                    }, 300);
+                    
+                    // IMMEDIATELY hide any banner that appears
+                    setTimeout(() => {
+                        const banner = document.querySelector('.goog-te-banner-frame');
+                        if (banner) {
+                            banner.style.display = 'none';
+                            banner.remove();
+                        }
+                        document.body.style.top = '0px';
+                        document.body.style.position = 'relative';
+                    }, 50);
+                    
+                    // Keep checking for banner
+                    let bannerCheckCount = 0;
+                    const bannerCheckInterval = setInterval(() => {
+                        const banner = document.querySelector('.goog-te-banner-frame');
+                        if (banner) {
+                            banner.style.display = 'none';
+                            banner.remove();
+                        }
+                        document.body.style.top = '0px';
+                        
+                        bannerCheckCount++;
+                        if (bannerCheckCount > 12) {
+                            clearInterval(bannerCheckInterval);
+                        }
+                    }, 250);
+                });
+            }
+            
+            return mobileMenu;
+        }
+        
         // Setup event listeners
         function setupEventListeners() {
-            // Mobile menu toggle
+            // Sync button with actual Google Translate state periodically
+            function syncButtonWithGoogleState() {
+                const selector = document.querySelector('.goog-te-combo');
+                if (selector && window.updateLanguageButton) {
+                    const currentLang = selector.value || 'en';
+                    window.updateLanguageButton(currentLang);
+                }
+            }
+            
+            // Sync every 2 seconds to catch auto-translate changes
+            setInterval(syncButtonWithGoogleState, 2000);
+            
+            // Also sync immediately after scene renders
+            $(document).on('knack-scene-render.any', function() {
+                setTimeout(syncButtonWithGoogleState, 500);
+            });
+            
+            // Language toggle handler with loading check
+            const languageToggleBtn = document.getElementById('languageToggleBtn');
+            log('Looking for language toggle button...', languageToggleBtn ? 'FOUND' : 'NOT FOUND');
+            if (languageToggleBtn) {
+                log('Attaching click event to language toggle button');
+                
+                // Prevent multiple simultaneous loading attempts
+                let isCheckingForTranslate = false;
+                
+                languageToggleBtn.addEventListener('click', async function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    log('Language toggle clicked');
+                    
+                    // Prevent multiple clicks while loading
+                    if (isCheckingForTranslate) {
+                        log('Already checking for Google Translate, ignoring click');
+                        return;
+                    }
+                    
+                    const selector = document.querySelector('.goog-te-combo');
+                    if (!selector) {
+                        console.log('[General Header] Google Translate not loaded yet, initializing on demand...');
+                        
+                        isCheckingForTranslate = true;
+                        
+                        // Show loading feedback
+                        const label = languageToggleBtn.querySelector('.language-label');
+                        const originalText = label ? label.textContent : '';
+                        if (label) label.textContent = 'Loading...';
+                        
+                        // Lazy load Google Translate
+                        if (typeof window.initializeGoogleTranslate === 'function') {
+                            const success = await window.initializeGoogleTranslate();
+                            isCheckingForTranslate = false;
+                            
+                            if (success) {
+                                console.log('[General Header] Google Translate loaded successfully!');
+                                console.log('[General Header] Waiting for Google to be fully ready before translating...');
+                                
+                                // Wait 1 second for Google Translate to be fully ready before changing language
+                                // The initializeGoogleTranslate already waited 1 second for event listeners
+                                // This additional wait ensures translation actually triggers
+                                setTimeout(() => {
+                                    const selectorNow = document.querySelector('.goog-te-combo');
+                                    if (selectorNow) {
+                                        console.log('[General Header] Selector ready! Current value:', selectorNow.value);
+                                        
+                                        localStorage.setItem('vespaPreferredLanguage', 'cy');
+                                        
+                                        // CRITICAL FIX: Always reset to English first, then change to Welsh
+                                        // This ensures the value actually CHANGES, triggering Google's event listeners
+                                        console.log('[General Header] Resetting to English first...');
+                                        selectorNow.value = 'en';
+                                        const resetEvt = document.createEvent('HTMLEvents');
+                                        resetEvt.initEvent('change', false, true);
+                                        selectorNow.dispatchEvent(resetEvt);
+                                        
+                                        // Wait a moment, then change to Welsh
+                                        setTimeout(() => {
+                                            console.log('[General Header] Now changing to Welsh...');
+                                            selectorNow.value = 'cy';
+                                            
+                                            // Trigger change event multiple ways to ensure Google picks it up
+                                            const evt = document.createEvent('HTMLEvents');
+                                            evt.initEvent('change', false, true);
+                                            selectorNow.dispatchEvent(evt);
+                                            
+                                            // Also try modern event
+                                            selectorNow.dispatchEvent(new Event('change', { bubbles: true }));
+                                            
+                                            // And trigger via jQuery if available
+                                            if (typeof $ !== 'undefined') {
+                                                $(selectorNow).trigger('change');
+                                            }
+                                            
+                                            console.log('[General Header] Selector value after change:', selectorNow.value);
+                                            console.log('[General Header] Translation should be starting...');
+                                            
+                                            // Update button using central function
+                                            if (window.updateLanguageButton) {
+                                                window.updateLanguageButton('cy');
+                                            }
+                                        }, 300); // Small delay between resets
+                                        
+                                        // Hide banner aggressively
+                                        setTimeout(() => {
+                                            const banner = document.querySelector('.goog-te-banner-frame');
+                                            if (banner) {
+                                                banner.style.display = 'none';
+                                                banner.remove();
+                                            }
+                                            document.body.style.top = '0px';
+                                            document.body.style.position = 'relative';
+                                        }, 100);
+                                        
+                                        // Keep checking for 3 seconds
+                                        let count = 0;
+                                        const interval = setInterval(() => {
+                                            const banner = document.querySelector('.goog-te-banner-frame');
+                                            if (banner) {
+                                                banner.remove();
+                                                document.body.style.top = '0px';
+                                            }
+                                            count++;
+                                            if (count > 12) clearInterval(interval);
+                                        }, 250);
+                                    } else {
+                                        console.error('[General Header] Selector disappeared!');
+                                    }
+                                }, 1000); // Wait 1 second for Google to be fully ready
+                            } else {
+                                console.error('[General Header] Google Translate failed to initialize');
+                                if (label) label.textContent = 'Error';
+                                setTimeout(() => {
+                                    if (label) label.textContent = originalText;
+                                }, 2000);
+                            }
+                        } else {
+                            console.error('[General Header] initializeGoogleTranslate function not found!');
+                            isCheckingForTranslate = false;
+                            if (label) label.textContent = 'Error';
+                            setTimeout(() => {
+                                if (label) label.textContent = originalText;
+                            }, 2000);
+                        }
+                        
+                        return;
+                    }
+                    
+                    // If we get here, selector exists and we can toggle immediately
+                    const currentLang = selector.value || localStorage.getItem('vespaPreferredLanguage') || 'en';
+                    const newLang = currentLang === 'cy' ? 'en' : 'cy';
+                    
+                    log(`Switching language from ${currentLang} to ${newLang}`);
+                    console.log('[General Header] Desktop - Current selector value:', selector.value);
+                    
+                    // Update localStorage (don't block loading, just set preference)
+                    if (newLang === 'en') {
+                        localStorage.removeItem('vespaPreferredLanguage');
+                    } else {
+                        localStorage.setItem('vespaPreferredLanguage', newLang);
+                    }
+                    
+                    // SIMPLE FIX: Always reset to English first, THEN go to target
+                    // This ensures a value change regardless of cookies/cache
+                    console.log('[General Header] Desktop - Force reset to English, then switch to:', newLang);
+                    
+                    // Step 1: Reset to English
+                    selector.value = 'en';
+                    let resetEvt = document.createEvent('HTMLEvents');
+                    resetEvt.initEvent('change', false, true);
+                    selector.dispatchEvent(resetEvt);
+                    
+                    // Step 2: Change to target language after brief delay
+                    setTimeout(() => {
+                        console.log('[General Header] Desktop - Now switching to:', newLang);
+                        selector.value = newLang;
+                        
+                        // Trigger change event multiple ways
+                        const evt = document.createEvent('HTMLEvents');
+                        evt.initEvent('change', false, true);
+                        selector.dispatchEvent(evt);
+                        
+                        selector.dispatchEvent(new Event('change', { bubbles: true }));
+                        
+                        if (typeof $ !== 'undefined') {
+                            $(selector).trigger('change');
+                        }
+                        
+                        console.log('[General Header] Desktop - Translation complete! Final value:', selector.value);
+                        
+                        // Update button using central function
+                        if (window.updateLanguageButton) {
+                            window.updateLanguageButton(newLang);
+                        }
+                    }, 300);
+                    
+                    // IMMEDIATELY hide any banner that appears
+                    setTimeout(() => {
+                        const banner = document.querySelector('.goog-te-banner-frame');
+                        if (banner) {
+                            banner.style.display = 'none';
+                            banner.remove();
+                        }
+                        document.body.style.top = '0px';
+                        document.body.style.position = 'relative';
+                    }, 50);
+                    
+                    // Keep checking for banner for 3 seconds after language change
+                    let bannerCheckCount = 0;
+                    const bannerCheckInterval = setInterval(() => {
+                        const banner = document.querySelector('.goog-te-banner-frame');
+                        if (banner) {
+                            banner.style.display = 'none';
+                            banner.remove();
+                        }
+                        document.body.style.top = '0px';
+                        document.body.style.position = 'relative';
+                        
+                        bannerCheckCount++;
+                        if (bannerCheckCount > 12) { // 3 seconds (250ms * 12)
+                            clearInterval(bannerCheckInterval);
+                        }
+                    }, 250);
+                    
+                    log(`Language switched to ${newLang}`);
+                });
+            }
+            
+            // Mobile menu toggle - FIXED to create proper mobile menu
             const mobileToggle = document.querySelector('.mobile-menu-toggle');
-            const navigation = document.querySelector('.header-navigation');
-            const utility = document.querySelector('.header-utility');
             const overlay = document.querySelector('.mobile-nav-overlay');
             
             // DEBUG: Log nav button styles after setup
@@ -1852,17 +2504,43 @@
             
             if (mobileToggle) {
                 mobileToggle.addEventListener('click', function() {
-                    navigation.classList.toggle('mobile-open');
-                    utility.classList.toggle('mobile-open');
+                    // Create or toggle mobile menu
+                    let mobileMenu = document.querySelector('.mobile-menu-container');
+                    
+                    if (!mobileMenu) {
+                        // Create mobile menu if it doesn't exist
+                        mobileMenu = createMobileMenu();
+                        document.body.appendChild(mobileMenu);
+                    }
+                    
+                    // Toggle menu and overlay
+                    mobileMenu.classList.toggle('mobile-open');
                     overlay.classList.toggle('active');
+                    
+                    // Update toggle button icon
+                    const icon = mobileToggle.querySelector('i');
+                    if (mobileMenu.classList.contains('mobile-open')) {
+                        icon.className = 'fa fa-times';
+                    } else {
+                        icon.className = 'fa fa-bars';
+                    }
                 });
             }
             
             if (overlay) {
                 overlay.addEventListener('click', function() {
-                    navigation.classList.remove('mobile-open');
-                    utility.classList.remove('mobile-open');
+                    const mobileMenu = document.querySelector('.mobile-menu-container');
+                    if (mobileMenu) {
+                        mobileMenu.classList.remove('mobile-open');
+                    }
                     overlay.classList.remove('active');
+                    
+                    // Reset toggle icon
+                    const mobileToggle = document.querySelector('.mobile-menu-toggle');
+                    if (mobileToggle) {
+                        const icon = mobileToggle.querySelector('i');
+                        icon.className = 'fa fa-bars';
+                    }
                 });
             }
             
@@ -1871,7 +2549,13 @@
             navLinks.forEach(link => {
                 link.addEventListener('click', function(e) {
                     e.preventDefault();
-                    
+                    handleNavigationClick.call(this, e);
+                });
+            });
+        }
+        
+        // Extracted navigation handler function
+        function handleNavigationClick(e) {
                     // Check if this is the refresh button
                     if (this.getAttribute('data-refresh') === 'true') {
                         log('Refresh button clicked - performing page reload');
@@ -1892,29 +2576,32 @@
                     
                     // Check if this is the logout button
                     if (this.getAttribute('data-logout') === 'true') {
-                        log('Logout button clicked');
+                        log('Logout button clicked - immediate logout');
                         
-                        // Clear role selection from session storage
-                        sessionStorage.removeItem('selectedUserRole');
-                        log('Cleared role selection from session storage');
+                        // Clear all session data
+                        sessionStorage.clear();
+                        localStorage.removeItem('vespaPreferredLanguage');
                         
-                        // FIRST: Navigate to home page immediately
-                        log('Navigating to home page first');
-                        window.location.href = 'https://vespaacademy.knack.com/vespa-academy#home/';
+                        // Show loading message if possible
+                        if (window.showUniversalLoadingScreen) {
+                            window.showUniversalLoadingScreen('Logging out...');
+                        }
                         
-                        // THEN: Trigger logout after a small delay to allow navigation to start
+                        // Try to find and click Knack's logout immediately
+                        const logoutLink = document.querySelector('.kn-log-out');
+                        if (logoutLink) {
+                            logoutLink.click();
+                        } else {
+                            // If no Knack logout, use direct navigation
+                            // This will trigger Knack's logout process
+                            window.location.href = 'https://vespaacademy.knack.com/vespa-academy#home/';
+                        }
+                        
+                        // Force reload after a short delay as fallback
                         setTimeout(() => {
-                            log('Now triggering logout');
-                            // Trigger Knack logout
-                            const logoutLink = document.querySelector('.kn-log-out');
-                            if (logoutLink) {
-                                logoutLink.click();
-                            } else {
-                                // Fallback: try to find and click any logout link
-                                const altLogout = document.querySelector('a[href*="logout"]');
-                                if (altLogout) altLogout.click();
-                            }
-                        }, 100); // Small delay to ensure navigation starts first
+                            // If we're still here, force navigation
+                            window.location.href = 'https://vespaacademy.knack.com/vespa-academy#home/';
+                        }, 1000);
                         
                         return;
                     }
@@ -1924,9 +2611,20 @@
                     
                     if (href && href.startsWith('#')) {
                         // Close mobile menu if open
-                        navigation.classList.remove('mobile-open');
-                        utility.classList.remove('mobile-open');
-                        overlay.classList.remove('active');
+                        const mobileMenu = document.querySelector('.mobile-menu-container');
+                        const overlay = document.querySelector('.mobile-nav-overlay');
+                        if (mobileMenu) {
+                            mobileMenu.classList.remove('mobile-open');
+                        }
+                        if (overlay) {
+                            overlay.classList.remove('active');
+                        }
+                        // Reset hamburger icon if it exists
+                        const mobileToggle = document.querySelector('.mobile-menu-toggle');
+                        if (mobileToggle) {
+                            const icon = mobileToggle.querySelector('i');
+                            if (icon) icon.className = 'fa fa-bars';
+                        }
                         
                         // Store the navigation intent
                         const currentHash = window.location.hash;
@@ -1958,7 +2656,8 @@
                         
                         // UNIVERSAL CLEANUP: Force cleanup for all scene navigations
                         // This ensures fresh app loads and prevents issues with cached states
-                        if (targetScene && targetScene !== currentScene) {
+                        const currentSceneKey = Knack.scene ? Knack.scene.key : null;
+                        if (targetScene && targetScene !== currentSceneKey) {
                             log(`Navigating to ${targetScene}, forcing universal cleanup`);
                             
                             // Signal the loader to force reload for this scene
@@ -1988,8 +2687,8 @@
                                 
                                 // Force scene render if needed
                                 setTimeout(() => {
-                                    const currentScene = Knack.scene ? Knack.scene.key : null;
-                                    if (currentScene !== targetScene) {
+                                    const currentSceneNow = Knack.scene ? Knack.scene.key : null;
+                                    if (currentSceneNow !== targetScene) {
                                         log(`Scene didn't change properly for ${targetScene}, attempting force navigation`);
                                         // Try hash navigation again instead of full page reload
                                         // This avoids going through scene_1 and triggering Universal Redirect
@@ -2035,8 +2734,8 @@
                             
                             // Simple navigation without aggressive retries
                             setTimeout(() => {
-                                const currentScene = Knack.scene ? Knack.scene.key : null;
-                                if (currentScene !== targetScene) {
+                                const currentSceneNow = Knack.scene ? Knack.scene.key : null;
+                                if (currentSceneNow !== targetScene) {
                                     log(`Navigating to Results page`);
                                     window.location.hash = href;
                                 }
@@ -2078,8 +2777,8 @@
                             
                             // Trigger a manual scene render event if Knack doesn't fire it
                             setTimeout(() => {
-                                const currentScene = Knack.scene ? Knack.scene.key : null;
-                                if (currentScene !== targetScene) {
+                                const currentSceneNow = Knack.scene ? Knack.scene.key : null;
+                                if (currentSceneNow !== targetScene) {
                                     log(`Scene didn't change properly, attempting force navigation`);
                                     // Try hash navigation again
                                     window.location.hash = href;
@@ -2110,8 +2809,6 @@
                             }
                         }, 50);
                     }
-                });
-            });
         }
         
         // Track page views for analytics
@@ -2394,19 +3091,7 @@
             }
         }
         
-        // Add function to explicitly disable translation for session
-        function disableTranslationForSession() {
-            sessionStorage.setItem('vespaTranslationDisabled', 'true');
-            // Switch back to English
-            const selector = document.querySelector('.goog-te-combo');
-            if (selector && selector.value !== 'en') {
-                selector.value = 'en';
-                const evt = document.createEvent('HTMLEvents');
-                evt.initEvent('change', false, true);
-                selector.dispatchEvent(evt);
-            }
-            log('Translation disabled for this session');
-        }
+        // Function removed - translation is always available now
         
         function observeLanguageChanges() {
             const selector = document.querySelector('.goog-te-combo');
@@ -2650,30 +3335,12 @@
         // This is exposed globally so any app can call window.refreshTranslations()
         // Used by: knackAppLoader (auto), manual refresh button, and can be called by any app
         window.refreshTranslations = function() {
-            // Trigger Google Translate to re-scan the page
-            const evt = document.createEvent('HTMLEvents');
-            evt.initEvent('change', false, true);
+            // DISABLED - This was causing the page to flip back and forth
+            // Google Translate auto-translates new content, we don't need to force it
             const selector = document.querySelector('.goog-te-combo');
             if (selector) {
                 const currentLang = selector.value;
-                if (currentLang && currentLang !== 'en' && currentLang !== '') {
-                    log(`Refreshing translations for language: ${currentLang}`);
-                    // Briefly switch to English and back to refresh
-                    selector.value = 'en';
-                    selector.dispatchEvent(evt);
-                    setTimeout(() => {
-                        selector.value = currentLang;
-                        selector.dispatchEvent(evt);
-                        // Also try to translate embedded content
-                        translateEmbeddedContent(currentLang);
-                        // Always remove banner after refresh
-                        removeGoogleBanner();
-                        // Trigger event for apps that need to know
-                        $(document).trigger('vespa-translation-refreshed', { language: currentLang });
-                    }, 100);
-                } else {
-                    log('No active translation to refresh (currently in English)');
-                }
+                log(`Current language is ${currentLang || 'en'}, no refresh needed`);
             }
         };
         
@@ -2839,6 +3506,23 @@
         function init() {
             log('Starting General Header initialization...');
             
+            // CHECK: Don't load header if we're inside a REPORT MODAL iframe
+            // But DO load for student emulator iframe
+            if (window.self !== window.top) {
+                // Check if parent window has the report modal marker
+                try {
+                    if (window.parent && window.parent.document && 
+                        window.parent.document.querySelector('.report-modal-overlay')) {
+                        log('Inside report modal iframe, skipping header initialization');
+                        return;
+                    }
+                } catch (e) {
+                    // Cross-origin - can't check parent, assume it's ok to load
+                    log('Cannot access parent window (cross-origin), loading header anyway');
+                }
+                log('Inside iframe but not report modal, loading header normally');
+            }
+            
             // ROBUST FIX: Disable Universal Redirect when user is logged in and navigating
             // Check if user is logged in
             const userType = getUserType();
@@ -2890,7 +3574,7 @@
             
             // Also disable Universal Redirect if we're on a Resource Portal specific page
             if (currentPath.includes('#resource-staff-management') || 
-                currentPath.includes('#tutor-activities/resources-levels') ||
+                currentPath.includes('#curriculum-resources/') ||
                 currentPath.includes('scene_1272') || 
                 currentPath.includes('scene_481')) {
                 window._universalRedirectCompleted = true;
@@ -3004,11 +3688,9 @@
                 window._generalHeaderLoaded = false;
                 // Clear session storage flag
                 sessionStorage.removeItem('_generalHeaderLoadedSession');
-                // Clear ALL translation preferences on logout
+                // Clear translation preferences on logout
                 localStorage.removeItem('vespaPreferredLanguage');
-                sessionStorage.removeItem('vespaTranslationActive');
-                sessionStorage.removeItem('vespaTranslationDisabled');
-                log('Cleared all translation preferences on logout');
+                log('Cleared translation preferences on logout');
                 
                 // Since we navigate BEFORE logout, user should already be on home page
                 log('Logout complete - user should already be on home page');
@@ -3029,12 +3711,26 @@
             window._roleModalShowing = false;
         };
         
+        // Global diagnostic function for translation debugging
+        window.checkTranslationStatus = function() {
+            console.log('=== Translation Status ===');
+            console.log('Language toggle button:', document.getElementById('languageToggleBtn') ? 'EXISTS' : 'NOT FOUND');
+            console.log('Google Translate container:', document.getElementById('google_translate_element') ? 'EXISTS' : 'NOT FOUND');
+            console.log('Google Translate selector:', document.querySelector('.goog-te-combo') ? 'EXISTS' : 'NOT FOUND');
+            console.log('Current language:', document.querySelector('.goog-te-combo')?.value || 'N/A');
+            console.log('Saved preference:', localStorage.getItem('vespaPreferredLanguage') || 'None');
+            console.log('Session disabled:', sessionStorage.getItem('vespaTranslationDisabled') || 'No');
+            console.log('Google Translate loaded:', window.google?.translate ? 'YES' : 'NO');
+            console.log('======================');
+            return 'Status logged above';
+        };
+        
         // Global function to clear translation preferences (useful for debugging)
         window.clearTranslationPreferences = function() {
-            // Clear all storage
+            console.log('[General Header] Clearing translation preferences...');
+            
+            // Clear all storage (don't block loading, just clear preference)
             localStorage.removeItem('vespaPreferredLanguage');
-            sessionStorage.removeItem('vespaTranslationActive');
-            sessionStorage.removeItem('vespaTranslationDisabled');
             
             // Switch back to English if currently translated
             const selector = document.querySelector('.goog-te-combo');
@@ -3045,14 +3741,16 @@
                 selector.dispatchEvent(evt);
             }
             
-            // Hide clear button if it exists
-            const clearButton = document.querySelector('.translation-clear-button');
-            if (clearButton) {
-                clearButton.style.display = 'none';
+            // Update toggle button if it exists
+            const toggleBtn = document.getElementById('languageToggleBtn');
+            if (toggleBtn) {
+                const label = toggleBtn.querySelector('.language-label');
+                if (label) label.textContent = 'Cymraeg';
+                toggleBtn.title = 'Newid i Gymraeg (Switch to Welsh)';
             }
             
-            console.log('[General Header] Translation preferences cleared. Page will load in English on next visit.');
-            return 'Translation preferences cleared';
+            console.log('[General Header] Translation preferences cleared. Reload page to apply.');
+            return 'Translation preferences cleared - reload page to apply';
         };
         
         // Start initialization

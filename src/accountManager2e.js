@@ -15,7 +15,7 @@
  * - 🎨 Beautiful VESPA-branded design
  * - 📱 Fully responsive
  * 
- * Version: 2d
+ * Version: 2e
  * Date: December 3, 2025
  * New: School management modal with dual-write capability for adding establishments
  */
@@ -23,7 +23,7 @@
 (function() {
   'use strict';
   
-  const VERSION = '2d';
+  const VERSION = '2e';
   const DEBUG_MODE = true;
   
   function debugLog(message, data) {
