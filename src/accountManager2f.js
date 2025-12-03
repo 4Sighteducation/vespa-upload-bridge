@@ -11,19 +11,19 @@
  * - 🔗 Connection management (add/remove tutors, HOY, teachers)
  * - ✅ Bulk operations (select multiple → action)
  * - 📧 Email actions (reset password, resend welcome)
- * - 🏫 School management (add new, migrate existing)
+ * - 🏫 School management (comprehensive onboarding + smart duplicate detection)
  * - 🎨 Beautiful VESPA-branded design
  * - 📱 Fully responsive
  * 
- * Version: 2e
+ * Version: 2f
  * Date: December 3, 2025
- * New: School management modal with dual-write capability for adding establishments
+ * New: Comprehensive establishment onboarding with smart duplicate detection by name
  */
 
 (function() {
   'use strict';
   
-  const VERSION = '2e';
+  const VERSION = '2f';
   const DEBUG_MODE = true;
   
   function debugLog(message, data) {
@@ -5354,32 +5354,36 @@
                     </div>
                   </div>
                   
-                  <!-- Migration Mode (Optional Knack ID) -->
-                  <div style="background: #fff3cd; padding: 16px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #ffc107;">
-                    <div style="font-weight: 700; margin-bottom: 8px; font-size: 14px; color: #856404; display: flex; align-items: center; gap: 8px;">
-                      <span>🔄</span>
-                      <span>Link Existing Knack School (Optional)</span>
+                  <!-- Smart Duplicate Detection Info -->
+                  <div style="background: #e3f2fd; padding: 16px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
+                    <div style="font-weight: 700; margin-bottom: 8px; font-size: 14px; color: #1976d2; display: flex; align-items: center; gap: 8px;">
+                      <span>🤖</span>
+                      <span>Smart Duplicate Detection</span>
                     </div>
-                    <div style="font-size: 13px; color: #856404; margin-bottom: 10px; line-height: 1.5;">
-                      <strong>For crossover schools like Kendal:</strong> If this school already exists in Knack, enter its Object_2 ID below. Leave blank for completely new schools.
+                    <div style="font-size: 13px; color: #0d47a1; line-height: 1.6;">
+                      <strong>For crossover schools like Kendal:</strong> Just enter the name! The system will automatically:
+                      <ul style="margin: 8px 0 0 20px; padding: 0;">
+                        <li>✅ Check if school already exists in Knack (by name)</li>
+                        <li>✅ Use existing record if found (no duplication!)</li>
+                        <li>✅ Create new record only if needed</li>
+                        <li>✅ Link everything to Supabase automatically</li>
+                      </ul>
                     </div>
-                    <input 
-                      v-model="newSchoolForm.knackId"
-                      placeholder="e.g., 5a1b2c3d4e5f6g7h8i9j0k (leave blank for new schools)"
-                      class="am-input-inline"
-                      style="width: 100%; padding: 10px; font-size: 13px; font-family: monospace; border: 2px solid #ffc107;" />
                   </div>
                   
                   <!-- Info Box -->
-                  <div style="background: #e3f2fd; padding: 14px; border-radius: 6px; border-left: 4px solid #2196f3; font-size: 13px; color: #0d47a1;">
-                    <div style="font-weight: 600; margin-bottom: 6px;">ℹ️ What Happens Next:</div>
+                  <div style="background: linear-gradient(135deg, #e3f2fd 0%, #e1f5fe 100%); padding: 16px; border-radius: 8px; border-left: 4px solid #2196f3; font-size: 13px; color: #0d47a1;">
+                    <div style="font-weight: 700; margin-bottom: 8px; color: #1976d2; font-size: 14px;">🚀 Automated Process:</div>
                     <ol style="margin: 6px 0 0 20px; padding: 0; line-height: 1.8;">
-                      <li>School created in <strong>Knack Object_2</strong> and <strong>Supabase establishments</strong></li>
-                      <li>Staff Admin account created for {{ newSchoolForm.primaryContactEmail || 'primary contact' }}</li>
-                      <li>Welcome email sent with login credentials</li>
-                      <li>School appears in dropdown immediately</li>
-                      <li>Ready to upload students and staff!</li>
+                      <li><strong>Duplicate Check:</strong> Searches Knack for "{{ newSchoolForm.name || 'school name' }}"</li>
+                      <li><strong>Smart Sync:</strong> Uses existing Knack record OR creates new (no duplicates!)</li>
+                      <li><strong>Dual Write:</strong> Creates/updates in both Knack and Supabase</li>
+                      <li><strong>Instant Access:</strong> School appears in dropdown immediately</li>
+                      <li><strong>Ready to Go:</strong> Upload students and staff right away!</li>
                     </ol>
+                    <div style="margin-top: 12px; padding: 12px; background: rgba(255,255,255,0.8); border-radius: 6px; font-size: 12px; color: #1976d2;">
+                      💡 <strong>Pro Tip:</strong> For Kendal College, just type the name - the system finds it automatically!
+                    </div>
                   </div>
                 </div>
                 
