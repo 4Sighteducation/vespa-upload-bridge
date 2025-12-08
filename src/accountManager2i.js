@@ -3266,12 +3266,12 @@
                   }
                   
                   // Bulk operations (connection updates, role assignments) have status endpoint
-                  const response = await fetch(
+                  const data = await fetchWithRetry(
                     `${this.apiUrl}/api/v3/bulk/status/${job.jobId}`,
-                    { headers: { 'Content-Type': 'application/json' } }
+                    { headers: { 'Content-Type': 'application/json' } },
+                    'Job status check',
+                    2  // Only retry twice for polling to avoid long delays
                   );
-                  
-                  const data = await safeJsonParse(response, 'API request');
                   
                   if (data.success) {
                     // Update job progress
@@ -3291,6 +3291,9 @@
                       // Remove from active jobs
                       this.activeJobs.splice(i, 1);
                       
+                      // Wait a bit before reloading to avoid rate limits
+                      await new Promise(resolve => setTimeout(resolve, 2000));
+                      
                       // Reload accounts to see changes
                       await this.loadAccounts();
                       
@@ -3303,10 +3306,16 @@
                     }
                   }
                 } catch (error) {
-                  console.error('Job polling error:', error);
+                  // If rate limited, the retry logic in fetchWithRetry has already handled it
+                  // Just log and continue - don't spam the console or crash
+                  if (error.message && error.message.includes('Rate limit')) {
+                    debugLog('Rate limit during job polling - will retry on next interval', error.message);
+                  } else {
+                    console.error('Job polling error:', error);
+                  }
                 }
               }
-            }, 5000); // Poll every 5 seconds
+            }, 10000); // Poll every 10 seconds to avoid rate limiting
           },
           
           // ========== DELETE ==========
