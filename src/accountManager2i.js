@@ -431,10 +431,13 @@
           if (this.isSuperUser) {
             await this.loadAllSchools();
             await new Promise(resolve => setTimeout(resolve, 300));
+            // Don't load groups yet - wait for school selection
+          } else {
+            // Staff admins have a fixed school context, so load groups now
+            await this.loadAllStudentGroups();
+            await this.loadAllDepartments(); // Load staff groups too
+            await new Promise(resolve => setTimeout(resolve, 300));
           }
-          
-          // Load groups for dropdowns (critical for filters and editing)
-          await this.loadAllStudentGroups();
           
           // Small delay before loading accounts
           await new Promise(resolve => setTimeout(resolve, 300));
@@ -552,6 +555,7 @@
             // Reload groups for the new school
             if (school) {
               await this.loadAllStudentGroups();
+              await this.loadAllDepartments(); // Load staff groups too
             }
             this.loadAccounts();
           },
@@ -793,15 +797,15 @@
               }
               
               // Load from centralized school_groups table (source of truth!)
-              const response = await fetch(
+              const data = await fetchWithRetry(
                 `${this.apiUrl}/api/v3/schools/${schoolId}/groups?groupType=department`,
                 {
                   method: 'GET',
                   headers: { 'Content-Type': 'application/json' }
-                }
+                },
+                'Load departments',
+                3  // Retry up to 3 times with exponential backoff
               );
-              
-              const data = await safeJsonParse(response, 'Load departments');
               
               if (data.success) {
                 // Extract just the group names
@@ -1241,15 +1245,15 @@
               }
               
               // Load from centralized school_groups table (source of truth!)
-              const response = await fetch(
+              const data = await fetchWithRetry(
                 `${this.apiUrl}/api/v3/schools/${schoolId}/groups?groupType=tutor_group`,
                 {
                   method: 'GET',
                   headers: { 'Content-Type': 'application/json' }
-                }
+                },
+                'Load student groups',
+                3  // Retry up to 3 times with exponential backoff
               );
-              
-              const data = await safeJsonParse(response, 'API request');
               
               if (data.success) {
                 // Extract just the group names
