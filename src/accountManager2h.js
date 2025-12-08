@@ -424,11 +424,20 @@
         async mounted() {
           debugLog('Vue app mounted');
           await this.checkAuth();
+          
+          // Small delay to prevent rate limiting
+          await new Promise(resolve => setTimeout(resolve, 300));
+          
           if (this.isSuperUser) {
             await this.loadAllSchools();
+            await new Promise(resolve => setTimeout(resolve, 300));
           }
+          
           // Load groups for dropdowns (critical for filters and editing)
           await this.loadAllStudentGroups();
+          
+          // Small delay before loading accounts
+          await new Promise(resolve => setTimeout(resolve, 300));
           await this.loadAccounts();
         },
         
@@ -451,16 +460,16 @@
               debugLog('User attributes', { email: this.userEmail, id: userId });
               debugLog('Full Knack user attributes', userAttrs);
               
-              // Call auth check endpoint
-              const response = await fetch(
+              // Call auth check endpoint with automatic retry on rate limit
+              const data = await fetchWithRetry(
                 `${this.apiUrl}/api/v3/accounts/auth/check?userEmail=${encodeURIComponent(this.userEmail)}&userId=${userId}`,
                 {
                   method: 'GET',
                   headers: { 'Content-Type': 'application/json' }
-                }
+                },
+                'Authentication check',
+                3  // Retry up to 3 times with exponential backoff
               );
-              
-              const data = await safeJsonParse(response, 'Authentication check');
               
               if (data.success) {
                 this.isSuperUser = data.isSuperUser;
@@ -514,15 +523,16 @@
             try {
               debugLog('Loading all schools for super user...');
               
-              const response = await fetch(
+              // Load schools with automatic retry on rate limit
+              const data = await fetchWithRetry(
                 `${this.apiUrl}/api/v3/accounts/schools`,
                 {
                   method: 'GET',
                   headers: { 'Content-Type': 'application/json' }
-                }
+                },
+                'Load schools',
+                3  // Retry up to 3 times with exponential backoff
               );
-              
-              const data = await safeJsonParse(response, 'API request');
               
               if (data.success && data.schools) {
                 this.allSchools = data.schools;
@@ -687,15 +697,16 @@
                 debugLog('No schoolId for RLS - will return all accounts (super user) or none (staff admin with RLS)');
               }
               
-              const response = await fetch(
+              // Fetch accounts with automatic retry on rate limit
+              const data = await fetchWithRetry(
                 `${this.apiUrl}/api/v3/accounts?${params}`,
                 {
                   method: 'GET',
                   headers: { 'Content-Type': 'application/json' }
-                }
+                },
+                'Load accounts',
+                3  // Retry up to 3 times with exponential backoff
               );
-              
-              const data = await safeJsonParse(response, 'Load accounts');
               
               if (data.success) {
                 // Deduplicate accounts (strip HTML from emails)
