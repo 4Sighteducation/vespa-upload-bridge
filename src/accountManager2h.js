@@ -15,15 +15,15 @@
  * - 🎨 Beautiful VESPA-branded design
  * - 📱 Fully responsive
  * 
- * Version: 2g
- * Date: December 3, 2025
- * New: Fixed school list loading to use working endpoint
+ * Version: 2h
+ * Date: December 8, 2025
+ * New: Fixed rate limiting errors with safe JSON parsing and retry logic
  */
 
 (function() {
   'use strict';
   
-  const VERSION = '2g';
+  const VERSION = '2h';
   const DEBUG_MODE = true;
   
   function debugLog(message, data) {
