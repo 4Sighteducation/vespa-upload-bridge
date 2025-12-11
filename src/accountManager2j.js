@@ -423,7 +423,22 @@
         
         async mounted() {
           debugLog('Vue app mounted');
-          await this.checkAuth();
+          
+          try {
+            await this.checkAuth();
+          } catch (error) {
+            // Auth failed - DO NOT CONTINUE
+            console.error('🚨 SECURITY: Auth check failed, blocking app initialization');
+            this.showMessage('🚨 Authentication failed. Please refresh the page.', 'error');
+            return; // Stop execution
+          }
+          
+          // Security check: Verify we have proper context before continuing
+          if (!this.isSuperUser && !this.schoolContext) {
+            console.error('🚨 SECURITY: No school context for staff admin - blocking app');
+            this.showMessage('🚨 Security error: Unable to determine your school. Please refresh the page.', 'error');
+            return; // Stop execution
+          }
           
           // Small delay to prevent rate limiting
           await new Promise(resolve => setTimeout(resolve, 300));
@@ -516,8 +531,12 @@
               
             } catch (error) {
               console.error('Auth check error:', error);
-              this.showMessage('Authentication check failed. Some features may not work.', 'error');
-              this.authChecked = true; // Continue anyway
+              this.showMessage('🚨 Authentication failed. Please refresh the page. If this persists, contact support immediately.', 'error');
+              // DO NOT CONTINUE - This is a security issue
+              // Block the UI and prevent any data from loading
+              this.authChecked = false;
+              this.loading = false;
+              throw error; // Stop execution
             }
           },
           
@@ -655,8 +674,12 @@
                 if (this.schoolContext && this.schoolContext.schoolId) {
                   schoolUuidForRls = this.schoolContext.schoolId;
                 } else {
-                  // No school context - RLS will return 0 results, but let UI show
-                  debugLog('Warning: Staff admin has no schoolId, RLS will return no results');
+                  // SECURITY CRITICAL: Staff admin MUST have school context
+                  // If not, this is a data breach - DO NOT LOAD ANY DATA
+                  console.error('🚨 SECURITY ERROR: Staff admin has no schoolId - blocking data access!');
+                  this.showMessage('🚨 Security error: Your school context could not be determined. Please refresh the page. Contact support if this persists.', 'error');
+                  this.loading = false;
+                  return; // Stop execution - do not load any data
                 }
               }
               
