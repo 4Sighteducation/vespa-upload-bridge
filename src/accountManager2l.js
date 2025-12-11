@@ -3078,8 +3078,9 @@
               
               for (const email of this.selectedAccounts) {
                 debugLog('Processing student', { email, current: successCount + failCount + 1, total: this.selectedAccounts.length });
-                const account = this.accounts.find(a => a.email === email);
-                if (!account) continue;
+                
+                // Don't check this.accounts - it's filtered by search!
+                // We have the email, that's all we need
                 
                 try {
                   const emulatedSchoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
