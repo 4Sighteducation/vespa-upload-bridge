@@ -15,7 +15,7 @@
  * - 🎨 Beautiful VESPA-branded design
  * - 📱 Fully responsive
  * 
- * Version: 2m
+ * Version: 2p
  * Date: December 11, 2025
  * New: Fixed bulk group update skipping filtered students
  */
@@ -23,7 +23,7 @@
 (function() {
   'use strict';
   
-  const VERSION = '2m';
+  const VERSION = '2p';
   const DEBUG_MODE = true;
   
   function debugLog(message, data) {
@@ -44,7 +44,13 @@
       // Check if response is ok (status 200-299)
       if (!response.ok) {
         // Try to get the text content for better error messages
+        const contentType = response.headers.get('content-type') || '';
         const text = await response.text();
+        let parsedJson = null;
+        if (contentType.includes('application/json') && text) {
+          try { parsedJson = JSON.parse(text); } catch (_) { /* ignore */ }
+        }
+        const apiMessage = parsedJson?.message || parsedJson?.error || (text ? text.substring(0, 200) : '');
         
         // Check for rate limiting
         if (response.status === 429 || text.toLowerCase().includes('too many requests')) {
@@ -59,14 +65,14 @@
           throw new Error('Access denied. You may not have permission for this action.');
         }
         if (response.status === 404) {
-          throw new Error('Resource not found. The API endpoint may have changed.');
+          throw new Error(apiMessage || 'Resource not found. The API endpoint may have changed.');
         }
         if (response.status >= 500) {
-          throw new Error(`Server error (${response.status}). Please try again later.`);
+          throw new Error(apiMessage ? `Server error (${response.status}): ${apiMessage}` : `Server error (${response.status}). Please try again later.`);
         }
         
         // Generic error with status and any text content
-        throw new Error(`Request failed (${response.status}): ${text.substring(0, 200)}`);
+        throw new Error(`Request failed (${response.status}): ${apiMessage || text.substring(0, 200)}`);
       }
       
       // Check if the response is actually JSON
@@ -2156,7 +2162,7 @@
             try {
               // Load trusts from Supabase (optional - for dropdown)
               const response = await fetch(
-                `${this.apiUrl}/api/v3/trusts`,
+                `${this.apiUrl}/api/v3/establishments/trusts`,
                 {
                   method: 'GET',
                   headers: { 'Content-Type': 'application/json' }
