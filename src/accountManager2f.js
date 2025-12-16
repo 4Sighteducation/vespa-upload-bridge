@@ -15,132 +15,21 @@
  * - 🎨 Beautiful VESPA-branded design
  * - 📱 Fully responsive
  * 
- * Version: 2n
- * Date: December 11, 2025
- * New: Complete fix - bulk operations work with filtered students + debug logging
+ * Version: 2g
+ * Date: December 3, 2025
+ * New: Fixed school list loading to use working endpoint
  */
 
 (function() {
-  'use strict;
+  'use strict';
   
-  const VERSION = '2n';
+  const VERSION = '2g';
   const DEBUG_MODE = true;
   
   function debugLog(message, data) {
     if (DEBUG_MODE) {
       console.log(`[AccountManager ${VERSION}] ${message}`, data || '');
     }
-  }
-  
-  /**
-   * Safely parse JSON response with proper error handling for rate limiting and non-JSON responses
-   * @param {Response} response - The fetch Response object
-   * @param {string} context - Context string for error messages (e.g., 'auth check', 'load accounts')
-   * @returns {Promise<Object>} Parsed JSON data
-   * @throws {Error} With descriptive message about what went wrong
-   */
-  async function safeJsonParse(response, context = 'API request') {
-    try {
-      // Check if response is ok (status 200-299)
-      if (!response.ok) {
-        // Try to get the text content for better error messages
-        const text = await response.text();
-        
-        // Check for rate limiting
-        if (response.status === 429 || text.toLowerCase().includes('too many requests')) {
-          throw new Error(`Rate limit exceeded. Please wait a moment and try again. (Status: ${response.status})`);
-        }
-        
-        // Check for other common HTTP errors
-        if (response.status === 401) {
-          throw new Error('Authentication failed. Please log out and log in again.');
-        }
-        if (response.status === 403) {
-          throw new Error('Access denied. You may not have permission for this action.');
-        }
-        if (response.status === 404) {
-          throw new Error('Resource not found. The API endpoint may have changed.');
-        }
-        if (response.status >= 500) {
-          throw new Error(`Server error (${response.status}). Please try again later.`);
-        }
-        
-        // Generic error with status and any text content
-        throw new Error(`Request failed (${response.status}): ${text.substring(0, 200)}`);
-      }
-      
-      // Check if the response is actually JSON
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        
-        // Check if the text looks like a rate limit message
-        if (text.toLowerCase().includes('too many requests') || text.toLowerCase().includes('rate limit')) {
-          throw new Error('Rate limit exceeded. Please wait a moment and try again.');
-        }
-        
-        // Log the unexpected content type for debugging
-        debugLog(`Warning: Expected JSON but got ${contentType}`, { context, text: text.substring(0, 200) });
-        throw new Error(`Server returned non-JSON response (${contentType || 'unknown'}). Response: ${text.substring(0, 200)}`);
-      }
-      
-      // Parse the JSON
-      const text = await response.text();
-      try {
-        return JSON.parse(text);
-      } catch (parseError) {
-        debugLog('JSON parse error', { context, text: text.substring(0, 200), error: parseError.message });
-        throw new Error(`Invalid JSON response: ${parseError.message}. Response: ${text.substring(0, 200)}`);
-      }
-      
-    } catch (error) {
-      // If it's already our custom error, rethrow it
-      if (error.message.includes('Rate limit') || 
-          error.message.includes('Authentication failed') ||
-          error.message.includes('Access denied') ||
-          error.message.includes('Request failed')) {
-        throw error;
-      }
-      
-      // Otherwise wrap it with context
-      throw new Error(`${context} failed: ${error.message}`);
-    }
-  }
-  
-  /**
-   * Fetch with automatic retry on rate limit errors
-   * @param {string} url - The URL to fetch
-   * @param {Object} options - Fetch options
-   * @param {string} context - Context for error messages
-   * @param {number} maxRetries - Maximum number of retries (default: 2)
-   * @returns {Promise<Object>} Parsed JSON data
-   */
-  async function fetchWithRetry(url, options = {}, context = 'API request', maxRetries = 2) {
-    let lastError;
-    
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const response = await fetch(url, options);
-        return await safeJsonParse(response, context);
-      } catch (error) {
-        lastError = error;
-        
-        // Only retry on rate limit errors
-        if (error.message.includes('Rate limit')) {
-          if (attempt < maxRetries) {
-            const waitTime = Math.min(1000 * Math.pow(2, attempt), 5000); // Exponential backoff: 1s, 2s, max 5s
-            debugLog(`Rate limit hit, retrying in ${waitTime}ms (attempt ${attempt + 1}/${maxRetries})...`);
-            await new Promise(resolve => setTimeout(resolve, waitTime));
-            continue;
-          }
-        }
-        
-        // For non-rate-limit errors or max retries reached, throw immediately
-        throw error;
-      }
-    }
-    
-    throw lastError;
   }
   
   debugLog('Script loaded', { version: VERSION });
@@ -423,39 +312,12 @@
         
         async mounted() {
           debugLog('Vue app mounted');
-          
-          try {
-            await this.checkAuth();
-          } catch (error) {
-            // Auth failed - DO NOT CONTINUE
-            console.error('🚨 SECURITY: Auth check failed, blocking app initialization');
-            this.showMessage('🚨 Authentication failed. Please refresh the page.', 'error');
-            return; // Stop execution
-          }
-          
-          // Security check: Verify we have proper context before continuing
-          if (!this.isSuperUser && !this.schoolContext) {
-            console.error('🚨 SECURITY: No school context for staff admin - blocking app');
-            this.showMessage('🚨 Security error: Unable to determine your school. Please refresh the page.', 'error');
-            return; // Stop execution
-          }
-          
-          // Small delay to prevent rate limiting
-          await new Promise(resolve => setTimeout(resolve, 300));
-          
+          await this.checkAuth();
           if (this.isSuperUser) {
             await this.loadAllSchools();
-            await new Promise(resolve => setTimeout(resolve, 300));
-            // Don't load groups yet - wait for school selection
-          } else {
-            // Staff admins have a fixed school context, so load groups now
-            await this.loadAllStudentGroups();
-            await this.loadAllDepartments(); // Load staff groups too
-            await new Promise(resolve => setTimeout(resolve, 300));
           }
-          
-          // Small delay before loading accounts
-          await new Promise(resolve => setTimeout(resolve, 300));
+          // Load groups for dropdowns (critical for filters and editing)
+          await this.loadAllStudentGroups();
           await this.loadAccounts();
         },
         
@@ -478,16 +340,16 @@
               debugLog('User attributes', { email: this.userEmail, id: userId });
               debugLog('Full Knack user attributes', userAttrs);
               
-              // Call auth check endpoint with automatic retry on rate limit
-              const data = await fetchWithRetry(
+              // Call auth check endpoint
+              const response = await fetch(
                 `${this.apiUrl}/api/v3/accounts/auth/check?userEmail=${encodeURIComponent(this.userEmail)}&userId=${userId}`,
                 {
                   method: 'GET',
                   headers: { 'Content-Type': 'application/json' }
-                },
-                'Authentication check',
-                3  // Retry up to 3 times with exponential backoff
+                }
               );
+              
+              const data = await response.json();
               
               if (data.success) {
                 this.isSuperUser = data.isSuperUser;
@@ -531,12 +393,8 @@
               
             } catch (error) {
               console.error('Auth check error:', error);
-              this.showMessage('🚨 Authentication failed. Please refresh the page. If this persists, contact support immediately.', 'error');
-              // DO NOT CONTINUE - This is a security issue
-              // Block the UI and prevent any data from loading
-              this.authChecked = false;
-              this.loading = false;
-              throw error; // Stop execution
+              this.showMessage('Authentication check failed. Some features may not work.', 'error');
+              this.authChecked = true; // Continue anyway
             }
           },
           
@@ -545,16 +403,15 @@
             try {
               debugLog('Loading all schools for super user...');
               
-              // Load schools with automatic retry on rate limit
-              const data = await fetchWithRetry(
+              const response = await fetch(
                 `${this.apiUrl}/api/v3/accounts/schools`,
                 {
                   method: 'GET',
                   headers: { 'Content-Type': 'application/json' }
-                },
-                'Load schools',
-                3  // Retry up to 3 times with exponential backoff
+                }
               );
+              
+              const data = await response.json();
               
               if (data.success && data.schools) {
                 this.allSchools = data.schools;
@@ -574,7 +431,6 @@
             // Reload groups for the new school
             if (school) {
               await this.loadAllStudentGroups();
-              await this.loadAllDepartments(); // Load staff groups too
             }
             this.loadAccounts();
           },
@@ -674,12 +530,8 @@
                 if (this.schoolContext && this.schoolContext.schoolId) {
                   schoolUuidForRls = this.schoolContext.schoolId;
                 } else {
-                  // SECURITY CRITICAL: Staff admin MUST have school context
-                  // If not, this is a data breach - DO NOT LOAD ANY DATA
-                  console.error('🚨 SECURITY ERROR: Staff admin has no schoolId - blocking data access!');
-                  this.showMessage('🚨 Security error: Your school context could not be determined. Please refresh the page. Contact support if this persists.', 'error');
-                  this.loading = false;
-                  return; // Stop execution - do not load any data
+                  // No school context - RLS will return 0 results, but let UI show
+                  debugLog('Warning: Staff admin has no schoolId, RLS will return no results');
                 }
               }
               
@@ -724,16 +576,15 @@
                 debugLog('No schoolId for RLS - will return all accounts (super user) or none (staff admin with RLS)');
               }
               
-              // Fetch accounts with automatic retry on rate limit
-              const data = await fetchWithRetry(
+              const response = await fetch(
                 `${this.apiUrl}/api/v3/accounts?${params}`,
                 {
                   method: 'GET',
                   headers: { 'Content-Type': 'application/json' }
-                },
-                'Load accounts',
-                3  // Retry up to 3 times with exponential backoff
+                }
               );
+              
+              const data = await response.json();
               
               if (data.success) {
                 // Deduplicate accounts (strip HTML from emails)
@@ -820,15 +671,15 @@
               }
               
               // Load from centralized school_groups table (source of truth!)
-              const data = await fetchWithRetry(
+              const response = await fetch(
                 `${this.apiUrl}/api/v3/schools/${schoolId}/groups?groupType=department`,
                 {
                   method: 'GET',
                   headers: { 'Content-Type': 'application/json' }
-                },
-                'Load departments',
-                3  // Retry up to 3 times with exponential backoff
+                }
               );
+              
+              const data = await response.json();
               
               if (data.success) {
                 // Extract just the group names
@@ -920,7 +771,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'Update staff groups');
+              const data = await response.json();
               
               if (data.success) {
                 this.showMessage('✅ Groups updated! Processing in background...', 'success');
@@ -966,7 +817,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 this.showMessage('Account updated successfully!', 'success');
@@ -1019,7 +870,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 this.connectionAccount = data.account;
@@ -1111,7 +962,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 this.showMessage('Connection added successfully!', 'success');
@@ -1172,7 +1023,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 this.showMessage('Connection removed successfully!', 'success');
@@ -1236,7 +1087,7 @@
                   }
                 );
                 
-                const data = await safeJsonParse(response, 'API request');
+                const data = await response.json();
                 
                 if (data.success && data.assignments) {
                   // Pre-populate selections
@@ -1268,15 +1119,15 @@
               }
               
               // Load from centralized school_groups table (source of truth!)
-              const data = await fetchWithRetry(
+              const response = await fetch(
                 `${this.apiUrl}/api/v3/schools/${schoolId}/groups?groupType=tutor_group`,
                 {
                   method: 'GET',
                   headers: { 'Content-Type': 'application/json' }
-                },
-                'Load student groups',
-                3  // Retry up to 3 times with exponential backoff
+                }
               );
+              
+              const data = await response.json();
               
               if (data.success) {
                 // Extract just the group names
@@ -1357,7 +1208,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 this.showMessage('✅ Role assignment submitted! Processing in background...', 'success');
@@ -1453,7 +1304,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 this.schoolGroups = data.groups || [];
@@ -1492,7 +1343,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 this.showMessage(`✅ Group "${this.newGroupName}" added!`, 'success');
@@ -1541,7 +1392,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 this.showMessage(`✅ Group renamed to "${this.renameGroupName}"`, 'success');
@@ -1576,7 +1427,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 this.deleteGroupUsage = data;
@@ -1627,7 +1478,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 this.showMessage(`✅ Group "${this.groupToDelete.group_name}" deleted`, 'success');
@@ -1773,7 +1624,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success || data.isValid) {
                 this.csvValidationResults = data;
@@ -1822,7 +1673,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success && data.jobId) {
                 this.csvJobId = data.jobId;
@@ -1944,7 +1795,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               debugLog('get-form-options response', data);
               
@@ -2044,7 +1895,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 this.showMessage(`${this.manualAddType === 'staff' ? 'Staff member' : 'Student'} added successfully!`, 'success');
@@ -2163,7 +2014,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success && data.trusts) {
                 this.availableTrusts = data.trusts;
@@ -2189,7 +2040,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success && data.schools) {
                 // Map to our expected format (id → knackId, supabaseUuid already there)
@@ -2313,7 +2164,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 let message = `✅ ${this.newSchoolForm.name} created successfully!`;
@@ -2385,7 +2236,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 // Update status
@@ -2532,7 +2383,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 // Load QR code library
@@ -2589,7 +2440,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 await this.loadQRCodeLibrary();
@@ -2725,7 +2576,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 this.showMessage('✅ Password reset email sent with new temporary password!', 'success');
@@ -2768,7 +2619,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 this.showMessage('✅ Welcome email sent with new temporary password!', 'success');
@@ -2949,7 +2800,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 // Add to active jobs for tracking
@@ -3041,12 +2892,6 @@
           
           // Execute bulk group update
           async executeBulkGroupUpdate() {
-            debugLog('executeBulkGroupUpdate called', { 
-              selectedCount: this.selectedAccounts.length,
-              groupName: this.bulkGroupName,
-              selectedEmails: this.selectedAccounts
-            });
-            
             if (!this.bulkGroupName) {
               this.showMessage('Please select a group', 'warning');
               return;
@@ -3058,14 +2903,9 @@
               ? `Update department for ${this.selectedAccounts.length} staff member(s) to "${this.bulkGroupName}"?`
               : `Update group for ${this.selectedAccounts.length} student(s) to "${this.bulkGroupName}"?`;
             
-            debugLog('Showing confirmation', { confirmMsg });
-            
             if (!confirm(confirmMsg)) {
-              debugLog('User cancelled bulk group update');
               return;
             }
-            
-            debugLog('Starting bulk group update loop');
             
             this.loading = true;
             this.loadingText = `Updating ${fieldName}s...`;
@@ -3074,13 +2914,9 @@
             let failCount = 0;
             
             try {
-              debugLog('Processing students', { count: this.selectedAccounts.length });
-              
               for (const email of this.selectedAccounts) {
-                debugLog('Processing student', { email, current: successCount + failCount + 1, total: this.selectedAccounts.length });
-                
-                // Don't check this.accounts - it's filtered by search!
-                // We have the email, that's all we need
+                const account = this.accounts.find(a => a.email === email);
+                if (!account) continue;
                 
                 try {
                   const emulatedSchoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
@@ -3108,7 +2944,7 @@
                     }
                   );
                   
-                  const data = await safeJsonParse(response, 'API request');
+                  const data = await response.json();
                   if (data.success) {
                     successCount++;
                   } else {
@@ -3122,8 +2958,6 @@
                 // Small delay
                 await new Promise(resolve => setTimeout(resolve, 100));
               }
-              
-              debugLog('Bulk group update loop complete', { successCount, failCount });
               
               this.showMessage(
                 `✅ Bulk ${fieldName} update complete: ${successCount} success, ${failCount} failed`,
@@ -3215,7 +3049,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 // Add to active jobs for background tracking
@@ -3306,12 +3140,12 @@
                   }
                   
                   // Bulk operations (connection updates, role assignments) have status endpoint
-                  const data = await fetchWithRetry(
+                  const response = await fetch(
                     `${this.apiUrl}/api/v3/bulk/status/${job.jobId}`,
-                    { headers: { 'Content-Type': 'application/json' } },
-                    'Job status check',
-                    2  // Only retry twice for polling to avoid long delays
+                    { headers: { 'Content-Type': 'application/json' } }
                   );
+                  
+                  const data = await response.json();
                   
                   if (data.success) {
                     // Update job progress
@@ -3331,9 +3165,6 @@
                       // Remove from active jobs
                       this.activeJobs.splice(i, 1);
                       
-                      // Wait a bit before reloading to avoid rate limits
-                      await new Promise(resolve => setTimeout(resolve, 2000));
-                      
                       // Reload accounts to see changes
                       await this.loadAccounts();
                       
@@ -3346,16 +3177,10 @@
                     }
                   }
                 } catch (error) {
-                  // If rate limited, the retry logic in fetchWithRetry has already handled it
-                  // Just log and continue - don't spam the console or crash
-                  if (error.message && error.message.includes('Rate limit')) {
-                    debugLog('Rate limit during job polling - will retry on next interval', error.message);
-                  } else {
-                    console.error('Job polling error:', error);
-                  }
+                  console.error('Job polling error:', error);
                 }
               }
-            }, 10000); // Poll every 10 seconds to avoid rate limiting
+            }, 5000); // Poll every 5 seconds
           },
           
           // ========== DELETE ==========
@@ -3414,7 +3239,7 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await response.json();
               
               if (data.success) {
                 this.showMessage(`✅ Account permanently deleted: ${account.email}`, 'success');

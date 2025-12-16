@@ -3041,6 +3041,12 @@
           
           // Execute bulk group update
           async executeBulkGroupUpdate() {
+            debugLog('executeBulkGroupUpdate called', { 
+              selectedCount: this.selectedAccounts.length,
+              groupName: this.bulkGroupName,
+              selectedEmails: this.selectedAccounts
+            });
+            
             if (!this.bulkGroupName) {
               this.showMessage('Please select a group', 'warning');
               return;
@@ -3052,9 +3058,14 @@
               ? `Update department for ${this.selectedAccounts.length} staff member(s) to "${this.bulkGroupName}"?`
               : `Update group for ${this.selectedAccounts.length} student(s) to "${this.bulkGroupName}"?`;
             
+            debugLog('Showing confirmation', { confirmMsg });
+            
             if (!confirm(confirmMsg)) {
+              debugLog('User cancelled bulk group update');
               return;
             }
+            
+            debugLog('Starting bulk group update loop');
             
             this.loading = true;
             this.loadingText = `Updating ${fieldName}s...`;
@@ -3063,7 +3074,10 @@
             let failCount = 0;
             
             try {
+              debugLog('Processing students', { count: this.selectedAccounts.length });
+              
               for (const email of this.selectedAccounts) {
+                debugLog('Processing student', { email, current: successCount + failCount + 1, total: this.selectedAccounts.length });
                 const account = this.accounts.find(a => a.email === email);
                 if (!account) continue;
                 
@@ -3107,6 +3121,8 @@
                 // Small delay
                 await new Promise(resolve => setTimeout(resolve, 100));
               }
+              
+              debugLog('Bulk group update loop complete', { successCount, failCount });
               
               this.showMessage(
                 `✅ Bulk ${fieldName} update complete: ${successCount} success, ${failCount} failed`,
