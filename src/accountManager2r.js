@@ -24,7 +24,7 @@
   'use strict';
   
   const VERSION = '2q';
-  const DEBUG_MODE = true;
+  const DEBUG_MODE = false;
   
   function debugLog(message, data) {
     if (DEBUG_MODE) {
