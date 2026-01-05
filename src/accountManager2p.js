@@ -51,28 +51,41 @@
           try { parsedJson = JSON.parse(text); } catch (_) { /* ignore */ }
         }
         const apiMessage = parsedJson?.message || parsedJson?.error || (text ? text.substring(0, 200) : '');
+        const url = response.url || '(unknown url)';
         
         // Check for rate limiting
         if (response.status === 429 || text.toLowerCase().includes('too many requests')) {
-          throw new Error(`Rate limit exceeded. Please wait a moment and try again. (Status: ${response.status})`);
+          throw new Error(`Rate limit exceeded. Please wait a moment and try again. (Status: ${response.status}) URL: ${url}`);
         }
         
         // Check for other common HTTP errors
         if (response.status === 401) {
-          throw new Error('Authentication failed. Please log out and log in again.');
+          throw new Error(`Authentication failed. Please log out and log in again. (Status: 401) URL: ${url}`);
         }
         if (response.status === 403) {
-          throw new Error('Access denied. You may not have permission for this action.');
+          throw new Error(`Access denied. You may not have permission for this action. (Status: 403) URL: ${url}`);
         }
         if (response.status === 404) {
-          throw new Error(apiMessage || 'Resource not found. The API endpoint may have changed.');
+          throw new Error(apiMessage ? `404 Not Found: ${apiMessage}. URL: ${url}` : `404 Not Found. The API endpoint may have changed. URL: ${url}`);
         }
         if (response.status >= 500) {
-          throw new Error(apiMessage ? `Server error (${response.status}): ${apiMessage}` : `Server error (${response.status}). Please try again later.`);
+          throw new Error(apiMessage ? `Server error (${response.status}): ${apiMessage}. URL: ${url}` : `Server error (${response.status}). Please try again later. URL: ${url}`);
+        }
+
+        // IMPORTANT: For expected validation failures (typically HTTP 400/422),
+        // return the JSON body (if present) so the UI can show detailed errors.
+        // Only throw if we couldn't parse a JSON payload.
+        if (parsedJson) {
+          return {
+            ...parsedJson,
+            _httpStatus: response.status,
+            _httpStatusText: response.statusText,
+            _url: url
+          };
         }
         
         // Generic error with status and any text content
-        throw new Error(`Request failed (${response.status}): ${apiMessage || text.substring(0, 200)}`);
+        throw new Error(`Request failed (${response.status}): ${apiMessage || text.substring(0, 200)}. URL: ${url}`);
       }
       
       // Check if the response is actually JSON
@@ -1779,18 +1792,39 @@
                 }
               );
               
-              const data = await safeJsonParse(response, 'API request');
+              const data = await safeJsonParse(response, `CSV ${this.csvUploadType} validation`);
               
               if (data.success || data.isValid) {
                 this.csvValidationResults = data;
                 this.showMessage(`Validation passed: ${this.csvData.length} rows ready`, 'success');
               } else {
                 this.csvValidationResults = data;
-                this.showMessage(`Validation failed: ${data.errors?.length || 0} errors found`, 'error');
+                
+                const errorCount = data.errors?.length || 0;
+                const firstError = Array.isArray(data.errors) && data.errors.length > 0
+                  ? (data.errors[0].message || data.errors[0].error || String(data.errors[0]))
+                  : (data.message || 'Validation failed');
+                
+                // Include HTTP status and URL when available (helps diagnose 404s / endpoint changes)
+                const transportHint = data._httpStatus
+                  ? ` (HTTP ${data._httpStatus}${data._url ? `: ${data._url}` : ''})`
+                  : '';
+                
+                this.showMessage(`Validation failed: ${errorCount} issue(s)${transportHint}. First: ${firstError}`, 'error');
               }
               
             } catch (error) {
               console.error('CSV validation error:', error);
+              
+              // Populate results so the modal shows a clear failure reason (even for 404/non-JSON)
+              this.csvValidationResults = {
+                success: false,
+                isValid: false,
+                errors: [error.message],
+                warnings: [],
+                message: error.message
+              };
+              
               this.showMessage('CSV validation failed: ' + error.message, 'error');
             } finally {
               this.loading = false;
