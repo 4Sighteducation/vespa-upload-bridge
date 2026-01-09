@@ -1971,7 +1971,11 @@
                           userEmail: this.userEmail
                         },
                         options: {
-                          replaceConnections: true,
+                          // SAFE DEFAULTS:
+                          // - ignoreBlankFields: true => blank cells do not overwrite
+                          // - replaceConnections: false => add-only unless explicitly requested
+                          ignoreBlankFields: true,
+                          replaceConnections: false,
                           skipConnections: false
                         }
                       }
