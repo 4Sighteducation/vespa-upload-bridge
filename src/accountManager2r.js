@@ -229,6 +229,12 @@
             selectedYearGroup: '',
             selectedGroup: '', // Tutor group filter (students)
             selectedStaffGroup: '', // Group filter for staff
+            
+            // Connected staff filter (students) - NEW
+            selectedConnectedStaffType: '', // '', 'tutor', 'head_of_year', 'subject_teacher', 'staff_admin'
+            selectedConnectedStaffEmail: '',
+            connectedStaffOptions: [], // [{ email, fullName, firstName, lastName }]
+            loadingConnectedStaffOptions: false,
             selectedSchool: null,
             allSchools: [], // For super user dropdown
             availableGroups: [], // For group dropdown (students)
@@ -470,6 +476,7 @@
             // Staff admins have a fixed school context, so load groups now
             await this.loadAllStudentGroups();
             await this.loadAllDepartments(); // Load staff groups too
+            await this.loadConnectedStaffOptions(); // NEW: for "Connected staff" filter dropdown
             await new Promise(resolve => setTimeout(resolve, 300));
           }
           
@@ -592,8 +599,13 @@
             debugLog('School selected', school);
             // Reload groups for the new school
             if (school) {
+              // Clear connected staff filter when changing school context
+              this.selectedConnectedStaffType = '';
+              this.selectedConnectedStaffEmail = '';
+              this.connectedStaffOptions = [];
               await this.loadAllStudentGroups();
               await this.loadAllDepartments(); // Load staff groups too
+              await this.loadConnectedStaffOptions(); // NEW
             }
             this.loadAccounts();
           },
@@ -640,6 +652,87 @@
             this.searchDebounceTimer = setTimeout(() => {
               this.loadAccounts();
             }, 300); // 300ms delay
+          },
+
+          // ========== CONNECTED STAFF FILTER (STUDENTS) ==========
+          
+          async loadConnectedStaffOptions() {
+            try {
+              // Only relevant for student tab; we still allow preloading so the dropdown is instant
+              const schoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
+                ? this.selectedSchool.supabaseUuid
+                : this.schoolContext?.schoolId || null;
+              
+              if (!schoolId) {
+                this.connectedStaffOptions = [];
+                return;
+              }
+              
+              this.loadingConnectedStaffOptions = true;
+              
+              const params = new URLSearchParams({
+                schoolId: schoolId
+              });
+              
+              if (this.selectedConnectedStaffType) {
+                params.append('roleType', this.selectedConnectedStaffType);
+              }
+              
+              const data = await fetchWithRetry(
+                `${this.apiUrl}/api/v3/accounts/staff/available?${params}`,
+                {
+                  method: 'GET',
+                  headers: { 'Content-Type': 'application/json' }
+                },
+                'Load staff list for connected-staff filter',
+                3
+              );
+              
+              if (data.success) {
+                const staff = (data.staff || []).slice();
+                // Sort by fullName/email for nicer UX
+                staff.sort((a, b) => {
+                  const aKey = (a.fullName || a.email || '').toLowerCase();
+                  const bKey = (b.fullName || b.email || '').toLowerCase();
+                  return aKey.localeCompare(bKey);
+                });
+                this.connectedStaffOptions = staff;
+              } else {
+                this.connectedStaffOptions = [];
+              }
+            } catch (error) {
+              console.error('Error loading connected staff options:', error);
+              this.connectedStaffOptions = [];
+            } finally {
+              this.loadingConnectedStaffOptions = false;
+            }
+          },
+          
+          async onConnectedStaffTypeChange() {
+            // When changing role type, reload staff options and clear staff selection
+            this.selectedConnectedStaffEmail = '';
+            this.currentPage = 1;
+            this.selectedAccounts = [];
+            this.allSelected = false;
+            await this.loadConnectedStaffOptions();
+            await this.loadAccounts();
+          },
+          
+          async onConnectedStaffEmailChange() {
+            this.currentPage = 1;
+            this.selectedAccounts = [];
+            this.allSelected = false;
+            await this.loadAccounts();
+          },
+          
+          async clearConnectedStaffFilter() {
+            this.selectedConnectedStaffType = '';
+            this.selectedConnectedStaffEmail = '';
+            this.currentPage = 1;
+            this.selectedAccounts = [];
+            this.allSelected = false;
+            await this.loadConnectedStaffOptions();
+            await this.loadAccounts();
           },
           
           // ========== DATA LOADING ==========
@@ -728,6 +821,15 @@
               
               if (this.selectedGroup && this.currentTab === 'students') {
                 params.append('group', this.selectedGroup);
+              }
+              
+              // NEW: Connected staff filter (students only)
+              // Only send when we have school context (backend requires emulatedSchoolId)
+              if (this.currentTab === 'students' && schoolUuidForRls && this.selectedConnectedStaffEmail) {
+                params.append('connectedStaffEmail', this.selectedConnectedStaffEmail);
+                if (this.selectedConnectedStaffType) {
+                  params.append('connectedConnectionType', this.selectedConnectedStaffType);
+                }
               }
               
               // Add staff group filter
@@ -3485,6 +3587,8 @@
             this.selectedYearGroup = '';
             this.selectedGroup = '';
             this.selectedStaffGroup = '';
+            this.selectedConnectedStaffType = '';
+            this.selectedConnectedStaffEmail = '';
             debugLog('Tab switched, filters cleared', { newTab: tab });
             this.loadAccounts();
           },
@@ -3746,6 +3850,45 @@
                     {{ group }}
                   </option>
                 </select>
+                
+                <!-- Connected Staff filter (students only) -->
+                <select
+                  v-if="currentTab === 'students'"
+                  v-model="selectedConnectedStaffType"
+                  @change="onConnectedStaffTypeChange"
+                  class="am-select"
+                  :disabled="isSuperUser && !selectedSchool">
+                  <option value="">All Connection Types</option>
+                  <option value="tutor">Tutor</option>
+                  <option value="head_of_year">Head of Year</option>
+                  <option value="subject_teacher">Subject Teacher</option>
+                  <option value="staff_admin">Staff Admin</option>
+                </select>
+                
+                <select
+                  v-if="currentTab === 'students'"
+                  v-model="selectedConnectedStaffEmail"
+                  @change="onConnectedStaffEmailChange"
+                  class="am-select"
+                  :disabled="(isSuperUser && !selectedSchool) || loadingConnectedStaffOptions || connectedStaffOptions.length === 0">
+                  <option value="">
+                    {{ (isSuperUser && !selectedSchool) ? 'Select a school first' : (loadingConnectedStaffOptions ? 'Loading staff...' : 'Connected Staff...') }}
+                  </option>
+                  <option
+                    v-for="staff in connectedStaffOptions"
+                    :key="staff.email"
+                    :value="staff.email">
+                    {{ staff.fullName }} ({{ staff.email }})
+                  </option>
+                </select>
+                
+                <button
+                  v-if="currentTab === 'students' && (selectedConnectedStaffEmail || selectedConnectedStaffType)"
+                  @click="clearConnectedStaffFilter"
+                  class="am-button secondary"
+                  style="padding: 10px 14px;">
+                  Clear
+                </button>
                 
                 <!-- Group filter (staff only) -->
                 <select 
