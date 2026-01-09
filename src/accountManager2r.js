@@ -314,6 +314,7 @@
             // CSV Upload
             showCSVUploadModal: false,
             csvUploadType: 'students', // 'students' or 'staff'
+            csvUploadMode: 'onboard', // students: 'onboard' | 'bulk-update' (guardrails)
             selectedCSVFile: null,
             csvData: null,
             csvValidationResults: null,
@@ -1781,6 +1782,7 @@
           openCSVUploadModal() {
             this.showCSVUploadModal = true;
             this.csvUploadType = this.currentTab === 'students' ? 'students' : 'staff';
+            this.csvUploadMode = (this.currentTab === 'students') ? 'onboard' : 'onboard';
             this.selectedCSVFile = null;
             this.csvData = null;
             this.csvValidationResults = null;
@@ -1878,8 +1880,10 @@
               debugLog('CSV parsed', { rows: this.csvData.length });
               
               // Call validation endpoint
-              const endpoint = this.csvUploadType === 'students' 
-                ? 'students/onboard/validate'
+              const endpoint = this.csvUploadType === 'students'
+                ? (this.csvUploadMode === 'bulk-update'
+                  ? 'v3/students/bulk-update/validate'
+                  : 'students/onboard/validate')
                 : 'staff/validate';
               
               const response = await fetch(
@@ -1945,7 +1949,9 @@
             
             try {
               const endpoint = this.csvUploadType === 'students'
-                ? 'students/onboard/process'
+                ? (this.csvUploadMode === 'bulk-update'
+                  ? 'v3/students/bulk-update/process'
+                  : 'students/onboard/process')
                 : 'staff/process';
               
               const response = await fetch(
@@ -1955,33 +1961,68 @@
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
                     csvData: this.csvData,
-                    options: {
-                      sendNotifications: true,
-                      notificationEmail: this.userEmail
-                    },
-                    context: this.getUploaderContext()
+                    // Bulk-update mode uses v3 endpoints and expects userContext/options
+                    ...(this.csvUploadType === 'students' && this.csvUploadMode === 'bulk-update'
+                      ? {
+                        userContext: {
+                          emulatedSchoolId: this.isSuperUser && this.selectedSchool?.supabaseUuid
+                            ? this.selectedSchool.supabaseUuid
+                            : this.schoolContext?.schoolId || null,
+                          userEmail: this.userEmail
+                        },
+                        options: {
+                          replaceConnections: true,
+                          skipConnections: false
+                        }
+                      }
+                      : {
+                        options: {
+                          sendNotifications: true,
+                          notificationEmail: this.userEmail
+                        },
+                        context: this.getUploaderContext()
+                      })
                   })
                 }
               );
               
               const data = await safeJsonParse(response, 'API request');
               
-              if (data.success && data.jobId) {
-                this.csvJobId = data.jobId;
-                this.showMessage(`Upload queued successfully! Job ID: ${data.jobId}. You'll receive an email when complete.`, 'success');
+              const returnedJobId = data.jobId || data.jobID || data.id; // tolerate variants
+              if (data.success && returnedJobId) {
+                this.csvJobId = returnedJobId;
+                
+                if (this.csvUploadType === 'students' && this.csvUploadMode === 'bulk-update') {
+                  this.showMessage(`✅ Bulk update queued! Job ID: ${returnedJobId}. Progress will appear bottom-right.`, 'success');
+                } else {
+                  this.showMessage(`Upload queued successfully! Job ID: ${returnedJobId}. You'll receive an email when complete.`, 'success');
+                }
                 
                 // Add to active jobs for tracking (CSV uploads have email notification)
-                this.activeJobs.push({
-                  jobId: data.jobId,
-                  type: 'csv-upload', // Special type for CSV uploads
-                  action: this.csvUploadType === 'students' ? 'Student Upload' : 'Staff Upload',
-                  total: this.csvData.length,
-                  current: 0,
-                  status: 'Queued - Processing in background...',
-                  description: `${this.csvUploadType === 'students' ? 'Student' : 'Staff'} CSV Upload`,
-                  startTime: Date.now(),
-                  emailNotification: true // Flag to show email notification message
-                });
+                if (this.csvUploadType === 'students' && this.csvUploadMode === 'bulk-update') {
+                  this.activeJobs.push({
+                    jobId: returnedJobId,
+                    type: 'student-bulk-update',
+                    action: 'Student Bulk Update',
+                    total: this.csvData.length,
+                    current: 0,
+                    status: 'Queued...',
+                    description: 'Student Bulk Update (CSV)',
+                    startTime: Date.now()
+                  });
+                } else {
+                  this.activeJobs.push({
+                    jobId: returnedJobId,
+                    type: 'csv-upload', // Special type for CSV uploads
+                    action: this.csvUploadType === 'students' ? 'Student Upload' : 'Staff Upload',
+                    total: this.csvData.length,
+                    current: 0,
+                    status: 'Queued - Processing in background...',
+                    description: `${this.csvUploadType === 'students' ? 'Student' : 'Staff'} CSV Upload`,
+                    startTime: Date.now(),
+                    emailNotification: true // Flag to show email notification message
+                  });
+                }
                 
                 // Start polling if not already running
                 if (!this.jobPollingInterval) {
@@ -2010,6 +2051,7 @@
             this.csvData = null;
             this.csvValidationResults = null;
             this.csvUploading = false;
+            this.csvUploadMode = 'onboard';
           },
           
           getUploaderContext() {
@@ -4888,6 +4930,18 @@
                 <div class="am-modal-body">
                   <div class="am-modal-description">
                     Upload multiple {{ csvUploadType }} accounts via CSV file. The same validation and processing as the main upload system.
+                  </div>
+
+                  <!-- Mode selector (students only) -->
+                  <div v-if="csvUploadType === 'students'" style="margin: 16px 0; padding: 14px; background: #f5f7fa; border-radius: 8px; border-left: 4px solid #079baa;">
+                    <div style="font-weight: 700; margin-bottom: 8px; color: #2a3c7a;">Mode</div>
+                    <select v-model="csvUploadMode" class="am-select" style="width: 100%;">
+                      <option value="onboard">🎓 Upload / Onboard (creates missing students)</option>
+                      <option value="bulk-update">🛡️ Bulk Update (guardrails: only updates whitelisted fields)</option>
+                    </select>
+                    <div v-if="csvUploadMode === 'bulk-update'" style="margin-top: 10px; font-size: 13px; color: #666; line-height: 1.5;">
+                      Updates: Firstname, Lastname, Year Gp, Group, Level, Tutors/HOY/Subject Teachers. Uses background job + progress tracking.
+                    </div>
                   </div>
                   
                   <!-- Staff-First Advisory (Students Only) -->
