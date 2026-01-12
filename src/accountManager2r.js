@@ -331,6 +331,14 @@
             apJobId: null,
             apPercentile: 75,
             apAcademicYear: '',
+            apUploadMode: 'profile', // 'profile' | 'snapshot'
+            // Grade Snapshot (mid-year bulk updates)
+            apSnapSelectedCSVFile: null,
+            apSnapCsvData: null,
+            apSnapValidationResults: null,
+            apSnapUploading: false,
+            apSnapJobId: null,
+            apSnapAcademicYear: '',
             
             // Manual Add
             showManualAddModal: false,
@@ -2089,6 +2097,36 @@
             return `${startYear}/${startYear + 1}`;
           },
 
+          getAcademicProfileKs5TemplateHref() {
+            const headers = ['UPN', 'Student Email', 'GCSE Prior Attainment'];
+            for (let i = 1; i <= 15; i++) {
+              headers.push(
+                `sub${i}`,
+                `sub${i}_current`,
+                `sub${i}_target`,
+                `sub${i}_effort`,
+                `sub${i}_behaviour`,
+                `sub${i}_attendance`
+              );
+            }
+            const example = [
+              '1234567890',
+              'student@example.com',
+              '5.5',
+              // sub1..sub15 (blank)
+              ...Array.from({ length: 15 }).flatMap(() => ['', '', '', '', '', ''])
+            ];
+            const csv = `${headers.join(',')}\n${example.join(',')}\n`;
+            return `data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`;
+          },
+
+          getAcademicProfileSnapshotTemplateHref() {
+            const headers = ['Student Email', 'Academic Year', 'Subject', 'Current Grade', 'Target Grade', 'Effort', 'Behaviour', 'Attendance'];
+            const example = ['student@example.com', this.apSnapAcademicYear || this.deriveAcademicYear(), 'A Level - AQA - Physics', 'C', 'B', '5', '7', '95'];
+            const csv = `${headers.join(',')}\n${example.join(',')}\n`;
+            return `data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`;
+          },
+
           openAcademicProfileUploadModal() {
             this.showAcademicProfileUploadModal = true;
             this.apSelectedCSVFile = null;
@@ -2096,7 +2134,15 @@
             this.apValidationResults = null;
             this.apUploading = false;
             this.apJobId = null;
+            this.apUploadMode = 'profile';
+            // Snapshot state
+            this.apSnapSelectedCSVFile = null;
+            this.apSnapCsvData = null;
+            this.apSnapValidationResults = null;
+            this.apSnapUploading = false;
+            this.apSnapJobId = null;
             if (!this.apAcademicYear) this.apAcademicYear = this.deriveAcademicYear();
+            if (!this.apSnapAcademicYear) this.apSnapAcademicYear = this.apAcademicYear;
           },
 
           closeAcademicProfileUploadModal() {
@@ -2105,6 +2151,10 @@
             this.apCsvData = null;
             this.apValidationResults = null;
             this.apUploading = false;
+            this.apSnapSelectedCSVFile = null;
+            this.apSnapCsvData = null;
+            this.apSnapValidationResults = null;
+            this.apSnapUploading = false;
           },
 
           handleAcademicProfileFileSelect(event) {
@@ -2112,6 +2162,14 @@
             if (file) {
               this.apSelectedCSVFile = file;
               debugLog('Academic Profile CSV selected', { name: file.name, size: file.size });
+            }
+          },
+
+          handleAcademicProfileSnapshotFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+              this.apSnapSelectedCSVFile = file;
+              debugLog('Academic Profile Grade Snapshot CSV selected', { name: file.name, size: file.size });
             }
           },
 
@@ -2141,8 +2199,54 @@
                   byNorm[`subject${i}`] ??
                   byNorm[`sub${i}`];
                 out[key] = (v && String(v).trim) ? String(v).trim() : (v || '');
+
+                // Optional per-subject snapshot columns for convenience during initial import
+                const current =
+                  byNorm[`${key}_current`] ??
+                  byNorm[`${key}_current_grade`] ??
+                  byNorm[`${key}_currentgrade`];
+                const target =
+                  byNorm[`${key}_target`] ??
+                  byNorm[`${key}_target_grade`] ??
+                  byNorm[`${key}_targetgrade`];
+                const effort = byNorm[`${key}_effort`];
+                const behaviour =
+                  byNorm[`${key}_behaviour`] ??
+                  byNorm[`${key}_behavior`];
+                const attendance =
+                  byNorm[`${key}_attendance`] ??
+                  byNorm[`${key}_att`];
+
+                out[`${key}_current`] = (current && String(current).trim) ? String(current).trim() : (current || '');
+                out[`${key}_target`] = (target && String(target).trim) ? String(target).trim() : (target || '');
+                out[`${key}_effort`] = (effort && String(effort).trim) ? String(effort).trim() : (effort || '');
+                out[`${key}_behaviour`] = (behaviour && String(behaviour).trim) ? String(behaviour).trim() : (behaviour || '');
+                out[`${key}_attendance`] = (attendance && String(attendance).trim) ? String(attendance).trim() : (attendance || '');
               }
 
+              return out;
+            });
+          },
+
+          normalizeAcademicProfileGradeSnapshotRows(rows) {
+            const normalizeHeaderKey = (k) => String(k || '').trim().toLowerCase().replace(/\s+/g, '_');
+            return (rows || []).map((row) => {
+              const byNorm = {};
+              Object.keys(row || {}).forEach((k) => {
+                byNorm[normalizeHeaderKey(k)] = row[k];
+              });
+
+              const out = {
+                UPN: (byNorm['upn'] || '').trim ? byNorm['upn'].trim() : (byNorm['upn'] || ''),
+                Student_Email: (byNorm['student_email'] || byNorm['studentemail'] || byNorm['student'] || '').trim ? (byNorm['student_email'] || byNorm['studentemail'] || byNorm['student'] || '').trim() : (byNorm['student_email'] || byNorm['studentemail'] || byNorm['student'] || ''),
+                Academic_Year: (byNorm['academic_year'] || byNorm['academicyear'] || '').trim ? String(byNorm['academic_year'] || byNorm['academicyear'] || '').trim() : (byNorm['academic_year'] || byNorm['academicyear'] || ''),
+                Subject: (byNorm['subject'] || byNorm['subject_name'] || byNorm['subjectname'] || '').trim ? String(byNorm['subject'] || byNorm['subject_name'] || byNorm['subjectname'] || '').trim() : (byNorm['subject'] || byNorm['subject_name'] || byNorm['subjectname'] || ''),
+                Current_Grade: (byNorm['current_grade'] || byNorm['current'] || '').trim ? String(byNorm['current_grade'] || byNorm['current'] || '').trim() : (byNorm['current_grade'] || byNorm['current'] || ''),
+                Target_Grade: (byNorm['target_grade'] || byNorm['target'] || '').trim ? String(byNorm['target_grade'] || byNorm['target'] || '').trim() : (byNorm['target_grade'] || byNorm['target'] || ''),
+                Effort: (byNorm['effort'] || '').trim ? String(byNorm['effort'] || '').trim() : (byNorm['effort'] || ''),
+                Behaviour: (byNorm['behaviour'] || byNorm['behavior'] || '').trim ? String(byNorm['behaviour'] || byNorm['behavior'] || '').trim() : (byNorm['behaviour'] || byNorm['behavior'] || ''),
+                Attendance: (byNorm['attendance'] || byNorm['att'] || '').trim ? String(byNorm['attendance'] || byNorm['att'] || '').trim() : (byNorm['attendance'] || byNorm['att'] || ''),
+              };
               return out;
             });
           },
@@ -2301,6 +2405,118 @@
               this.showMessage('Academic Profile upload failed: ' + error.message, 'error');
             } finally {
               this.apUploading = false;
+              this.loading = false;
+            }
+          },
+
+          async validateAcademicProfileGradeSnapshotCsv() {
+            if (!this.apSnapSelectedCSVFile) {
+              this.showMessage('Please select a CSV file', 'error');
+              return;
+            }
+
+            this.loading = true;
+            this.loadingText = 'Validating Grade Snapshot CSV...';
+
+            try {
+              const rawRows = await this.parseCSVFile(this.apSnapSelectedCSVFile);
+              this.apSnapCsvData = this.normalizeAcademicProfileGradeSnapshotRows(rawRows);
+
+              const response = await fetch(
+                `${this.apiUrl}/api/students/ks5-grade-snapshots/validate`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ csvData: this.apSnapCsvData })
+                }
+              );
+
+              const data = await safeJsonParse(response, 'Academic Profile snapshot validation');
+              this.apSnapValidationResults = data;
+
+              if (data.success || data.isValid) {
+                this.showMessage(`✅ Grade snapshot CSV valid: ${this.apSnapCsvData.length} rows`, 'success');
+              } else {
+                const errorCount = data.errors?.length || 0;
+                const firstError = Array.isArray(data.errors) && data.errors.length > 0
+                  ? (data.errors[0].message || data.errors[0].error || String(data.errors[0]))
+                  : (data.message || 'Validation failed');
+                this.showMessage(`❌ Grade snapshot validation failed: ${errorCount} issue(s). First: ${firstError}`, 'error');
+              }
+            } catch (error) {
+              console.error('Grade snapshot CSV validation error:', error);
+              this.apSnapValidationResults = {
+                success: false,
+                isValid: false,
+                errors: [error.message],
+                warnings: [],
+                message: error.message
+              };
+              this.showMessage('Grade snapshot validation failed: ' + error.message, 'error');
+            } finally {
+              this.loading = false;
+            }
+          },
+
+          async submitAcademicProfileGradeSnapshotUpload() {
+            if (!this.apSnapValidationResults || (!this.apSnapValidationResults.success && !this.apSnapValidationResults.isValid)) {
+              this.showMessage('Please validate the CSV first', 'error');
+              return;
+            }
+
+            this.apSnapUploading = true;
+            this.loading = true;
+            this.loadingText = 'Submitting Grade Snapshot job...';
+
+            try {
+              const response = await fetch(
+                `${this.apiUrl}/api/students/ks5-grade-snapshots/process`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    csvData: this.apSnapCsvData,
+                    options: {
+                      academicYear: this.apSnapAcademicYear || this.apAcademicYear,
+                      sendNotifications: true,
+                      notificationEmail: this.userEmail
+                    },
+                    context: this.getKs5UploaderContext()
+                  })
+                }
+              );
+
+              const data = await safeJsonParse(response, 'Academic Profile snapshot submit');
+              const returnedJobId = data.jobId || data.jobID || data.id;
+              if (data.success && returnedJobId) {
+                this.apSnapJobId = returnedJobId;
+                this.showMessage(`✅ Grade snapshot queued! Job ID: ${returnedJobId}`, 'success');
+
+                this.activeJobs.push({
+                  jobId: returnedJobId,
+                  type: 'academic-profile-snapshot',
+                  action: 'Academic Profile Grade Snapshot',
+                  total: this.apSnapCsvData?.length || 0,
+                  current: 0,
+                  status: 'Queued - Processing in background...',
+                  description: `Grade Snapshot Upload (${this.apSnapAcademicYear || this.apAcademicYear})`,
+                  startTime: Date.now(),
+                  emailNotification: true
+                });
+
+                if (!this.jobPollingInterval) {
+                  this.startJobPolling();
+                }
+
+                this.closeAcademicProfileUploadModal();
+              } else {
+                throw new Error(data.message || 'Upload failed');
+              }
+            } catch (error) {
+              console.error('Grade snapshot upload error:', error);
+              this.showMessage('Grade snapshot upload failed: ' + error.message, 'error');
+            } finally {
+              this.apSnapUploading = false;
               this.loading = false;
             }
           },
@@ -3785,6 +4001,47 @@
                     }
                     continue;
                   }
+
+                  // Academic Profile Grade Snapshot jobs have a dedicated status endpoint
+                  if (job.type === 'academic-profile-snapshot') {
+                    const data = await fetchWithRetry(
+                      `${this.apiUrl}/api/students/ks5-grade-snapshots/status/${encodeURIComponent(job.jobId)}`,
+                      { headers: { 'Content-Type': 'application/json' } },
+                      'KS5 grade snapshot job status check',
+                      2
+                    );
+
+                    if (data.success && data.found) {
+                      if (data.progress) {
+                        job.current = data.progress.current || 0;
+                        job.total = data.progress.total || job.total || 0;
+                        job.status = data.progress.status || data.state || 'Processing...';
+                      }
+
+                      if (data.completed) {
+                        const result = data.result || {};
+                        this.showMessage(
+                          `✅ Grade snapshot completed: ${result.successful || 0} student(s) updated`,
+                          (result.processingErrors && result.processingErrors.length > 0) ? 'warning' : 'success'
+                        );
+                        this.activeJobs.splice(i, 1);
+                      } else if (data.failed) {
+                        this.showMessage(
+                          `❌ Grade snapshot failed: ${data.failedReason || 'Unknown error'}`,
+                          'error'
+                        );
+                        this.activeJobs.splice(i, 1);
+                      }
+                    } else if (data.success && data.found === false) {
+                      job.status = 'Completed - Check your email for results';
+                      job.current = job.total;
+                      setTimeout(() => {
+                        const idx = this.activeJobs.indexOf(job);
+                        if (idx > -1) this.activeJobs.splice(idx, 1);
+                      }, 8000);
+                    }
+                    continue;
+                  }
                   
                   // Bulk operations (connection updates, role assignments) have status endpoint
                   const data = await fetchWithRetry(
@@ -4028,7 +4285,7 @@
                   <button 
                     @click="openAcademicProfileUploadModal" 
                     class="am-button-header"
-                    title="Upload KS5 Academic Profile (MEG/STG) to Supabase">
+                    title="Upload KS5 Academic Profile / Bulk update grades (snapshots)">
                     🎯 Academic Profile
                   </button>
                   <button 
@@ -5392,10 +5649,45 @@
                 
                 <div class="am-modal-body">
                   <div class="am-modal-description">
-                    Upload KS5 subjects + GCSE prior attainment. We calculate <strong>MEG</strong> + <strong>STG</strong> and write the profile directly to <strong>Supabase</strong> (overwriting any existing KS5 profile for that student/year).
+                    Upload KS5 subjects + GCSE prior attainment to create an Academic Profile, or upload a Grade Snapshot mid‑year to update Current/Target (and optional Effort/Behaviour/Attendance) in bulk.
+                  </div>
+
+                  <!-- Mode selector -->
+                  <div style="display:flex; gap:10px; align-items:center; margin: 10px 0 16px 0;">
+                    <label style="font-weight:600;">Upload type:</label>
+                    <select v-model="apUploadMode" class="am-select-inline" style="padding: 10px; min-width: 280px;">
+                      <option value="profile">Create/Overwrite Academic Profile (MEG/STG)</option>
+                      <option value="snapshot">Grade Snapshot (bulk update Current/Target etc)</option>
+                    </select>
+                  </div>
+
+                  <!-- Template Downloads -->
+                  <div style="margin: 10px 0 18px 0; padding: 14px; background: #ffffff; border: 1px solid #e3e8ef; border-radius: 8px;">
+                    <div style="font-weight: 700; margin-bottom: 8px;">Templates</div>
+                    <div style="font-size: 13px; color: #555; margin-bottom: 10px;">
+                      Download a template CSV to copy/paste your data into the right format.
+                    </div>
+                    <div style="display:flex; gap:10px; flex-wrap: wrap;">
+                      <a 
+                        :href="getAcademicProfileKs5TemplateHref()"
+                        download="AcademicProfile_KS5_Template.csv"
+                        class="am-button secondary">
+                        📥 Profile Template (KS5)
+                      </a>
+                      <a 
+                        :href="getAcademicProfileSnapshotTemplateHref()"
+                        download="AcademicProfile_GradeSnapshot_Template.csv"
+                        class="am-button secondary">
+                        📥 Grade Snapshot Template
+                      </a>
+                    </div>
+                    <div style="margin-top:10px; font-size: 12px; color:#666; line-height:1.4;">
+                      <strong>Tip:</strong> The Profile template supports optional columns like <code>sub1_current</code> / <code>sub1_target</code> etc.
+                      The Grade Snapshot template updates existing profiles without changing MEG/STG.
+                    </div>
                   </div>
                   
-                  <div style="display: grid; grid-template-columns: 1fr 220px; gap: 12px; margin: 16px 0;">
+                  <div v-if="apUploadMode === 'profile'" style="display: grid; grid-template-columns: 1fr 220px; gap: 12px; margin: 16px 0;">
                     <div>
                       <label style="display: block; margin-bottom: 8px; font-weight: 600;">Academic Year</label>
                       <input v-model="apAcademicYear" class="am-input-inline" placeholder="e.g. 2025/2026" style="width: 100%; padding: 10px;" />
@@ -5410,25 +5702,38 @@
                       </select>
                     </div>
                   </div>
+
+                  <div v-else style="display: grid; grid-template-columns: 1fr; gap: 12px; margin: 16px 0;">
+                    <div>
+                      <label style="display: block; margin-bottom: 8px; font-weight: 600;">Academic Year</label>
+                      <input v-model="apSnapAcademicYear" class="am-input-inline" placeholder="e.g. 2025/2026" style="width: 100%; padding: 10px;" />
+                      <div style="margin-top:6px; font-size: 12px; color:#666;">
+                        This is used to find the student’s existing Academic Profile for that year.
+                      </div>
+                    </div>
+                  </div>
                   
                   <!-- File Selection -->
                   <div style="margin: 20px 0;">
                     <label style="display: block; margin-bottom: 10px; font-weight: 600;">
-                      Select KS5 CSV File:
+                      Select CSV File:
                     </label>
                     <input 
                       type="file" 
                       accept=".csv"
-                      @change="handleAcademicProfileFileSelect"
+                      @change="apUploadMode === 'profile' ? handleAcademicProfileFileSelect($event) : handleAcademicProfileSnapshotFileSelect($event)"
                       style="padding: 10px; border: 1px solid #ddd; border-radius: 6px; width: 100%;" />
                     
-                    <div v-if="apSelectedCSVFile" style="margin-top: 10px; padding: 10px; background: #e3f2fd; border-radius: 6px;">
+                    <div v-if="apUploadMode === 'profile' && apSelectedCSVFile" style="margin-top: 10px; padding: 10px; background: #e3f2fd; border-radius: 6px;">
                       <strong>Selected:</strong> {{ apSelectedCSVFile.name }} ({{ (apSelectedCSVFile.size / 1024).toFixed(1) }} KB)
+                    </div>
+                    <div v-if="apUploadMode === 'snapshot' && apSnapSelectedCSVFile" style="margin-top: 10px; padding: 10px; background: #e3f2fd; border-radius: 6px;">
+                      <strong>Selected:</strong> {{ apSnapSelectedCSVFile.name }} ({{ (apSnapSelectedCSVFile.size / 1024).toFixed(1) }} KB)
                     </div>
                   </div>
                   
                   <!-- Validation Results -->
-                  <div v-if="apValidationResults" style="margin: 20px 0;">
+                  <div v-if="apUploadMode === 'profile' && apValidationResults" style="margin: 20px 0;">
                     <div v-if="apValidationResults.success || apValidationResults.isValid" 
                       style="padding: 15px; border-radius: 8px; background: #d4edda; border-left: 4px solid #28a745;">
                       <div style="font-weight: 600; margin-bottom: 8px; color: #155724; font-size: 16px;">
@@ -5438,7 +5743,7 @@
                         <strong>Total Rows:</strong> {{ apCsvData?.length || 0 }}
                       </div>
                       <div style="margin-top: 8px; padding: 10px; background: rgba(255,255,255,0.7); border-radius: 4px; color: #155724;">
-                        Ready to upload. This will create/overwrite each student's Supabase academic profile + subjects for {{ apAcademicYear }}.
+                        Ready to upload. This will create/overwrite each student's Academic Profile + subjects for {{ apAcademicYear }}.
                       </div>
                     </div>
                     
@@ -5470,6 +5775,30 @@
                       </div>
                     </div>
                   </div>
+
+                  <div v-if="apUploadMode === 'snapshot' && apSnapValidationResults" style="margin: 20px 0;">
+                    <div v-if="apSnapValidationResults.success || apSnapValidationResults.isValid" 
+                      style="padding: 15px; border-radius: 8px; background: #d4edda; border-left: 4px solid #28a745;">
+                      <div style="font-weight: 600; margin-bottom: 8px; color: #155724; font-size: 16px;">
+                        ✅ Validation Passed
+                      </div>
+                      <div style="color: #155724;">
+                        <strong>Total Rows:</strong> {{ apSnapCsvData?.length || 0 }}
+                      </div>
+                      <div style="margin-top: 8px; padding: 10px; background: rgba(255,255,255,0.7); border-radius: 4px; color: #155724;">
+                        Ready to upload. This will update Current/Target (and optional Effort/Behaviour/Attendance) for existing Academic Profiles in {{ apSnapAcademicYear || apAcademicYear }}.
+                      </div>
+                    </div>
+                    <div v-else style="padding: 15px; border-radius: 8px; background: #f8d7da; border-left: 4px solid #dc3545;">
+                      <div style="font-weight: 600; margin-bottom: 12px; color: #721c24; font-size: 16px;">
+                        ❌ Validation Failed
+                      </div>
+                      <div style="color: #721c24; margin-bottom: 12px;">
+                        <strong>Total Rows:</strong> {{ apSnapCsvData?.length || 0 }}<br>
+                        <strong>Errors Found:</strong> {{ apSnapValidationResults.errors?.length || 0 }}
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 
                 <div class="am-modal-footer">
@@ -5477,18 +5806,33 @@
                     Cancel
                   </button>
                   <button 
-                    v-if="!apValidationResults"
+                    v-if="apUploadMode === 'profile' && !apValidationResults"
                     @click="validateAcademicProfileKs5Csv" 
                     :disabled="!apSelectedCSVFile || apUploading"
                     class="am-button primary">
                     Validate CSV
                   </button>
                   <button 
-                    v-if="apValidationResults && (apValidationResults.success || apValidationResults.isValid)"
+                    v-if="apUploadMode === 'profile' && apValidationResults && (apValidationResults.success || apValidationResults.isValid)"
                     @click="submitAcademicProfileKs5Upload" 
                     :disabled="apUploading"
                     class="am-button primary">
-                    {{ apUploading ? 'Uploading...' : 'Upload & Process (Supabase)' }}
+                    {{ apUploading ? 'Uploading...' : 'Upload & Process' }}
+                  </button>
+
+                  <button 
+                    v-if="apUploadMode === 'snapshot' && !apSnapValidationResults"
+                    @click="validateAcademicProfileGradeSnapshotCsv"
+                    :disabled="!apSnapSelectedCSVFile || apSnapUploading"
+                    class="am-button primary">
+                    Validate CSV
+                  </button>
+                  <button 
+                    v-if="apUploadMode === 'snapshot' && apSnapValidationResults && (apSnapValidationResults.success || apSnapValidationResults.isValid)"
+                    @click="submitAcademicProfileGradeSnapshotUpload"
+                    :disabled="apSnapUploading"
+                    class="am-button primary">
+                    {{ apSnapUploading ? 'Uploading...' : 'Upload Snapshot' }}
                   </button>
                 </div>
               </div>
