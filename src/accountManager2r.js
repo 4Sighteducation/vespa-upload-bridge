@@ -286,6 +286,12 @@
             // Background job tracking
             activeJobs: [], // { jobId, type, total, description }
             jobPollingInterval: null,
+
+            // Academic Profile quick view (student table)
+            dashboardApiUrl: 'https://vespa-dashboard-9a1f84ee5341.herokuapp.com',
+            academicProfileExists: {}, // email -> boolean
+            showStudentAcademicProfileModal: false,
+            studentAcademicProfileEmail: null,
             
             // Role management
             showRoleModal: false,
@@ -919,6 +925,8 @@
                 // Update available groups for dropdown
                 if (this.currentTab === 'students') {
                   this.updateAvailableGroups();
+                  // Prefetch which students have an Academic Profile so we can grey out the view button
+                  this.prefetchAcademicProfileExists().catch(err => console.warn('prefetchAcademicProfileExists failed', err));
                 } else if (this.currentTab === 'staff') {
                   this.updateAvailableStaffGroups();
                 }
@@ -2125,6 +2133,102 @@
             const example = ['student@example.com', this.apSnapAcademicYear || this.deriveAcademicYear(), 'A Level - AQA - Physics', 'C', 'B', '5', '7', '95'];
             const csv = `${headers.join(',')}\n${example.join(',')}\n`;
             return `data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`;
+          },
+
+          async prefetchAcademicProfileExists() {
+            // Only for student table
+            if (this.currentTab !== 'students') return;
+            const emails = (this.accounts || []).map(a => a.email).filter(Boolean);
+            if (emails.length === 0) return;
+
+            // Simple concurrency limiter
+            const concurrency = 5;
+            let idx = 0;
+            const worker = async () => {
+              while (idx < emails.length) {
+                const email = emails[idx++];
+                // Skip if already known
+                if (this.academicProfileExists[email] !== undefined) continue;
+                try {
+                  const res = await fetch(`${this.dashboardApiUrl}/api/academic-profile/${encodeURIComponent(email)}`, { method: 'GET' });
+                  if (res.ok) {
+                    this.academicProfileExists[email] = true;
+                  } else if (res.status === 404) {
+                    this.academicProfileExists[email] = false;
+                  } else {
+                    // Unknown status, don't lock it out
+                    this.academicProfileExists[email] = undefined;
+                  }
+                } catch (e) {
+                  // Network/CORS issues - leave as unknown
+                  this.academicProfileExists[email] = undefined;
+                }
+              }
+            };
+
+            await Promise.all(Array.from({ length: concurrency }).map(() => worker()));
+          },
+
+          async openStudentAcademicProfileModal(account) {
+            const email = account?.email;
+            if (!email) return;
+
+            // If we already know there is no profile, bail early
+            if (this.academicProfileExists[email] === false) {
+              this.showMessage('No academic profile found for this student.', 'info');
+              return;
+            }
+
+            this.studentAcademicProfileEmail = email;
+            this.showStudentAcademicProfileModal = true;
+
+            // Mount Academic Profile V2 in the modal
+            const mount = async () => {
+              // Config for the academic profile bundle
+              window.ACADEMIC_PROFILE_V2_CONFIG = {
+                apiUrl: this.dashboardApiUrl,
+                elementSelector: '#student-academic-profile-container',
+                editable: false,
+                defaultVisible: true,
+                forcedStudentEmail: email,
+                mode: 'inline'
+              };
+
+              const scriptSrc = `https://cdn.jsdelivr.net/gh/4Sighteducation/VESPA-report-v2@main/academic-profile/dist/academic-profile1i.js?v=${Date.now()}`;
+              const existing = document.querySelector(`script[src^="https://cdn.jsdelivr.net/gh/4Sighteducation/VESPA-report-v2@"]`);
+
+              if (!existing) {
+                await new Promise((resolve, reject) => {
+                  const s = document.createElement('script');
+                  s.src = scriptSrc;
+                  s.async = true;
+                  s.onload = resolve;
+                  s.onerror = reject;
+                  document.head.appendChild(s);
+                });
+              }
+
+              if (typeof window.initializeAcademicProfileV2 === 'function') {
+                window.initializeAcademicProfileV2();
+              } else {
+                console.warn('initializeAcademicProfileV2 not found after script load');
+              }
+            };
+
+            // Let the modal render its container first
+            setTimeout(() => {
+              mount().catch(err => {
+                console.error('Failed to mount Academic Profile V2 in modal', err);
+                this.showMessage('Failed to load academic profile. Please try again.', 'error');
+              });
+            }, 50);
+          },
+
+          closeStudentAcademicProfileModal() {
+            this.showStudentAcademicProfileModal = false;
+            this.studentAcademicProfileEmail = null;
+            const container = document.querySelector('#student-academic-profile-container');
+            if (container) container.innerHTML = '';
           },
 
           openAcademicProfileUploadModal() {
@@ -4734,6 +4838,15 @@
                         <button @click="startEdit(account)" class="am-button-icon" title="Edit">
                           ✏️
                         </button>
+                        <button
+                          v-if="currentTab === 'students'"
+                          @click="openStudentAcademicProfileModal(account)"
+                          class="am-button-icon"
+                          :class="{ 'am-button-disabled': academicProfileExists[account.email] === false }"
+                          :disabled="academicProfileExists[account.email] === false"
+                          title="View Academic Profile">
+                          🎯
+                        </button>
                         <button v-if="currentTab === 'staff'" @click="openRoleEditor(account)" class="am-button-icon" title="Edit Roles">
                           👔
                         </button>
@@ -5834,6 +5947,25 @@
                     class="am-button primary">
                     {{ apSnapUploading ? 'Uploading...' : 'Upload Snapshot' }}
                   </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Student Academic Profile Quick View Modal -->
+            <div v-if="showStudentAcademicProfileModal" class="am-modal-overlay" @click.self="closeStudentAcademicProfileModal">
+              <div class="am-modal am-modal-large">
+                <div class="am-modal-header">
+                  <h3>🎯 Academic Profile</h3>
+                  <button @click="closeStudentAcademicProfileModal" class="am-modal-close">✖</button>
+                </div>
+                <div class="am-modal-body">
+                  <div class="am-modal-description" style="background:#fff; border:1px solid #e3e8ef; border-radius:8px; padding:12px;">
+                    Viewing Academic Profile for <strong>{{ studentAcademicProfileEmail }}</strong>
+                  </div>
+                  <div id="student-academic-profile-container"></div>
+                </div>
+                <div class="am-modal-footer">
+                  <button @click="closeStudentAcademicProfileModal" class="am-button secondary">Close</button>
                 </div>
               </div>
             </div>
@@ -7257,6 +7389,20 @@
         
         .am-button-icon.danger:hover {
           background: #c82333;
+        }
+
+        .am-button-icon.am-button-disabled,
+        .am-button-icon:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+          transform: none !important;
+          box-shadow: none !important;
+        }
+
+        .am-button-icon.am-button-disabled:hover,
+        .am-button-icon:disabled:hover {
+          background: #f5f7fa;
+          color: inherit;
         }
         
         .am-button {
