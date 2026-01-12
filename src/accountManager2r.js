@@ -925,8 +925,8 @@
                 // Update available groups for dropdown
                 if (this.currentTab === 'students') {
                   this.updateAvailableGroups();
-                  // Prefetch which students have an Academic Profile so we can grey out the view button
-                  this.prefetchAcademicProfileExists().catch(err => console.warn('prefetchAcademicProfileExists failed', err));
+                  // NOTE: We intentionally do NOT prefetch academic profiles here.
+                  // Prefetching would generate lots of 404s (many students won't have profiles yet).
                 } else if (this.currentTab === 'staff') {
                   this.updateAvailableStaffGroups();
                 }
@@ -2135,40 +2135,6 @@
             return `data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`;
           },
 
-          async prefetchAcademicProfileExists() {
-            // Only for student table
-            if (this.currentTab !== 'students') return;
-            const emails = (this.accounts || []).map(a => a.email).filter(Boolean);
-            if (emails.length === 0) return;
-
-            // Simple concurrency limiter
-            const concurrency = 5;
-            let idx = 0;
-            const worker = async () => {
-              while (idx < emails.length) {
-                const email = emails[idx++];
-                // Skip if already known
-                if (this.academicProfileExists[email] !== undefined) continue;
-                try {
-                  const res = await fetch(`${this.dashboardApiUrl}/api/academic-profile/${encodeURIComponent(email)}`, { method: 'GET' });
-                  if (res.ok) {
-                    this.academicProfileExists[email] = true;
-                  } else if (res.status === 404) {
-                    this.academicProfileExists[email] = false;
-                  } else {
-                    // Unknown status, don't lock it out
-                    this.academicProfileExists[email] = undefined;
-                  }
-                } catch (e) {
-                  // Network/CORS issues - leave as unknown
-                  this.academicProfileExists[email] = undefined;
-                }
-              }
-            };
-
-            await Promise.all(Array.from({ length: concurrency }).map(() => worker()));
-          },
-
           async openStudentAcademicProfileModal(account) {
             const email = account?.email;
             if (!email) return;
@@ -2188,16 +2154,17 @@
               window.ACADEMIC_PROFILE_V2_CONFIG = {
                 apiUrl: this.dashboardApiUrl,
                 elementSelector: '#student-academic-profile-container',
-                editable: false,
+                editable: true,
+                forceEditable: true, // staff admin / super user editing
                 defaultVisible: true,
                 forcedStudentEmail: email,
                 mode: 'inline'
               };
 
-              const scriptSrc = `https://cdn.jsdelivr.net/gh/4Sighteducation/VESPA-report-v2@main/academic-profile/dist/academic-profile1i.js?v=${Date.now()}`;
-              const existing = document.querySelector(`script[src^="https://cdn.jsdelivr.net/gh/4Sighteducation/VESPA-report-v2@"]`);
-
-              if (!existing) {
+              // Ensure the correct academic profile bundle is present before initializing
+              if (typeof window.initializeAcademicProfileV2 !== 'function') {
+                const pinnedRef = '14a3730bb6de1b1a7c6c46202127589af83e2137';
+                const scriptSrc = `https://cdn.jsdelivr.net/gh/4Sighteducation/VESPA-report-v2@${pinnedRef}/academic-profile/dist/academic-profile1i.js`;
                 await new Promise((resolve, reject) => {
                   const s = document.createElement('script');
                   s.src = scriptSrc;
@@ -2211,7 +2178,7 @@
               if (typeof window.initializeAcademicProfileV2 === 'function') {
                 window.initializeAcademicProfileV2();
               } else {
-                console.warn('initializeAcademicProfileV2 not found after script load');
+                throw new Error('Academic Profile bundle did not expose initializeAcademicProfileV2')
               }
             };
 
@@ -2219,9 +2186,11 @@
             setTimeout(() => {
               mount().catch(err => {
                 console.error('Failed to mount Academic Profile V2 in modal', err);
-                this.showMessage('Failed to load academic profile. Please try again.', 'error');
+                // Mark as missing (greys out button for this session) if we got a hard "not found"
+                this.academicProfileExists[email] = this.academicProfileExists[email] ?? undefined;
+                this.showMessage('Failed to load academic profile. If you see "Profile not found" this student may not have one yet.', 'warning');
               });
-            }, 50);
+            }, 150);
           },
 
           closeStudentAcademicProfileModal() {
