@@ -321,6 +321,16 @@
             csvValidationResults: null,
             csvUploading: false,
             csvJobId: null,
+
+            // Academic Profile (KS5) Upload - Supabase native
+            showAcademicProfileUploadModal: false,
+            apSelectedCSVFile: null,
+            apCsvData: null,
+            apValidationResults: null,
+            apUploading: false,
+            apJobId: null,
+            apPercentile: 75,
+            apAcademicYear: '',
             
             // Manual Add
             showManualAddModal: false,
@@ -2068,6 +2078,232 @@
             this.csvUploading = false;
             this.csvUploadMode = 'onboard';
           },
+
+          // ========== ACADEMIC PROFILE (KS5) UPLOAD ==========
+
+          deriveAcademicYear() {
+            const d = new Date();
+            const month = d.getMonth() + 1; // 1-12
+            const year = d.getFullYear();
+            const startYear = month >= 8 ? year : year - 1;
+            return `${startYear}/${startYear + 1}`;
+          },
+
+          openAcademicProfileUploadModal() {
+            this.showAcademicProfileUploadModal = true;
+            this.apSelectedCSVFile = null;
+            this.apCsvData = null;
+            this.apValidationResults = null;
+            this.apUploading = false;
+            this.apJobId = null;
+            if (!this.apAcademicYear) this.apAcademicYear = this.deriveAcademicYear();
+          },
+
+          closeAcademicProfileUploadModal() {
+            this.showAcademicProfileUploadModal = false;
+            this.apSelectedCSVFile = null;
+            this.apCsvData = null;
+            this.apValidationResults = null;
+            this.apUploading = false;
+          },
+
+          handleAcademicProfileFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+              this.apSelectedCSVFile = file;
+              debugLog('Academic Profile CSV selected', { name: file.name, size: file.size });
+            }
+          },
+
+          normalizeAcademicProfileKs5CsvRows(rows) {
+            // Accept multiple header variants (e.g. "Student Email" vs "Student_Email")
+            const normalizeHeaderKey = (k) => String(k || '').trim().toLowerCase().replace(/\s+/g, '_');
+
+            return (rows || []).map((row) => {
+              const byNorm = {};
+              Object.keys(row || {}).forEach((k) => {
+                byNorm[normalizeHeaderKey(k)] = row[k];
+              });
+
+              const out = {
+                UPN: (byNorm['upn'] || '').trim ? byNorm['upn'].trim() : (byNorm['upn'] || ''),
+                Student_Email: (byNorm['student_email'] || byNorm['studentemail'] || byNorm['student'] || '').trim ? (byNorm['student_email'] || byNorm['studentemail'] || byNorm['student'] || '').trim() : (byNorm['student_email'] || byNorm['studentemail'] || byNorm['student'] || ''),
+                GCSE_Prior_Attainment: (byNorm['gcse_prior_attainment'] || byNorm['gcse_prior'] || byNorm['gcseprior'] || '').trim ? (byNorm['gcse_prior_attainment'] || byNorm['gcse_prior'] || byNorm['gcseprior'] || '').trim() : (byNorm['gcse_prior_attainment'] || byNorm['gcse_prior'] || byNorm['gcseprior'] || ''),
+              };
+
+              // Subjects: sub1..sub15 (accept "Sub1"/"sub_1" too)
+              for (let i = 1; i <= 15; i++) {
+                const key = `sub${i}`;
+                const v =
+                  byNorm[key] ??
+                  byNorm[`sub_${i}`] ??
+                  byNorm[`subject_${i}`] ??
+                  byNorm[`subject${i}`] ??
+                  byNorm[`sub${i}`];
+                out[key] = (v && String(v).trim) ? String(v).trim() : (v || '');
+              }
+
+              return out;
+            });
+          },
+
+          getKs5UploaderContext() {
+            // studentKs5Subjects route/worker expects `context.loggedInUser.customerId` for non-emulating
+            const baseCustomerId = this.isSuperUser && this.selectedSchool?.id
+              ? this.selectedSchool.id
+              : (this.schoolContext?.customerId || this.schoolContext?.knackCustomerId || this.schoolContext?.knackId);
+
+            const baseCustomerName = this.isSuperUser && this.selectedSchool?.name
+              ? this.selectedSchool.name
+              : (this.schoolContext?.customerName || null);
+
+            const isEmulating = this.isSuperUser && !!this.selectedSchool;
+
+            if (isEmulating) {
+              return {
+                isEmulating: true,
+                loggedInUser: {
+                  userId: this.userId,
+                  userEmail: this.userEmail,
+                  customerId: baseCustomerId
+                },
+                emulatedSchool: {
+                  customerId: baseCustomerId,
+                  customerName: baseCustomerName,
+                  admins: [
+                    { email: this.userEmail, schoolIdText: this.selectedSchool?.schoolIdText || null }
+                  ]
+                }
+              };
+            }
+
+            return {
+              isEmulating: false,
+              loggedInUser: {
+                userId: this.userId,
+                userEmail: this.userEmail,
+                customerId: baseCustomerId,
+                schoolId: this.schoolContext?.schoolId || null
+              }
+            };
+          },
+
+          async validateAcademicProfileKs5Csv() {
+            if (!this.apSelectedCSVFile) {
+              this.showMessage('Please select a CSV file', 'error');
+              return;
+            }
+
+            this.loading = true;
+            this.loadingText = 'Validating Academic Profile CSV...';
+
+            try {
+              const rawRows = await this.parseCSVFile(this.apSelectedCSVFile);
+              this.apCsvData = this.normalizeAcademicProfileKs5CsvRows(rawRows);
+
+              const response = await fetch(
+                `${this.apiUrl}/api/students/ks5-subjects/validate`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    csvData: this.apCsvData
+                  })
+                }
+              );
+
+              const data = await safeJsonParse(response, 'Academic Profile KS5 validation');
+              this.apValidationResults = data;
+
+              if (data.success || data.isValid) {
+                this.showMessage(`✅ Academic Profile CSV valid: ${this.apCsvData.length} rows`, 'success');
+              } else {
+                const errorCount = data.errors?.length || 0;
+                const firstError = Array.isArray(data.errors) && data.errors.length > 0
+                  ? (data.errors[0].message || data.errors[0].error || String(data.errors[0]))
+                  : (data.message || 'Validation failed');
+                this.showMessage(`❌ Academic Profile validation failed: ${errorCount} issue(s). First: ${firstError}`, 'error');
+              }
+            } catch (error) {
+              console.error('Academic Profile CSV validation error:', error);
+              this.apValidationResults = {
+                success: false,
+                isValid: false,
+                errors: [error.message],
+                warnings: [],
+                message: error.message
+              };
+              this.showMessage('Academic Profile validation failed: ' + error.message, 'error');
+            } finally {
+              this.loading = false;
+            }
+          },
+
+          async submitAcademicProfileKs5Upload() {
+            if (!this.apValidationResults || (!this.apValidationResults.success && !this.apValidationResults.isValid)) {
+              this.showMessage('Please validate the CSV first', 'error');
+              return;
+            }
+
+            this.apUploading = true;
+            this.loading = true;
+            this.loadingText = 'Submitting Academic Profile job...';
+
+            try {
+              const response = await fetch(
+                `${this.apiUrl}/api/students/ks5-subjects/process`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    csvData: this.apCsvData,
+                    options: {
+                      percentile: this.apPercentile,
+                      academicYear: this.apAcademicYear,
+                      writeToSupabase: true,
+                      writeToKnack: false,
+                      sendNotifications: true,
+                      notificationEmail: this.userEmail
+                    },
+                    context: this.getKs5UploaderContext()
+                  })
+                }
+              );
+
+              const data = await safeJsonParse(response, 'Academic Profile KS5 submit');
+              const returnedJobId = data.jobId || data.jobID || data.id;
+              if (data.success && returnedJobId) {
+                this.apJobId = returnedJobId;
+                this.showMessage(`✅ Academic Profile upload queued! Job ID: ${returnedJobId}`, 'success');
+
+                this.activeJobs.push({
+                  jobId: returnedJobId,
+                  type: 'academic-profile-ks5',
+                  action: 'Academic Profile (KS5) Upload',
+                  total: this.apCsvData?.length || 0,
+                  current: 0,
+                  status: 'Queued - Processing in background...',
+                  description: `Academic Profile (KS5) Upload (${this.apPercentile}th pct)`,
+                  startTime: Date.now(),
+                  emailNotification: true
+                });
+
+                if (!this.jobPollingInterval) {
+                  this.startJobPolling();
+                }
+
+                this.closeAcademicProfileUploadModal();
+              } else {
+                throw new Error(data.message || 'Upload failed');
+              }
+            } catch (error) {
+              console.error('Academic Profile upload error:', error);
+              this.showMessage('Academic Profile upload failed: ' + error.message, 'error');
+            } finally {
+              this.apUploading = false;
+              this.loading = false;
+            }
+          },
           
           getUploaderContext() {
             // Build context similar to upload system
@@ -3748,6 +3984,12 @@
                     📤 Upload CSV
                   </button>
                   <button 
+                    @click="openAcademicProfileUploadModal" 
+                    class="am-button-header"
+                    title="Upload KS5 Academic Profile (MEG/STG) to Supabase">
+                    🎯 Academic Profile
+                  </button>
+                  <button 
                     @click="openManualAddModal" 
                     class="am-button-header"
                     title="Add individual account">
@@ -5098,6 +5340,118 @@
               </div>
             </div>
             
+            <!-- Academic Profile (KS5) Upload Modal -->
+            <div v-if="showAcademicProfileUploadModal" class="am-modal-overlay" @click.self="closeAcademicProfileUploadModal">
+              <div class="am-modal">
+                <div class="am-modal-header">
+                  <h3>🎯 Academic Profile Upload (KS5)</h3>
+                  <button @click="closeAcademicProfileUploadModal" class="am-modal-close">✖</button>
+                </div>
+                
+                <div class="am-modal-body">
+                  <div class="am-modal-description">
+                    Upload KS5 subjects + GCSE prior attainment. We calculate <strong>MEG</strong> + <strong>STG</strong> and write the profile directly to <strong>Supabase</strong> (overwriting any existing KS5 profile for that student/year).
+                  </div>
+                  
+                  <div style="display: grid; grid-template-columns: 1fr 220px; gap: 12px; margin: 16px 0;">
+                    <div>
+                      <label style="display: block; margin-bottom: 8px; font-weight: 600;">Academic Year</label>
+                      <input v-model="apAcademicYear" class="am-input-inline" placeholder="e.g. 2025/2026" style="width: 100%; padding: 10px;" />
+                    </div>
+                    <div>
+                      <label style="display: block; margin-bottom: 8px; font-weight: 600;">Percentile</label>
+                      <select v-model.number="apPercentile" class="am-select-inline" style="width: 100%; padding: 10px;">
+                        <option :value="60">60th</option>
+                        <option :value="75">75th (default)</option>
+                        <option :value="90">90th</option>
+                        <option :value="100">100th</option>
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <!-- File Selection -->
+                  <div style="margin: 20px 0;">
+                    <label style="display: block; margin-bottom: 10px; font-weight: 600;">
+                      Select KS5 CSV File:
+                    </label>
+                    <input 
+                      type="file" 
+                      accept=".csv"
+                      @change="handleAcademicProfileFileSelect"
+                      style="padding: 10px; border: 1px solid #ddd; border-radius: 6px; width: 100%;" />
+                    
+                    <div v-if="apSelectedCSVFile" style="margin-top: 10px; padding: 10px; background: #e3f2fd; border-radius: 6px;">
+                      <strong>Selected:</strong> {{ apSelectedCSVFile.name }} ({{ (apSelectedCSVFile.size / 1024).toFixed(1) }} KB)
+                    </div>
+                  </div>
+                  
+                  <!-- Validation Results -->
+                  <div v-if="apValidationResults" style="margin: 20px 0;">
+                    <div v-if="apValidationResults.success || apValidationResults.isValid" 
+                      style="padding: 15px; border-radius: 8px; background: #d4edda; border-left: 4px solid #28a745;">
+                      <div style="font-weight: 600; margin-bottom: 8px; color: #155724; font-size: 16px;">
+                        ✅ Validation Passed
+                      </div>
+                      <div style="color: #155724;">
+                        <strong>Total Rows:</strong> {{ apCsvData?.length || 0 }}
+                      </div>
+                      <div style="margin-top: 8px; padding: 10px; background: rgba(255,255,255,0.7); border-radius: 4px; color: #155724;">
+                        Ready to upload. This will create/overwrite each student's Supabase academic profile + subjects for {{ apAcademicYear }}.
+                      </div>
+                    </div>
+                    
+                    <div v-else style="padding: 15px; border-radius: 8px; background: #f8d7da; border-left: 4px solid #dc3545;">
+                      <div style="font-weight: 600; margin-bottom: 12px; color: #721c24; font-size: 16px;">
+                        ❌ Validation Failed
+                      </div>
+                      <div style="color: #721c24; margin-bottom: 12px;">
+                        <strong>Total Rows:</strong> {{ apCsvData?.length || 0 }}<br>
+                        <strong>Errors Found:</strong> {{ apValidationResults.errors?.length || 0 }}
+                      </div>
+                      <div v-if="apValidationResults.errors && apValidationResults.errors.length > 0" 
+                        style="max-height: 300px; overflow-y: auto; background: white; padding: 12px; border-radius: 6px; margin-top: 12px;">
+                        <div style="font-weight: 600; margin-bottom: 12px; color: #721c24; border-bottom: 2px solid #dc3545; padding-bottom: 8px;">
+                          📋 Issues Found:
+                        </div>
+                        <div 
+                          v-for="(error, index) in apValidationResults.errors" 
+                          :key="index"
+                          style="padding: 10px; margin-bottom: 8px; background: #fff3cd; border-left: 3px solid #ffc107; border-radius: 4px;">
+                          <div style="color: #721c24; font-size: 14px; line-height: 1.5;">
+                            {{ error.message || error.error || error }}
+                          </div>
+                        </div>
+                      </div>
+                      <div style="margin-top: 12px; padding: 12px; background: rgba(255,255,255,0.7); border-radius: 4px; color: #721c24; font-size: 13px;">
+                        <strong>Required columns (minimum):</strong><br>
+                        UPN, Student Email, GCSE Prior Attainment, sub1 (up to sub15 supported)
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="am-modal-footer">
+                  <button @click="closeAcademicProfileUploadModal" class="am-button secondary">
+                    Cancel
+                  </button>
+                  <button 
+                    v-if="!apValidationResults"
+                    @click="validateAcademicProfileKs5Csv" 
+                    :disabled="!apSelectedCSVFile || apUploading"
+                    class="am-button primary">
+                    Validate CSV
+                  </button>
+                  <button 
+                    v-if="apValidationResults && (apValidationResults.success || apValidationResults.isValid)"
+                    @click="submitAcademicProfileKs5Upload" 
+                    :disabled="apUploading"
+                    class="am-button primary">
+                    {{ apUploading ? 'Uploading...' : 'Upload & Process (Supabase)' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <!-- Manual Add Modal -->
             <div v-if="showManualAddModal" class="am-modal-overlay" @click.self="closeManualAddModal">
               <div class="am-modal am-modal-large">
