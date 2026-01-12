@@ -3743,6 +3743,48 @@
                     }
                     continue;
                   }
+
+                  // Academic Profile KS5 jobs have a dedicated status endpoint
+                  if (job.type === 'academic-profile-ks5') {
+                    const data = await fetchWithRetry(
+                      `${this.apiUrl}/api/students/ks5-subjects/status/${encodeURIComponent(job.jobId)}`,
+                      { headers: { 'Content-Type': 'application/json' } },
+                      'KS5 job status check',
+                      2
+                    );
+
+                    if (data.success && data.found) {
+                      if (data.progress) {
+                        job.current = data.progress.current || 0;
+                        job.total = data.progress.total || job.total || 0;
+                        job.status = data.progress.status || data.state || 'Processing...';
+                      }
+
+                      if (data.completed) {
+                        const result = data.result || {};
+                        this.showMessage(
+                          `✅ Academic Profile upload completed: ${result.successful || 0} student(s) written`,
+                          (result.processingErrors && result.processingErrors.length > 0) ? 'warning' : 'success'
+                        );
+                        this.activeJobs.splice(i, 1);
+                      } else if (data.failed) {
+                        this.showMessage(
+                          `❌ Academic Profile upload failed: ${data.failedReason || 'Unknown error'}`,
+                          'error'
+                        );
+                        this.activeJobs.splice(i, 1);
+                      }
+                    } else if (data.success && data.found === false) {
+                      // Job cleaned up; assume done (email should have been sent)
+                      job.status = 'Completed - Check your email for results';
+                      job.current = job.total;
+                      setTimeout(() => {
+                        const idx = this.activeJobs.indexOf(job);
+                        if (idx > -1) this.activeJobs.splice(idx, 1);
+                      }, 8000);
+                    }
+                    continue;
+                  }
                   
                   // Bulk operations (connection updates, role assignments) have status endpoint
                   const data = await fetchWithRetry(
