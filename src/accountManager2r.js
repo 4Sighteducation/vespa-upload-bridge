@@ -216,6 +216,7 @@
             authChecked: false,
             isSuperUser: false,
             userEmail: null,
+            userId: null,
             schoolContext: null,
             
             // UI State
@@ -501,6 +502,7 @@
               const userAttrs = Knack.getUserAttributes();
               this.userEmail = userAttrs.email;
               const userId = userAttrs.id;
+              this.userId = userId;
               
               debugLog('User attributes', { email: this.userEmail, id: userId });
               debugLog('Full Knack user attributes', userAttrs);
@@ -571,10 +573,19 @@
           async loadAllSchools() {
             try {
               debugLog('Loading all schools for super user...');
+
+              if (!this.userEmail || !this.userId) {
+                console.error('🚨 Missing auth context for loading schools', {
+                  userEmail: this.userEmail,
+                  userId: this.userId
+                });
+                this.showMessage('Authentication context missing (userEmail/userId). Please refresh the page.', 'error');
+                return;
+              }
               
               // Load schools with automatic retry on rate limit
               const data = await fetchWithRetry(
-                `${this.apiUrl}/api/v3/accounts/schools`,
+                `${this.apiUrl}/api/v3/accounts/schools?userEmail=${encodeURIComponent(this.userEmail)}&userId=${encodeURIComponent(this.userId)}`,
                 {
                   method: 'GET',
                   headers: { 'Content-Type': 'application/json' }
@@ -2368,9 +2379,13 @@
             this.loadingText = 'Loading all establishments...';
             
             try {
+              if (!this.userEmail || !this.userId) {
+                throw new Error('Authentication context missing (userEmail/userId). Please refresh the page.');
+              }
+
               // Use the WORKING schools endpoint that already exists
               const response = await fetch(
-                `${this.apiUrl}/api/v3/accounts/schools`,
+                `${this.apiUrl}/api/v3/accounts/schools?userEmail=${encodeURIComponent(this.userEmail)}&userId=${encodeURIComponent(this.userId)}`,
                 {
                   method: 'GET',
                   headers: { 'Content-Type': 'application/json' }
