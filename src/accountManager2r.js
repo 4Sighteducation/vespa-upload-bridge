@@ -2163,7 +2163,11 @@
 
               // Ensure the correct academic profile bundle is present before initializing
               if (typeof window.initializeAcademicProfileV2 !== 'function') {
-                const pinnedRef = '14a3730bb6de1b1a7c6c46202127589af83e2137';
+                // Prefer the loader's pinned ref if available, otherwise fall back to a known-good commit.
+                const pinnedRef =
+                  (window.JSDELIVR_PINNED_REFS && window.JSDELIVR_PINNED_REFS['VESPA-report-v2'])
+                    ? window.JSDELIVR_PINNED_REFS['VESPA-report-v2']
+                    : 'be348a73f9c60290b688e49d09d145db8baf2065';
                 const scriptSrc = `https://cdn.jsdelivr.net/gh/4Sighteducation/VESPA-report-v2@${pinnedRef}/academic-profile/dist/academic-profile1i.js`;
                 await new Promise((resolve, reject) => {
                   const s = document.createElement('script');
