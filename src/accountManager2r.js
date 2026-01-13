@@ -346,6 +346,17 @@
             apSnapJobId: null,
             apSnapAcademicYear: '',
             apPopulateTargetFromStg: false,
+
+            // Academic Profile school-wide defaults (source of truth for student visibility + upload default)
+            showAcademicProfileDefaultsModal: false,
+            apSchoolSettingsLoading: false,
+            apSchoolSettings: {
+              studentsShowMeg: true,
+              studentsShowStg: false,
+              defaultPopulateTargetFromStg: false,
+              updatedAt: null,
+              updatedByEmail: null
+            },
             
             // Manual Add
             showManualAddModal: false,
@@ -2205,7 +2216,106 @@
             if (container) container.innerHTML = '';
           },
 
-          openAcademicProfileUploadModal() {
+          getSelectedSchoolUuidForRls() {
+            if (this.isSuperUser) {
+              return (this.selectedSchool && this.selectedSchool.supabaseUuid) ? this.selectedSchool.supabaseUuid : null;
+            }
+            return (this.schoolContext && this.schoolContext.schoolId) ? this.schoolContext.schoolId : null;
+          },
+
+          async ensureAcademicProfileSchoolSettingsLoaded() {
+            const schoolId = this.getSelectedSchoolUuidForRls();
+            if (!schoolId) {
+              // Super user with no school selected (or broken context) - don't fetch
+              return;
+            }
+
+            this.apSchoolSettingsLoading = true;
+            try {
+              const resp = await fetch(
+                `${this.apiUrl}/api/v3/academic-profile/settings?schoolId=${encodeURIComponent(schoolId)}`,
+                { method: 'GET', headers: { 'Content-Type': 'application/json' } }
+              );
+              const data = await safeJsonParse(resp, 'Academic Profile school settings load');
+              if (data && data.success && data.settings) {
+                this.apSchoolSettings = {
+                  studentsShowMeg: data.settings.students_show_meg !== undefined ? !!data.settings.students_show_meg : true,
+                  studentsShowStg: data.settings.students_show_stg !== undefined ? !!data.settings.students_show_stg : false,
+                  defaultPopulateTargetFromStg: data.settings.default_populate_target_from_stg !== undefined ? !!data.settings.default_populate_target_from_stg : false,
+                  updatedAt: data.settings.updated_at || null,
+                  updatedByEmail: data.settings.updated_by_email || null
+                };
+              }
+            } catch (e) {
+              console.warn('Failed to load Academic Profile school settings (non-fatal):', e);
+            } finally {
+              this.apSchoolSettingsLoading = false;
+            }
+          },
+
+          async openAcademicProfileDefaultsModal() {
+            const schoolId = this.getSelectedSchoolUuidForRls();
+            if (!schoolId) {
+              this.showMessage('Select a school first to edit Academic Profile defaults.', 'warning');
+              return;
+            }
+            await this.ensureAcademicProfileSchoolSettingsLoaded();
+            this.showAcademicProfileDefaultsModal = true;
+          },
+
+          closeAcademicProfileDefaultsModal() {
+            this.showAcademicProfileDefaultsModal = false;
+          },
+
+          async saveAcademicProfileDefaults() {
+            const schoolId = this.getSelectedSchoolUuidForRls();
+            if (!schoolId) {
+              this.showMessage('Select a school first to edit Academic Profile defaults.', 'warning');
+              return;
+            }
+
+            this.apSchoolSettingsLoading = true;
+            try {
+              const resp = await fetch(
+                `${this.apiUrl}/api/v3/academic-profile/settings`,
+                {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    schoolId,
+                    studentsShowMeg: !!this.apSchoolSettings.studentsShowMeg,
+                    studentsShowStg: !!this.apSchoolSettings.studentsShowStg,
+                    defaultPopulateTargetFromStg: !!this.apSchoolSettings.defaultPopulateTargetFromStg,
+                    updatedByEmail: this.userEmail
+                  })
+                }
+              );
+              const data = await safeJsonParse(resp, 'Academic Profile school settings save');
+              if (data && data.success && data.settings) {
+                this.apSchoolSettings = {
+                  studentsShowMeg: data.settings.students_show_meg !== undefined ? !!data.settings.students_show_meg : true,
+                  studentsShowStg: data.settings.students_show_stg !== undefined ? !!data.settings.students_show_stg : false,
+                  defaultPopulateTargetFromStg: data.settings.default_populate_target_from_stg !== undefined ? !!data.settings.default_populate_target_from_stg : false,
+                  updatedAt: data.settings.updated_at || null,
+                  updatedByEmail: data.settings.updated_by_email || null
+                };
+                this.showMessage('✅ Academic Profile defaults saved for this school', 'success');
+                this.closeAcademicProfileDefaultsModal();
+              } else {
+                throw new Error(data?.message || 'Save failed');
+              }
+            } catch (e) {
+              console.error('Failed to save Academic Profile defaults:', e);
+              this.showMessage('Failed to save Academic Profile defaults: ' + (e.message || String(e)), 'error');
+            } finally {
+              this.apSchoolSettingsLoading = false;
+            }
+          },
+
+          async openAcademicProfileUploadModal() {
+            // Load defaults so upload toggle can start from school-wide default
+            await this.ensureAcademicProfileSchoolSettingsLoaded();
+
             this.showAcademicProfileUploadModal = true;
             this.apSelectedCSVFile = null;
             this.apCsvData = null;
@@ -2219,7 +2329,7 @@
             this.apSnapValidationResults = null;
             this.apSnapUploading = false;
             this.apSnapJobId = null;
-            this.apPopulateTargetFromStg = false;
+            this.apPopulateTargetFromStg = !!(this.apSchoolSettings && this.apSchoolSettings.defaultPopulateTargetFromStg);
             if (!this.apAcademicYear) this.apAcademicYear = this.deriveAcademicYear();
             if (!this.apSnapAcademicYear) this.apSnapAcademicYear = this.apAcademicYear;
           },
@@ -4369,6 +4479,12 @@
                     🎯 Academic Profile
                   </button>
                   <button 
+                    @click="openAcademicProfileDefaultsModal" 
+                    class="am-button-header"
+                    title="Set school-wide Academic Profile defaults (student visibility + upload defaults)">
+                    🎛 Profile Defaults
+                  </button>
+                  <button 
                     @click="openManualAddModal" 
                     class="am-button-header"
                     title="Add individual account">
@@ -5932,6 +6048,57 @@
                     :disabled="apSnapUploading"
                     class="am-button primary">
                     {{ apSnapUploading ? 'Uploading...' : 'Upload Snapshot' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Academic Profile Defaults Modal -->
+            <div v-if="showAcademicProfileDefaultsModal" class="am-modal-overlay" @click.self="closeAcademicProfileDefaultsModal">
+              <div class="am-modal" style="max-width: 720px;">
+                <div class="am-modal-header">
+                  <h3>🎛 Academic Profile Defaults (School-wide)</h3>
+                  <button @click="closeAcademicProfileDefaultsModal" class="am-modal-close">✖</button>
+                </div>
+
+                <div class="am-modal-body">
+                  <div class="am-modal-description">
+                    These settings control what <strong>students</strong> see on the Homepage and above the VESPA Report (students have no MEG/STG toggles).
+                    Staff will start from these defaults but can still toggle locally.
+                  </div>
+
+                  <div style="margin-top: 14px; padding: 14px; border: 1px solid #e3e8ef; border-radius: 8px; background: #ffffff;">
+                    <div style="display:flex; gap:16px; flex-wrap: wrap;">
+                      <label style="display:flex; align-items:center; gap:10px; font-weight: 600; cursor:pointer;">
+                        <input type="checkbox" v-model="apSchoolSettings.studentsShowMeg" />
+                        Students can see <strong>MEG</strong>
+                      </label>
+                      <label style="display:flex; align-items:center; gap:10px; font-weight: 600; cursor:pointer;">
+                        <input type="checkbox" v-model="apSchoolSettings.studentsShowStg" />
+                        Students can see <strong>STG</strong>
+                      </label>
+                    </div>
+
+                    <div style="margin-top: 12px; border-top: 1px solid #edf1f7; padding-top: 12px;">
+                      <label style="display:flex; align-items:center; gap:10px; font-weight: 600; cursor:pointer;">
+                        <input type="checkbox" v-model="apSchoolSettings.defaultPopulateTargetFromStg" />
+                        Default upload behaviour: <strong>Make Student Target Grade match the STG</strong>
+                      </label>
+                      <div style="margin-top:6px; font-size: 12px; color:#666; line-height:1.4;">
+                        If off (recommended), Target Grade stays blank unless a staff admin turns it on for a specific upload.
+                      </div>
+                    </div>
+
+                    <div v-if="apSchoolSettings.updatedAt" style="margin-top: 10px; font-size: 12px; color:#666;">
+                      Last saved: {{ apSchoolSettings.updatedAt }}{{ apSchoolSettings.updatedByEmail ? ` by ${apSchoolSettings.updatedByEmail}` : '' }}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="am-modal-footer">
+                  <button @click="closeAcademicProfileDefaultsModal" class="am-button secondary">Cancel</button>
+                  <button @click="saveAcademicProfileDefaults" class="am-button primary" :disabled="apSchoolSettingsLoading">
+                    {{ apSchoolSettingsLoading ? 'Saving...' : 'Save Defaults' }}
                   </button>
                 </div>
               </div>
