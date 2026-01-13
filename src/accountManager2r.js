@@ -4479,12 +4479,6 @@
                     🎯 Academic Profile
                   </button>
                   <button 
-                    @click="openAcademicProfileDefaultsModal" 
-                    class="am-button-header"
-                    title="Set school-wide Academic Profile defaults (student visibility + upload defaults)">
-                    🎛 Profile Defaults
-                  </button>
-                  <button 
                     @click="openManualAddModal" 
                     class="am-button-header"
                     title="Add individual account">
@@ -5891,6 +5885,47 @@
                       The Grade Snapshot template updates existing profiles without changing MEG/STG.
                     </div>
                   </div>
+
+                  <!-- School Defaults (inside Academic Profile modal to avoid header crowding) -->
+                  <div style="margin: 10px 0 18px 0; padding: 14px; background: #ffffff; border: 1px solid #e3e8ef; border-radius: 8px;">
+                    <div style="display:flex; justify-content: space-between; align-items: center; gap: 12px;">
+                      <div style="font-weight: 700;">🎛 Profile Defaults (School-wide)</div>
+                      <div style="font-size: 12px; color:#666;">
+                        Applies everywhere for students (Homepage + Report)
+                      </div>
+                    </div>
+                    <div style="margin-top: 10px; display:flex; gap:16px; flex-wrap: wrap;">
+                      <label style="display:flex; align-items:center; gap:10px; font-weight: 600; cursor:pointer;">
+                        <input type="checkbox" v-model="apSchoolSettings.studentsShowMeg" />
+                        Students can see <strong>MEG</strong>
+                      </label>
+                      <label style="display:flex; align-items:center; gap:10px; font-weight: 600; cursor:pointer;">
+                        <input type="checkbox" v-model="apSchoolSettings.studentsShowStg" />
+                        Students can see <strong>STG</strong>
+                      </label>
+                    </div>
+                    <div style="margin-top: 12px; border-top: 1px solid #edf1f7; padding-top: 12px;">
+                      <label style="display:flex; align-items:center; gap:10px; font-weight: 600; cursor:pointer;">
+                        <input type="checkbox" v-model="apSchoolSettings.defaultPopulateTargetFromStg" />
+                        Default upload behaviour: <strong>Make Student Target Grade match the STG</strong>
+                      </label>
+                      <div style="margin-top:6px; font-size: 12px; color:#666; line-height:1.4;">
+                        If off (recommended), Target Grade stays blank unless a staff admin turns it on for a specific upload.
+                      </div>
+                    </div>
+                    <div v-if="apSchoolSettings.updatedAt" style="margin-top: 10px; font-size: 12px; color:#666;">
+                      Last saved: {{ apSchoolSettings.updatedAt }}
+                      <span v-if="apSchoolSettings.updatedByEmail"> by {{ apSchoolSettings.updatedByEmail }}</span>
+                    </div>
+                    <div style="margin-top: 12px; display:flex; gap: 10px; align-items: center;">
+                      <button @click="saveAcademicProfileDefaults" class="am-button secondary" :disabled="apSchoolSettingsLoading">
+                        {{ apSchoolSettingsLoading ? 'Saving...' : 'Save Defaults' }}
+                      </button>
+                      <div style="font-size: 12px; color:#666;">
+                        Saved defaults also set the starting state for this upload’s “Target = STG” checkbox.
+                      </div>
+                    </div>
+                  </div>
                   
                   <div v-if="apUploadMode === 'profile'" style="display: grid; grid-template-columns: 1fr 220px; gap: 12px; margin: 16px 0;">
                     <div>
@@ -6053,57 +6088,7 @@
               </div>
             </div>
 
-            <!-- Academic Profile Defaults Modal -->
-            <div v-if="showAcademicProfileDefaultsModal" class="am-modal-overlay" @click.self="closeAcademicProfileDefaultsModal">
-              <div class="am-modal" style="max-width: 720px;">
-                <div class="am-modal-header">
-                  <h3>🎛 Academic Profile Defaults (School-wide)</h3>
-                  <button @click="closeAcademicProfileDefaultsModal" class="am-modal-close">✖</button>
-                </div>
-
-                <div class="am-modal-body">
-                  <div class="am-modal-description">
-                    These settings control what <strong>students</strong> see on the Homepage and above the VESPA Report (students have no MEG/STG toggles).
-                    Staff will start from these defaults but can still toggle locally.
-                  </div>
-
-                  <div style="margin-top: 14px; padding: 14px; border: 1px solid #e3e8ef; border-radius: 8px; background: #ffffff;">
-                    <div style="display:flex; gap:16px; flex-wrap: wrap;">
-                      <label style="display:flex; align-items:center; gap:10px; font-weight: 600; cursor:pointer;">
-                        <input type="checkbox" v-model="apSchoolSettings.studentsShowMeg" />
-                        Students can see <strong>MEG</strong>
-                      </label>
-                      <label style="display:flex; align-items:center; gap:10px; font-weight: 600; cursor:pointer;">
-                        <input type="checkbox" v-model="apSchoolSettings.studentsShowStg" />
-                        Students can see <strong>STG</strong>
-                      </label>
-                    </div>
-
-                    <div style="margin-top: 12px; border-top: 1px solid #edf1f7; padding-top: 12px;">
-                      <label style="display:flex; align-items:center; gap:10px; font-weight: 600; cursor:pointer;">
-                        <input type="checkbox" v-model="apSchoolSettings.defaultPopulateTargetFromStg" />
-                        Default upload behaviour: <strong>Make Student Target Grade match the STG</strong>
-                      </label>
-                      <div style="margin-top:6px; font-size: 12px; color:#666; line-height:1.4;">
-                        If off (recommended), Target Grade stays blank unless a staff admin turns it on for a specific upload.
-                      </div>
-                    </div>
-
-                    <div v-if="apSchoolSettings.updatedAt" style="margin-top: 10px; font-size: 12px; color:#666;">
-                      Last saved: {{ apSchoolSettings.updatedAt }}
-                      <span v-if="apSchoolSettings.updatedByEmail"> by {{ apSchoolSettings.updatedByEmail }}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="am-modal-footer">
-                  <button @click="closeAcademicProfileDefaultsModal" class="am-button secondary">Cancel</button>
-                  <button @click="saveAcademicProfileDefaults" class="am-button primary" :disabled="apSchoolSettingsLoading">
-                    {{ apSchoolSettingsLoading ? 'Saving...' : 'Save Defaults' }}
-                  </button>
-                </div>
-              </div>
-            </div>
+            <!-- Academic Profile Defaults Modal removed (now lives inside the Academic Profile modal) -->
 
             <!-- Student Academic Profile Quick View Modal -->
             <div v-if="showStudentAcademicProfileModal" class="am-modal-overlay" @click.self="closeStudentAcademicProfileModal">
