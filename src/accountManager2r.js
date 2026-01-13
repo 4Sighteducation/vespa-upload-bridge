@@ -2464,19 +2464,12 @@
           },
 
           async createReportDownload() {
-            if (this.reportFormat !== 'csv') {
-              this.showMessage('PDF export is coming next — CSV is available now.', 'info');
-              return;
-            }
-
+            // Background job + email (fast UI, reliable for big cohorts)
             this.reportExporting = true;
             this.loading = true;
-            this.loadingText = 'Preparing report...';
-            this.reportExportProgress = 0;
-            this.reportExportTotal = 0;
+            this.loadingText = 'Queuing report export job...';
 
             try {
-              // Guard: at least one section must be selected
               if (!this.reportInclude.vespaResults && !this.reportInclude.academicProfile && !this.reportInclude.userComments) {
                 this.showMessage('Select at least one section to include.', 'warning');
                 return;
@@ -2488,115 +2481,50 @@
                 return;
               }
 
-              this.reportExportTotal = students.length;
-              this.loadingText = `Fetching data for ${students.length} students...`;
-
-              // Concurrency-limited fetch to avoid hammering the Dashboard
-              const limit = 6;
-              let idx = 0;
-              const results = new Array(students.length);
-
-              const worker = async () => {
-                while (idx < students.length) {
-                  const i = idx++;
-                  const s = students[i];
-                  const email = s.email;
-                  const out = { email, name: s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim(), yearGroup: s.yearGroup || '', group: s.group || '' };
-
-                  // VESPA / Questionnaire / Comments live in report data
-                  let reportData = null;
-                  if (this.reportInclude.vespaResults || this.reportInclude.userComments) {
-                    try {
-                      reportData = await this.fetchStudentReportData(email);
-                    } catch (e) {
-                      reportData = null;
-                      out._reportDataError = e.message;
-                    }
-                  }
-
-                  if (reportData && this.reportInclude.vespaResults) {
-                    // Flatten cycle scores (1-3). scores is an array of cycle entries.
-                    const scores = Array.isArray(reportData.scores) ? reportData.scores : [];
-                    for (const c of [1, 2, 3]) {
-                      const sc = scores.find(x => Number(x.cycle) === c);
-                      out[`c${c}_vision`] = sc ? sc.vision : '';
-                      out[`c${c}_effort`] = sc ? sc.effort : '';
-                      out[`c${c}_systems`] = sc ? sc.systems : '';
-                      out[`c${c}_practice`] = sc ? sc.practice : '';
-                      out[`c${c}_attitude`] = sc ? sc.attitude : '';
-                      out[`c${c}_overall`] = sc ? sc.overall : '';
-                      out[`c${c}_completionDate`] = sc ? sc.completion_date : '';
-                    }
-                  }
-
-                  if (reportData && this.reportInclude.userComments) {
-                    // From reportData.studentProfile (Knack text fields by cycle)
-                    const sp = reportData.studentProfile || {};
-                    out.userCommentsJson = Object.keys(sp).length ? JSON.stringify(sp) : '';
-                  }
-
-                  if (this.reportInclude.academicProfile) {
-                    try {
-                      const ap = await this.fetchStudentAcademicProfile(email);
-                      const apStudent = ap && ap.student ? ap.student : (ap && ap.data && ap.data.student ? ap.data.student : null);
-                      const apSubjects = ap && ap.subjects ? ap.subjects : (ap && ap.data && ap.data.subjects ? ap.data.subjects : []);
-                      const apUpdatedAt = ap && ap.updatedAt ? ap.updatedAt : (ap && ap.data && ap.data.updatedAt ? ap.data.updatedAt : '');
-
-                      out.academicProfileUpdatedAt = apUpdatedAt || '';
-                      out.priorAttainment = apStudent && apStudent.priorAttainment ? apStudent.priorAttainment : (out.priorAttainment || '');
-
-                      // Flatten up to 15 subjects to useful columns
-                      for (let p = 1; p <= 15; p++) {
-                        const subj = Array.isArray(apSubjects) ? apSubjects.find(x => Number(x.position) === p) : null;
-                        out[`sub${p}_name`] = subj ? subj.subjectName : '';
-                        out[`sub${p}_examType`] = subj ? subj.examType : '';
-                        out[`sub${p}_examBoard`] = subj ? subj.examBoard : '';
-                        out[`sub${p}_MEG`] = subj ? subj.minimumExpectedGrade : '';
-                        out[`sub${p}_STG`] = subj ? subj.subjectTargetGrade : '';
-                        out[`sub${p}_current`] = subj ? subj.currentGrade : '';
-                        out[`sub${p}_target`] = subj ? subj.targetGrade : '';
-                      }
-                    } catch (e) {
-                      out._academicProfileError = e.message;
-                    }
-                  }
-
-                  results[i] = out;
-                  this.reportExportProgress += 1;
-                  this.loadingText = `Fetching data... (${this.reportExportProgress}/${this.reportExportTotal})`;
-                }
+              const schoolName = (this.isSuperUser && this.selectedSchool?.name) ? this.selectedSchool.name : (this.schoolContext?.customerName || 'School');
+              const payload = {
+                students: students.map(s => ({
+                  email: s.email,
+                  name: s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim(),
+                  yearGroup: s.yearGroup || '',
+                  group: s.group || ''
+                })),
+                schoolName,
+                academicYear: this.reportAcademicYear || '',
+                include: {
+                  vespaResults: !!this.reportInclude.vespaResults,
+                  academicProfile: !!this.reportInclude.academicProfile,
+                  userComments: !!this.reportInclude.userComments
+                },
+                notificationEmail: this.userEmail
               };
 
-              const workers = Array.from({ length: Math.min(limit, students.length) }, () => worker());
-              await Promise.all(workers);
+              const resp = await fetch(`${this.apiUrl}/api/v3/reports/vespa-csv/process`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+              });
+              const data = await safeJsonParse(resp, 'Create report queue');
+              const jobId = data.jobId || data.jobID || data.id;
+              if (!data.success || !jobId) throw new Error(data.message || 'Failed to queue report');
 
-              const rows = results.filter(Boolean);
-
-              // Remove cohort-wide blank columns (e.g. unused subject slots)
-              const isBlank = (v) => v === null || v === undefined || String(v).trim() === '';
-              const allKeys = new Set();
-              rows.forEach(r => Object.keys(r || {}).forEach(k => allKeys.add(k)));
-              const keepKeys = [];
-              for (const k of allKeys) {
-                let any = false;
-                for (const r of rows) {
-                  if (r && !isBlank(r[k])) { any = true; break; }
-                }
-                if (any) keepKeys.push(k);
-              }
-              const prunedRows = rows.map(r => {
-                const out = {};
-                for (const k of keepKeys) out[k] = r[k];
-                return out;
+              this.activeJobs.push({
+                jobId,
+                type: 'report-export-csv',
+                action: 'CSV Report Export',
+                total: students.length,
+                current: 0,
+                status: 'Queued - you will receive an email with the CSV',
+                description: `Report export (${students.length} students)`,
+                startTime: Date.now(),
+                emailNotification: true
               });
 
-              const schoolName = (this.isSuperUser && this.selectedSchool?.name) ? this.selectedSchool.name : (this.schoolContext?.customerName || 'School');
-              const filename = `VESPA_Report_${schoolName.replace(/\\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.csv`;
-              this.downloadCsv(filename, prunedRows);
-              this.showMessage(`✅ Report downloaded (${prunedRows.length} students)`, 'success');
+              if (!this.jobPollingInterval) this.startJobPolling();
+              this.showMessage(`✅ Report queued! Job ID: ${jobId}. We'll email the CSV to ${this.userEmail}`, 'success');
               this.closeCreateReportModal();
             } catch (e) {
-              console.error('Create report failed:', e);
+              console.error('Queue report failed:', e);
               this.showMessage('Create report failed: ' + (e.message || String(e)), 'error');
             } finally {
               this.reportExporting = false;
@@ -4516,6 +4444,39 @@
                       }
                     } else if (data.success && data.found === false) {
                       job.status = 'Completed - Check your email for results';
+                      job.current = job.total;
+                      setTimeout(() => {
+                        const idx = this.activeJobs.indexOf(job);
+                        if (idx > -1) this.activeJobs.splice(idx, 1);
+                      }, 8000);
+                    }
+                    continue;
+                  }
+
+                  // Report export jobs (CSV emailed to requester)
+                  if (job.type === 'report-export-csv') {
+                    const data = await fetchWithRetry(
+                      `${this.apiUrl}/api/v3/reports/vespa-csv/status/${encodeURIComponent(job.jobId)}`,
+                      { headers: { 'Content-Type': 'application/json' } },
+                      'Report export job status check',
+                      2
+                    );
+
+                    if (data.success && data.found) {
+                      if (data.progress) {
+                        job.current = data.progress.current || 0;
+                        job.total = data.progress.total || job.total || 0;
+                        job.status = data.progress.status || data.state || 'Processing...';
+                      }
+                      if (data.completed) {
+                        this.showMessage('✅ Report export completed. Check your email for the CSV.', 'success');
+                        this.activeJobs.splice(i, 1);
+                      } else if (data.failed) {
+                        this.showMessage(`❌ Report export failed: ${data.failedReason || 'Unknown error'}`, 'error');
+                        this.activeJobs.splice(i, 1);
+                      }
+                    } else if (data.success && data.found === false) {
+                      job.status = 'Completed - Check your email for the CSV';
                       job.current = job.total;
                       setTimeout(() => {
                         const idx = this.activeJobs.indexOf(job);
