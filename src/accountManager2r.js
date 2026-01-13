@@ -358,6 +358,9 @@
               updatedByEmail: null
             },
 
+            // Grade Snapshot sheet generator options
+            apSnapshotSheetPrefillGrades: true,
+
             // Create Report (cohort export)
             showCreateReportModal: false,
             reportExporting: false,
@@ -2969,6 +2972,7 @@
                 })),
                 schoolName,
                 academicYear,
+                prefillGrades: !!this.apSnapshotSheetPrefillGrades,
                 notificationEmail: this.userEmail
               };
 
@@ -6263,6 +6267,16 @@
                     <div v-if="apUploadMode === 'snapshot'" style="margin-top:10px; font-size: 12px; color:#666; line-height:1.4;">
                       <strong>New:</strong> We can generate a <em>bespoke</em> sheet that is already populated with each student’s subjects (and any existing grades),
                       so staff just type the grades and upload.
+                    </div>
+                    <div v-if="apUploadMode === 'snapshot'" style="margin-top:10px; padding: 12px; border: 1px solid #e3e8ef; background: #ffffff; border-radius: 8px;">
+                      <div style="font-weight:700; margin-bottom: 8px;">Bespoke Snapshot Sheet options</div>
+                      <label style="display:flex; align-items:center; gap:10px; font-weight:600; cursor:pointer;">
+                        <input type="checkbox" v-model="apSnapshotSheetPrefillGrades" />
+                        Prefill grades (default): include Current, Target, Effort, Behaviour, Attendance (if already stored)
+                      </label>
+                      <div style="margin-top:6px; font-size: 12px; color:#666; line-height:1.4;">
+                        Turn this off to <strong>leave grade fields blank</strong> while still pre-filling the correct subjects for each student.
+                      </div>
                     </div>
                   </div>
 
