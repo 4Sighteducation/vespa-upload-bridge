@@ -345,6 +345,10 @@
             apSnapUploading: false,
             apSnapJobId: null,
             apSnapAcademicYear: '',
+            apSnapFormat: 'vespa', // 'vespa' (long template) | 'alps' (ALPS export: UCI + subject columns)
+            apSnapWideRawRows: null, // raw parsed rows for ALPS export (wide)
+            apSnapSubjectMapping: null, // { header: canonicalSubject }
+            apSnapIdentifierColumn: null, // 'UCI' | 'UPN' | 'ULN'
             apPopulateTargetFromStg: false,
 
             // Academic Profile school-wide defaults (source of truth for student visibility + upload default)
@@ -2554,6 +2558,10 @@
             this.apSnapValidationResults = null;
             this.apSnapUploading = false;
             this.apSnapJobId = null;
+            this.apSnapFormat = 'vespa';
+            this.apSnapWideRawRows = null;
+            this.apSnapSubjectMapping = null;
+            this.apSnapIdentifierColumn = null;
             this.apPopulateTargetFromStg = !!(this.apSchoolSettings && this.apSchoolSettings.defaultPopulateTargetFromStg);
             if (!this.apAcademicYear) this.apAcademicYear = this.deriveAcademicYear();
             if (!this.apSnapAcademicYear) this.apSnapAcademicYear = this.apAcademicYear;
@@ -2569,6 +2577,9 @@
             this.apSnapCsvData = null;
             this.apSnapValidationResults = null;
             this.apSnapUploading = false;
+            this.apSnapWideRawRows = null;
+            this.apSnapSubjectMapping = null;
+            this.apSnapIdentifierColumn = null;
           },
 
           handleAcademicProfileFileSelect(event) {
@@ -2843,29 +2854,84 @@
             this.loadingText = 'Validating Grade Snapshot CSV...';
 
             try {
+              const schoolId = this.getSelectedSchoolUuidForRls();
+              const academicYear = (this.apSnapAcademicYear || this.apAcademicYear || '').trim();
+              if (!schoolId) {
+                this.showMessage('Select a school first.', 'warning');
+                return;
+              }
+              if (!academicYear) {
+                this.showMessage('Please set an Academic Year first.', 'warning');
+                return;
+              }
+
+              // Reset format-specific state
+              this.apSnapSubjectMapping = null;
+              this.apSnapIdentifierColumn = null;
+              this.apSnapWideRawRows = null;
+
               const rawRows = await this.parseCSVFile(this.apSnapSelectedCSVFile);
-              this.apSnapCsvData = this.normalizeAcademicProfileGradeSnapshotRows(rawRows);
 
-              const response = await fetch(
-                `${this.apiUrl}/api/students/ks5-grade-snapshots/validate`,
-                {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ csvData: this.apSnapCsvData })
+              if (this.apSnapFormat === 'alps') {
+                // ALPS export format: keep wide rows as-is
+                this.apSnapWideRawRows = rawRows;
+                this.apSnapCsvData = rawRows;
+
+                const response = await fetch(
+                  `${this.apiUrl}/api/v3/academic-profile/grade-snapshots/alps-export/validate`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-user-email': this.userEmail,
+                      'x-user-id': this.userId
+                    },
+                    body: JSON.stringify({
+                      csvData: rawRows,
+                      schoolId,
+                      academicYear
+                    })
+                  }
+                );
+
+                const data = await safeJsonParse(response, 'ALPS export snapshot validation');
+                this.apSnapValidationResults = data;
+                if (data.success || data.isValid) {
+                  this.apSnapSubjectMapping = data.subjectMapping || null;
+                  this.apSnapIdentifierColumn = data.identifierColumn || null;
+                  this.showMessage(`✅ ALPS export CSV valid: ${this.apSnapCsvData.length} rows`, 'success');
+                } else {
+                  const errorCount = data.errors?.length || 0;
+                  const firstError = Array.isArray(data.errors) && data.errors.length > 0
+                    ? (data.errors[0].message || data.errors[0].error || String(data.errors[0]))
+                    : (data.message || 'Validation failed');
+                  this.showMessage(`❌ ALPS export validation failed: ${errorCount} issue(s). First: ${firstError}`, 'error');
                 }
-              );
-
-              const data = await safeJsonParse(response, 'Academic Profile snapshot validation');
-              this.apSnapValidationResults = data;
-
-              if (data.success || data.isValid) {
-                this.showMessage(`✅ Grade snapshot CSV valid: ${this.apSnapCsvData.length} rows`, 'success');
               } else {
-                const errorCount = data.errors?.length || 0;
-                const firstError = Array.isArray(data.errors) && data.errors.length > 0
-                  ? (data.errors[0].message || data.errors[0].error || String(data.errors[0]))
-                  : (data.message || 'Validation failed');
-                this.showMessage(`❌ Grade snapshot validation failed: ${errorCount} issue(s). First: ${firstError}`, 'error');
+                // VESPA grade snapshot template (long)
+                this.apSnapCsvData = this.normalizeAcademicProfileGradeSnapshotRows(rawRows);
+
+                const response = await fetch(
+                  `${this.apiUrl}/api/students/ks5-grade-snapshots/validate`,
+                  {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ csvData: this.apSnapCsvData })
+                  }
+                );
+
+                const data = await safeJsonParse(response, 'Academic Profile snapshot validation');
+                this.apSnapValidationResults = data;
+
+                if (data.success || data.isValid) {
+                  this.showMessage(`✅ Grade snapshot CSV valid: ${this.apSnapCsvData.length} rows`, 'success');
+                } else {
+                  const errorCount = data.errors?.length || 0;
+                  const firstError = Array.isArray(data.errors) && data.errors.length > 0
+                    ? (data.errors[0].message || data.errors[0].error || String(data.errors[0]))
+                    : (data.message || 'Validation failed');
+                  this.showMessage(`❌ Grade snapshot validation failed: ${errorCount} issue(s). First: ${firstError}`, 'error');
+                }
               }
             } catch (error) {
               console.error('Grade snapshot CSV validation error:', error);
@@ -2893,22 +2959,67 @@
             this.loadingText = 'Submitting Grade Snapshot job...';
 
             try {
-              const response = await fetch(
-                `${this.apiUrl}/api/students/ks5-grade-snapshots/process`,
-                {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    csvData: this.apSnapCsvData,
-                    options: {
-                      academicYear: this.apSnapAcademicYear || this.apAcademicYear,
-                      sendNotifications: true,
-                      notificationEmail: this.userEmail
-                    },
-                    context: this.getKs5UploaderContext()
-                  })
+              const schoolId = this.getSelectedSchoolUuidForRls();
+              const academicYear = (this.apSnapAcademicYear || this.apAcademicYear || '').trim();
+              if (!schoolId) {
+                this.showMessage('Select a school first.', 'warning');
+                return;
+              }
+              if (!academicYear) {
+                this.showMessage('Please set an Academic Year first.', 'warning');
+                return;
+              }
+
+              let response;
+              if (this.apSnapFormat === 'alps') {
+                if (!this.apSnapWideRawRows || !Array.isArray(this.apSnapWideRawRows)) {
+                  throw new Error('Missing ALPS export rows; please re-validate the file.');
                 }
-              );
+                if (!this.apSnapSubjectMapping || !this.apSnapIdentifierColumn) {
+                  throw new Error('Missing ALPS subject mapping; please re-validate the file.');
+                }
+
+                response = await fetch(
+                  `${this.apiUrl}/api/v3/academic-profile/grade-snapshots/alps-export/process`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-user-email': this.userEmail,
+                      'x-user-id': this.userId
+                    },
+                    body: JSON.stringify({
+                      csvData: this.apSnapWideRawRows,
+                      options: {
+                        schoolId,
+                        academicYear,
+                        subjectMapping: this.apSnapSubjectMapping,
+                        identifierColumn: this.apSnapIdentifierColumn,
+                        sendNotifications: true,
+                        notificationEmail: this.userEmail
+                      },
+                      context: this.getKs5UploaderContext()
+                    })
+                  }
+                );
+              } else {
+                response = await fetch(
+                  `${this.apiUrl}/api/students/ks5-grade-snapshots/process`,
+                  {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      csvData: this.apSnapCsvData,
+                      options: {
+                        academicYear,
+                        sendNotifications: true,
+                        notificationEmail: this.userEmail
+                      },
+                      context: this.getKs5UploaderContext()
+                    })
+                  }
+                );
+              }
 
               const data = await safeJsonParse(response, 'Academic Profile snapshot submit');
               const returnedJobId = data.jobId || data.jobID || data.id;
@@ -2918,12 +3029,14 @@
 
                 this.activeJobs.push({
                   jobId: returnedJobId,
-                  type: 'academic-profile-snapshot',
-                  action: 'Academic Profile Grade Snapshot',
+                  type: (this.apSnapFormat === 'alps') ? 'academic-profile-snapshot-alps' : 'academic-profile-snapshot',
+                  action: (this.apSnapFormat === 'alps') ? 'Academic Profile Grade Snapshot (ALPS Export)' : 'Academic Profile Grade Snapshot',
                   total: this.apSnapCsvData?.length || 0,
                   current: 0,
                   status: 'Queued - Processing in background...',
-                  description: `Grade Snapshot Upload (${this.apSnapAcademicYear || this.apAcademicYear})`,
+                  description: (this.apSnapFormat === 'alps')
+                    ? `ALPS export upload (${academicYear})`
+                    : `Grade Snapshot Upload (${academicYear})`,
                   startTime: Date.now(),
                   emailNotification: true
                 });
@@ -4525,6 +4638,53 @@
                       } else if (data.failed) {
                         this.showMessage(
                           `❌ Grade snapshot failed: ${data.failedReason || 'Unknown error'}`,
+                          'error'
+                        );
+                        this.activeJobs.splice(i, 1);
+                      }
+                    } else if (data.success && data.found === false) {
+                      job.status = 'Completed - Check your email for results';
+                      job.current = job.total;
+                      setTimeout(() => {
+                        const idx = this.activeJobs.indexOf(job);
+                        if (idx > -1) this.activeJobs.splice(idx, 1);
+                      }, 8000);
+                    }
+                    continue;
+                  }
+
+                  // ALPS export grade snapshot jobs (Account Manager-only v3 endpoint)
+                  if (job.type === 'academic-profile-snapshot-alps') {
+                    const data = await fetchWithRetry(
+                      `${this.apiUrl}/api/v3/academic-profile/grade-snapshots/alps-export/status/${encodeURIComponent(job.jobId)}`,
+                      {
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'x-user-email': this.userEmail,
+                          'x-user-id': this.userId
+                        }
+                      },
+                      'ALPS export grade snapshot job status check',
+                      2
+                    );
+
+                    if (data.success && data.found) {
+                      if (data.progress) {
+                        job.current = data.progress.current || 0;
+                        job.total = data.progress.total || job.total || 0;
+                        job.status = data.progress.status || data.state || 'Processing...';
+                      }
+
+                      if (data.completed) {
+                        const result = data.result || {};
+                        this.showMessage(
+                          `✅ ALPS export snapshot completed: ${result.successful || 0} student(s) updated`,
+                          (result.processingErrors && result.processingErrors.length > 0) ? 'warning' : 'success'
+                        );
+                        this.activeJobs.splice(i, 1);
+                      } else if (data.failed) {
+                        this.showMessage(
+                          `❌ ALPS export snapshot failed: ${data.failedReason || 'Unknown error'}`,
                           'error'
                         );
                         this.activeJobs.splice(i, 1);
@@ -6366,6 +6526,16 @@
                         This is used to find the student’s existing Academic Profile for that year.
                       </div>
                     </div>
+                    <div>
+                      <label style="display: block; margin-bottom: 8px; font-weight: 600;">Snapshot CSV format</label>
+                      <select v-model="apSnapFormat" class="am-select-inline" style="width: 100%; padding: 10px;">
+                        <option value="vespa">VESPA Snapshot template (Student_Email + Subject rows)</option>
+                        <option value="alps">ALPS export (UCI + subject columns)</option>
+                      </select>
+                      <div style="margin-top:6px; font-size: 12px; color:#666; line-height:1.4;">
+                        ALPS export supports identifying students by <strong>UCI/UPN</strong> (no email needed). Ambiguous subject headers will be rejected with guidance.
+                      </div>
+                    </div>
                   </div>
                   
                   <!-- File Selection -->
@@ -6443,6 +6613,16 @@
                       <div style="margin-top: 8px; padding: 10px; background: rgba(255,255,255,0.7); border-radius: 4px; color: #155724;">
                         Ready to upload. This will update Current/Target (and optional Effort/Behaviour/Attendance) for existing Academic Profiles in {{ apSnapAcademicYear || apAcademicYear }}.
                       </div>
+                      <div v-if="apSnapValidationResults.warnings && apSnapValidationResults.warnings.length > 0"
+                        style="margin-top: 12px; padding: 12px; background: rgba(255,255,255,0.85); border-radius: 6px;">
+                        <div style="font-weight: 700; margin-bottom: 8px; color: #155724;">Warnings</div>
+                        <div
+                          v-for="(w, idx) in apSnapValidationResults.warnings"
+                          :key="idx"
+                          style="padding: 8px; margin-bottom: 6px; background: #fff3cd; border-left: 3px solid #ffc107; border-radius: 4px; font-size: 13px;">
+                          {{ w }}
+                        </div>
+                      </div>
                     </div>
                     <div v-else style="padding: 15px; border-radius: 8px; background: #f8d7da; border-left: 4px solid #dc3545;">
                       <div style="font-weight: 600; margin-bottom: 12px; color: #721c24; font-size: 16px;">
@@ -6451,6 +6631,25 @@
                       <div style="color: #721c24; margin-bottom: 12px;">
                         <strong>Total Rows:</strong> {{ apSnapCsvData?.length || 0 }}<br>
                         <strong>Errors Found:</strong> {{ apSnapValidationResults.errors?.length || 0 }}
+                      </div>
+                      <div v-if="apSnapValidationResults.errors && apSnapValidationResults.errors.length > 0"
+                        style="max-height: 300px; overflow-y: auto; background: white; padding: 12px; border-radius: 6px; margin-top: 12px;">
+                        <div style="font-weight: 700; margin-bottom: 12px; color: #721c24; border-bottom: 2px solid #dc3545; padding-bottom: 8px;">
+                          📋 Issues Found:
+                        </div>
+                        <div
+                          v-for="(error, index) in apSnapValidationResults.errors"
+                          :key="index"
+                          style="padding: 10px; margin-bottom: 8px; background: #fff3cd; border-left: 3px solid #ffc107; border-radius: 4px;">
+                          <div style="color: #721c24; font-size: 14px; line-height: 1.5;">
+                            {{ error.message || error.error || error }}
+                          </div>
+                        </div>
+                      </div>
+                      <div v-if="apSnapFormat === 'alps'" style="margin-top: 12px; padding: 12px; background: rgba(255,255,255,0.7); border-radius: 4px; color: #721c24; font-size: 13px; line-height:1.4;">
+                        <strong>ALPS export expectations:</strong><br>
+                        - Must include an identifier column: <code>UCI</code> (preferred) / <code>UPN</code> / <code>ULN</code><br>
+                        - Subject headers must map unambiguously. If a header like <code>Business</code> is ambiguous, rename to a canonical key like <code>A - Business Studies</code> or <code>16 Dip - Business</code>.
                       </div>
                     </div>
                   </div>
