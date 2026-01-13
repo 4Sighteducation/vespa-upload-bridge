@@ -2930,6 +2930,78 @@
               this.loading = false;
             }
           },
+
+          async queueGradeSnapshotSheet() {
+            // Generate a pre-filled grade snapshot CSV (one row per subject) and email it to the requester.
+            if (this.currentTab !== 'students') {
+              this.showMessage('Grade snapshot sheet is only available for Students.', 'info');
+              return;
+            }
+
+            const schoolId = this.getSelectedSchoolUuidForRls();
+            if (!schoolId) {
+              this.showMessage('Select a school first to generate a snapshot sheet.', 'warning');
+              return;
+            }
+
+            const academicYear = (this.apSnapAcademicYear || this.apAcademicYear || '').trim();
+            if (!academicYear) {
+              this.showMessage('Please set an Academic Year first.', 'warning');
+              return;
+            }
+
+            this.loading = true;
+            this.loadingText = 'Queuing Grade Snapshot Sheet...';
+            try {
+              const students = await this.fetchAllFilteredStudentsForReport();
+              if (!students || students.length === 0) {
+                this.showMessage('No students match the current filters.', 'warning');
+                return;
+              }
+
+              const schoolName = (this.isSuperUser && this.selectedSchool?.name) ? this.selectedSchool.name : (this.schoolContext?.customerName || 'School');
+              const payload = {
+                students: students.map(s => ({
+                  email: s.email,
+                  name: s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim(),
+                  yearGroup: s.yearGroup || '',
+                  group: s.group || ''
+                })),
+                schoolName,
+                academicYear,
+                notificationEmail: this.userEmail
+              };
+
+              const resp = await fetch(`${this.apiUrl}/api/v3/reports/grade-snapshot-sheet/process`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+              });
+              const data = await safeJsonParse(resp, 'Queue grade snapshot sheet');
+              const jobId = data.jobId || data.jobID || data.id;
+              if (!data.success || !jobId) throw new Error(data.message || 'Failed to queue snapshot sheet');
+
+              this.activeJobs.push({
+                jobId,
+                type: 'grade-snapshot-sheet',
+                action: 'Grade Snapshot Sheet',
+                total: students.length,
+                current: 0,
+                status: 'Queued - you will receive an email with the CSV',
+                description: `Snapshot sheet (${academicYear})`,
+                startTime: Date.now(),
+                emailNotification: true
+              });
+
+              if (!this.jobPollingInterval) this.startJobPolling();
+              this.showMessage(`✅ Snapshot sheet queued! Job ID: ${jobId}. We'll email it to ${this.userEmail}`, 'success');
+            } catch (e) {
+              console.error('Queue snapshot sheet failed:', e);
+              this.showMessage('Failed to generate snapshot sheet: ' + (e.message || String(e)), 'error');
+            } finally {
+              this.loading = false;
+            }
+          },
           
           getUploaderContext() {
             // Build context similar to upload system
@@ -4473,6 +4545,39 @@
                         this.activeJobs.splice(i, 1);
                       } else if (data.failed) {
                         this.showMessage(`❌ Report export failed: ${data.failedReason || 'Unknown error'}`, 'error');
+                        this.activeJobs.splice(i, 1);
+                      }
+                    } else if (data.success && data.found === false) {
+                      job.status = 'Completed - Check your email for the CSV';
+                      job.current = job.total;
+                      setTimeout(() => {
+                        const idx = this.activeJobs.indexOf(job);
+                        if (idx > -1) this.activeJobs.splice(idx, 1);
+                      }, 8000);
+                    }
+                    continue;
+                  }
+
+                  // Grade snapshot sheet jobs (CSV emailed to requester)
+                  if (job.type === 'grade-snapshot-sheet') {
+                    const data = await fetchWithRetry(
+                      `${this.apiUrl}/api/v3/reports/grade-snapshot-sheet/status/${encodeURIComponent(job.jobId)}`,
+                      { headers: { 'Content-Type': 'application/json' } },
+                      'Grade snapshot sheet job status check',
+                      2
+                    );
+
+                    if (data.success && data.found) {
+                      if (data.progress) {
+                        job.current = data.progress.current || 0;
+                        job.total = data.progress.total || job.total || 0;
+                        job.status = data.progress.status || data.state || 'Processing...';
+                      }
+                      if (data.completed) {
+                        this.showMessage('✅ Snapshot sheet generated. Check your email for the CSV.', 'success');
+                        this.activeJobs.splice(i, 1);
+                      } else if (data.failed) {
+                        this.showMessage(`❌ Snapshot sheet failed: ${data.failedReason || 'Unknown error'}`, 'error');
                         this.activeJobs.splice(i, 1);
                       }
                     } else if (data.success && data.found === false) {
@@ -6143,10 +6248,21 @@
                         class="am-button secondary">
                         📥 Grade Snapshot Template
                       </a>
+                      <button
+                        v-if="apUploadMode === 'snapshot'"
+                        @click="queueGradeSnapshotSheet"
+                        class="am-button secondary"
+                        :disabled="loading || apSnapUploading">
+                        ✉️ Email me a pre-filled Snapshot Sheet
+                      </button>
                     </div>
                     <div style="margin-top:10px; font-size: 12px; color:#666; line-height:1.4;">
                       <strong>Tip:</strong> The Profile template supports optional columns like <code>sub1_current</code> / <code>sub1_target</code> etc.
                       The Grade Snapshot template updates existing profiles without changing MEG/STG.
+                    </div>
+                    <div v-if="apUploadMode === 'snapshot'" style="margin-top:10px; font-size: 12px; color:#666; line-height:1.4;">
+                      <strong>New:</strong> We can generate a <em>bespoke</em> sheet that is already populated with each student’s subjects (and any existing grades),
+                      so staff just type the grades and upload.
                     </div>
                   </div>
 
