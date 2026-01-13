@@ -6090,7 +6090,8 @@
                     </div>
 
                     <div v-if="apSchoolSettings.updatedAt" style="margin-top: 10px; font-size: 12px; color:#666;">
-                      Last saved: {{ apSchoolSettings.updatedAt }}{{ apSchoolSettings.updatedByEmail ? ` by ${apSchoolSettings.updatedByEmail}` : '' }}
+                      Last saved: {{ apSchoolSettings.updatedAt }}
+                      <span v-if="apSchoolSettings.updatedByEmail"> by {{ apSchoolSettings.updatedByEmail }}</span>
                     </div>
                   </div>
                 </div>
