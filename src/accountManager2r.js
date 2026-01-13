@@ -367,7 +367,6 @@
             reportAcademicYear: '', // optional, used for academic profile fetch
             reportInclude: {
               vespaResults: true,
-              questionnaireResponses: false,
               academicProfile: true,
               userComments: false
             },
@@ -2431,7 +2430,23 @@
               this.showMessage('No rows to export', 'warning');
               return;
             }
-            const headers = Object.keys(rows[0]);
+            // Union of keys across all rows (some rows may have extra fields)
+            const keySet = new Set();
+            for (const r of rows) {
+              Object.keys(r || {}).forEach(k => keySet.add(k));
+            }
+
+            // Stable ordering: put common fields first, then everything else
+            const preferred = [
+              'email', 'name', 'yearGroup', 'group',
+              'priorAttainment',
+              'academicProfileUpdatedAt',
+              'userCommentsJson'
+            ];
+            const headers = [
+              ...preferred.filter(k => keySet.has(k)),
+              ...Array.from(keySet).filter(k => !preferred.includes(k))
+            ];
             const lines = [];
             lines.push(headers.map(h => this.toCsvCell(h)).join(','));
             for (const r of rows) {
@@ -2461,6 +2476,12 @@
             this.reportExportTotal = 0;
 
             try {
+              // Guard: at least one section must be selected
+              if (!this.reportInclude.vespaResults && !this.reportInclude.academicProfile && !this.reportInclude.userComments) {
+                this.showMessage('Select at least one section to include.', 'warning');
+                return;
+              }
+
               const students = await this.fetchAllFilteredStudentsForReport();
               if (!students || students.length === 0) {
                 this.showMessage('No students match the current filters.', 'warning');
@@ -2484,7 +2505,7 @@
 
                   // VESPA / Questionnaire / Comments live in report data
                   let reportData = null;
-                  if (this.reportInclude.vespaResults || this.reportInclude.questionnaireResponses || this.reportInclude.userComments) {
+                  if (this.reportInclude.vespaResults || this.reportInclude.userComments) {
                     try {
                       reportData = await this.fetchStudentReportData(email);
                     } catch (e) {
@@ -2506,11 +2527,6 @@
                       out[`c${c}_overall`] = sc ? sc.overall : '';
                       out[`c${c}_completionDate`] = sc ? sc.completion_date : '';
                     }
-                  }
-
-                  if (reportData && this.reportInclude.questionnaireResponses) {
-                    // Store as JSON to avoid extremely wide CSVs
-                    out.questionnaireResponsesJson = reportData.responses ? JSON.stringify(reportData.responses) : '';
                   }
 
                   if (reportData && this.reportInclude.userComments) {
@@ -2555,10 +2571,29 @@
               await Promise.all(workers);
 
               const rows = results.filter(Boolean);
+
+              // Remove cohort-wide blank columns (e.g. unused subject slots)
+              const isBlank = (v) => v === null || v === undefined || String(v).trim() === '';
+              const allKeys = new Set();
+              rows.forEach(r => Object.keys(r || {}).forEach(k => allKeys.add(k)));
+              const keepKeys = [];
+              for (const k of allKeys) {
+                let any = false;
+                for (const r of rows) {
+                  if (r && !isBlank(r[k])) { any = true; break; }
+                }
+                if (any) keepKeys.push(k);
+              }
+              const prunedRows = rows.map(r => {
+                const out = {};
+                for (const k of keepKeys) out[k] = r[k];
+                return out;
+              });
+
               const schoolName = (this.isSuperUser && this.selectedSchool?.name) ? this.selectedSchool.name : (this.schoolContext?.customerName || 'School');
               const filename = `VESPA_Report_${schoolName.replace(/\\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.csv`;
-              this.downloadCsv(filename, rows);
-              this.showMessage(`✅ Report downloaded (${rows.length} students)`, 'success');
+              this.downloadCsv(filename, prunedRows);
+              this.showMessage(`✅ Report downloaded (${prunedRows.length} students)`, 'success');
               this.closeCreateReportModal();
             } catch (e) {
               console.error('Create report failed:', e);
@@ -6388,10 +6423,6 @@
                           VESPA Results
                         </label>
                         <label style="display:flex; align-items:center; gap:10px; font-weight:600; cursor:pointer;">
-                          <input type="checkbox" v-model="reportInclude.questionnaireResponses" />
-                          Questionnaire responses
-                        </label>
-                        <label style="display:flex; align-items:center; gap:10px; font-weight:600; cursor:pointer;">
                           <input type="checkbox" v-model="reportInclude.academicProfile" />
                           Academic Profile
                         </label>
@@ -6401,7 +6432,7 @@
                         </label>
                       </div>
                       <div style="margin-top: 8px; font-size: 12px; color:#666;">
-                        Note: Questionnaire responses and comments are exported as JSON columns (to avoid extremely wide CSVs).
+                        Note: Student comments are exported as a JSON column (to avoid extremely wide CSVs).
                       </div>
                     </div>
 
