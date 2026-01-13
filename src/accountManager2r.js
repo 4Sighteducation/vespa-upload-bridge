@@ -345,6 +345,7 @@
             apSnapUploading: false,
             apSnapJobId: null,
             apSnapAcademicYear: '',
+            apPopulateTargetFromStg: false,
             
             // Manual Add
             showManualAddModal: false,
@@ -2218,6 +2219,7 @@
             this.apSnapValidationResults = null;
             this.apSnapUploading = false;
             this.apSnapJobId = null;
+            this.apPopulateTargetFromStg = false;
             if (!this.apAcademicYear) this.apAcademicYear = this.deriveAcademicYear();
             if (!this.apSnapAcademicYear) this.apSnapAcademicYear = this.apAcademicYear;
           },
@@ -2443,6 +2445,7 @@
                       academicYear: this.apAcademicYear,
                       writeToSupabase: true,
                       writeToKnack: false,
+                      populateTargetFromStg: !!this.apPopulateTargetFromStg,
                       sendNotifications: true,
                       notificationEmail: this.userEmail
                     },
@@ -5786,6 +5789,16 @@
                         <option :value="90">90th</option>
                         <option :value="100">100th</option>
                       </select>
+                    </div>
+                  </div>
+                  
+                  <div v-if="apUploadMode === 'profile'" style="margin: 8px 0 16px 0; padding: 12px; border: 1px solid #e3e8ef; background: #ffffff; border-radius: 8px;">
+                    <label style="display:flex; gap:10px; align-items:center; font-weight:600; cursor:pointer;">
+                      <input type="checkbox" v-model="apPopulateTargetFromStg" />
+                      Make Student <strong>Target Grade</strong> match the <strong>STG</strong>
+                    </label>
+                    <div style="margin-top:6px; font-size: 12px; color:#666; line-height:1.4;">
+                      Default is <strong>off</strong>: Target Grade will be left blank. Turn this on only if your school wants Target = STG.
                     </div>
                   </div>
 
