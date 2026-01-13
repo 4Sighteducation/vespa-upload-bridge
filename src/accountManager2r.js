@@ -2134,7 +2134,9 @@
           },
 
           getAcademicProfileKs5TemplateHref() {
-            const headers = ['UPN', 'ULN', 'Student Email', 'GCSE Prior Attainment'];
+            // Note: in Supabase we store ULN-like identifiers on `academic_profiles.upn`
+            // (UCI is treated separately). So templates should use "UPN".
+            const headers = ['UPN', 'Student Email', 'GCSE Prior Attainment'];
             for (let i = 1; i <= 15; i++) {
               headers.push(
                 `sub${i}`,
@@ -2147,7 +2149,6 @@
             }
             const example = [
               '1234567890',
-              '',
               'student@example.com',
               '5.5',
               // sub1..sub15 (blank)
@@ -2158,7 +2159,7 @@
           },
 
           getAcademicProfileSnapshotTemplateHref() {
-            const headers = ['Student Email', 'Name', 'ULN', 'Academic Year', 'Subject', 'Current Grade', 'Target Grade', 'Effort', 'Behaviour', 'Attendance'];
+            const headers = ['Student Email', 'Name', 'UPN', 'Academic Year', 'Subject', 'Current Grade', 'Target Grade', 'Effort', 'Behaviour', 'Attendance'];
             const example = ['student@example.com', 'Student Name', '', this.apSnapAcademicYear || this.deriveAcademicYear(), 'A Level - AQA - Physics', 'C', 'B', '5', '7', '95'];
             const csv = `${headers.join(',')}\n${example.join(',')}\n`;
             return `data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`;
@@ -2596,9 +2597,12 @@
                 byNorm[normalizeHeaderKey(k)] = row[k];
               });
 
+              const upnValue = (byNorm['upn'] || '').trim ? byNorm['upn'].trim() : (byNorm['upn'] || '');
+              const ulnValue = (byNorm['uln'] || '').trim ? byNorm['uln'].trim() : (byNorm['uln'] || '');
+
               const out = {
-                UPN: (byNorm['upn'] || '').trim ? byNorm['upn'].trim() : (byNorm['upn'] || ''),
-                ULN: (byNorm['uln'] || '').trim ? byNorm['uln'].trim() : (byNorm['uln'] || ''),
+                // Treat ULN as a synonym for UPN in templates/uploads (UCI is separate)
+                UPN: upnValue || ulnValue,
                 Student_Email: (byNorm['student_email'] || byNorm['studentemail'] || byNorm['student'] || '').trim ? (byNorm['student_email'] || byNorm['studentemail'] || byNorm['student'] || '').trim() : (byNorm['student_email'] || byNorm['studentemail'] || byNorm['student'] || ''),
                 GCSE_Prior_Attainment: (byNorm['gcse_prior_attainment'] || byNorm['gcse_prior'] || byNorm['gcseprior'] || '').trim ? (byNorm['gcse_prior_attainment'] || byNorm['gcse_prior'] || byNorm['gcseprior'] || '').trim() : (byNorm['gcse_prior_attainment'] || byNorm['gcse_prior'] || byNorm['gcseprior'] || ''),
               };
@@ -2650,9 +2654,12 @@
                 byNorm[normalizeHeaderKey(k)] = row[k];
               });
 
+              const upnValue = (byNorm['upn'] || '').trim ? byNorm['upn'].trim() : (byNorm['upn'] || '');
+              const ulnValue = (byNorm['uln'] || '').trim ? byNorm['uln'].trim() : (byNorm['uln'] || '');
+
               const out = {
-                UPN: (byNorm['upn'] || '').trim ? byNorm['upn'].trim() : (byNorm['upn'] || ''),
-                ULN: (byNorm['uln'] || '').trim ? byNorm['uln'].trim() : (byNorm['uln'] || ''),
+                // Treat ULN as a synonym for UPN in templates/uploads (UCI is separate)
+                UPN: upnValue || ulnValue,
                 Name: (byNorm['name'] || byNorm['student_name'] || byNorm['studentname'] || '').trim ? String(byNorm['name'] || byNorm['student_name'] || byNorm['studentname'] || '').trim() : (byNorm['name'] || byNorm['student_name'] || byNorm['studentname'] || ''),
                 Student_Email: (byNorm['student_email'] || byNorm['studentemail'] || byNorm['student'] || '').trim ? (byNorm['student_email'] || byNorm['studentemail'] || byNorm['student'] || '').trim() : (byNorm['student_email'] || byNorm['studentemail'] || byNorm['student'] || ''),
                 Academic_Year: (byNorm['academic_year'] || byNorm['academicyear'] || '').trim ? String(byNorm['academic_year'] || byNorm['academicyear'] || '').trim() : (byNorm['academic_year'] || byNorm['academicyear'] || ''),
