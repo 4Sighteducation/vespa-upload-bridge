@@ -1872,6 +1872,14 @@
               reader.onload = (event) => {
                 try {
                   const csvText = event.target.result;
+                  // Detect delimiter (Excel often uses ";" depending on locale)
+                  const firstLine = String(csvText || '').split(/\r?\n/)[0] || '';
+                  const countChar = (s, ch) => (s.match(new RegExp(`\\${ch}`, 'g')) || []).length;
+                  const commaCount = countChar(firstLine, ',');
+                  const semiCount = countChar(firstLine, ';');
+                  const tabCount = (firstLine.match(/\t/g) || []).length;
+                  const delimiter = (semiCount > commaCount && semiCount >= tabCount) ? ';' : (tabCount > commaCount ? '\t' : ',');
+
                   const rows = [];
                   let currentRow = [];
                   let inQuotes = false;
@@ -1888,7 +1896,7 @@
                       } else {
                         inQuotes = !inQuotes;
                       }
-                    } else if (char === ',' && !inQuotes) {
+                    } else if (char === delimiter && !inQuotes) {
                       currentRow.push(value);
                       value = "";
                     } else if ((char === '\r' || char === '\n') && !inQuotes) {
@@ -1914,7 +1922,11 @@
                     return;
                   }
                   
-                  const headers = rows[0].map(h => h.trim());
+                  const headers = rows[0].map((h, idx) => {
+                    const cleaned = String(h || '').replace(/^\uFEFF/, '').trim();
+                    // If a header is blank, give it a stable placeholder to avoid losing columns
+                    return cleaned || `__col_${idx + 1}`;
+                  });
                   const data = rows.slice(1).map(row => {
                     const obj = {};
                     headers.forEach((header, index) => {
