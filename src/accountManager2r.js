@@ -357,6 +357,20 @@
               updatedAt: null,
               updatedByEmail: null
             },
+
+            // Create Report (cohort export)
+            showCreateReportModal: false,
+            reportExporting: false,
+            reportExportProgress: 0,
+            reportExportTotal: 0,
+            reportFormat: 'csv', // 'csv' | 'pdf' (pdf later)
+            reportAcademicYear: '', // optional, used for academic profile fetch
+            reportInclude: {
+              vespaResults: true,
+              questionnaireResponses: false,
+              academicProfile: true,
+              userComments: false
+            },
             
             // Manual Add
             showManualAddModal: false,
@@ -2309,6 +2323,249 @@
               this.showMessage('Failed to save Academic Profile defaults: ' + (e.message || String(e)), 'error');
             } finally {
               this.apSchoolSettingsLoading = false;
+            }
+          },
+
+          openCreateReportModal() {
+            if (this.currentTab !== 'students') {
+              this.showMessage('Reports are only available for Students.', 'info');
+              return;
+            }
+            const schoolId = this.getSelectedSchoolUuidForRls();
+            if (!schoolId) {
+              this.showMessage('Select a school first to create a report.', 'warning');
+              return;
+            }
+            if (!this.reportAcademicYear) {
+              this.reportAcademicYear = this.deriveAcademicYear ? this.deriveAcademicYear() : '';
+            }
+            this.showCreateReportModal = true;
+          },
+
+          closeCreateReportModal() {
+            this.showCreateReportModal = false;
+            this.reportExporting = false;
+            this.reportExportProgress = 0;
+            this.reportExportTotal = 0;
+          },
+
+          async fetchAllFilteredStudentsForReport() {
+            // Fetch ALL matching students (not just current page)
+            let schoolUuidForRls = this.getSelectedSchoolUuidForRls();
+            if (!schoolUuidForRls) return [];
+
+            const pageSize = 500;
+            let page = 1;
+            let all = [];
+
+            while (true) {
+              const params = new URLSearchParams({
+                accountType: 'student',
+                page: page,
+                limit: pageSize,
+                search: this.searchQuery || ''
+              });
+
+              if (this.selectedYearGroup) params.append('yearGroup', this.selectedYearGroup);
+              if (this.selectedGroup) params.append('group', this.selectedGroup);
+              if (this.selectedConnectedStaffEmail) {
+                params.append('connectedStaffEmail', this.selectedConnectedStaffEmail);
+                if (this.selectedConnectedStaffType) params.append('connectedConnectionType', this.selectedConnectedStaffType);
+              }
+              if (schoolUuidForRls) params.append('emulatedSchoolId', schoolUuidForRls);
+
+              const data = await fetchWithRetry(
+                `${this.apiUrl}/api/v3/accounts?${params}`,
+                { method: 'GET', headers: { 'Content-Type': 'application/json' } },
+                'Load accounts for report',
+                3
+              );
+
+              if (!data || !data.success) break;
+              const batch = this.deduplicateAccounts(data.accounts || []);
+              all = all.concat(batch);
+
+              // Stop when we got less than a full page
+              if (batch.length < pageSize) break;
+              page += 1;
+              // Safety stop
+              if (page > 50) break;
+            }
+
+            // Client-side filter for staff-search workaround doesn't apply to students.
+            return all;
+          },
+
+          async fetchStudentReportData(email) {
+            const url = `${this.dashboardApiUrl}/api/vespa/report/data?email=${encodeURIComponent(email)}`;
+            const res = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+            if (!res.ok) throw new Error(`Dashboard report data failed (${res.status})`);
+            return await res.json();
+          },
+
+          async fetchStudentAcademicProfile(email) {
+            // Uses Dashboard's Academic Profile endpoint (Supabase-backed, with uiDefaults)
+            let url = `${this.dashboardApiUrl}/api/academic-profile/${encodeURIComponent(email)}`;
+            if (this.reportAcademicYear) {
+              url += `?academic_year=${encodeURIComponent(this.reportAcademicYear)}`;
+            }
+            const res = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+            if (!res.ok) {
+              // Not all students have a profile; treat as null
+              return null;
+            }
+            return await res.json();
+          },
+
+          toCsvCell(value) {
+            if (value === null || value === undefined) return '';
+            const s = String(value);
+            if (s.includes('"') || s.includes(',') || s.includes('\n') || s.includes('\r')) {
+              return `"${s.replace(/"/g, '""')}"`;
+            }
+            return s;
+          },
+
+          downloadCsv(filename, rows) {
+            if (!rows || rows.length === 0) {
+              this.showMessage('No rows to export', 'warning');
+              return;
+            }
+            const headers = Object.keys(rows[0]);
+            const lines = [];
+            lines.push(headers.map(h => this.toCsvCell(h)).join(','));
+            for (const r of rows) {
+              lines.push(headers.map(h => this.toCsvCell(r[h])).join(','));
+            }
+            const csv = '\uFEFF' + lines.join('\n'); // BOM for Excel
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(link.href), 2500);
+          },
+
+          async createReportDownload() {
+            if (this.reportFormat !== 'csv') {
+              this.showMessage('PDF export is coming next — CSV is available now.', 'info');
+              return;
+            }
+
+            this.reportExporting = true;
+            this.loading = true;
+            this.loadingText = 'Preparing report...';
+            this.reportExportProgress = 0;
+            this.reportExportTotal = 0;
+
+            try {
+              const students = await this.fetchAllFilteredStudentsForReport();
+              if (!students || students.length === 0) {
+                this.showMessage('No students match the current filters.', 'warning');
+                return;
+              }
+
+              this.reportExportTotal = students.length;
+              this.loadingText = `Fetching data for ${students.length} students...`;
+
+              // Concurrency-limited fetch to avoid hammering the Dashboard
+              const limit = 6;
+              let idx = 0;
+              const results = new Array(students.length);
+
+              const worker = async () => {
+                while (idx < students.length) {
+                  const i = idx++;
+                  const s = students[i];
+                  const email = s.email;
+                  const out = { email, name: s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim(), yearGroup: s.yearGroup || '', group: s.group || '' };
+
+                  // VESPA / Questionnaire / Comments live in report data
+                  let reportData = null;
+                  if (this.reportInclude.vespaResults || this.reportInclude.questionnaireResponses || this.reportInclude.userComments) {
+                    try {
+                      reportData = await this.fetchStudentReportData(email);
+                    } catch (e) {
+                      reportData = null;
+                      out._reportDataError = e.message;
+                    }
+                  }
+
+                  if (reportData && this.reportInclude.vespaResults) {
+                    // Flatten cycle scores (1-3). scores is an array of cycle entries.
+                    const scores = Array.isArray(reportData.scores) ? reportData.scores : [];
+                    for (const c of [1, 2, 3]) {
+                      const sc = scores.find(x => Number(x.cycle) === c);
+                      out[`c${c}_vision`] = sc ? sc.vision : '';
+                      out[`c${c}_effort`] = sc ? sc.effort : '';
+                      out[`c${c}_systems`] = sc ? sc.systems : '';
+                      out[`c${c}_practice`] = sc ? sc.practice : '';
+                      out[`c${c}_attitude`] = sc ? sc.attitude : '';
+                      out[`c${c}_overall`] = sc ? sc.overall : '';
+                      out[`c${c}_completionDate`] = sc ? sc.completion_date : '';
+                    }
+                  }
+
+                  if (reportData && this.reportInclude.questionnaireResponses) {
+                    // Store as JSON to avoid extremely wide CSVs
+                    out.questionnaireResponsesJson = reportData.responses ? JSON.stringify(reportData.responses) : '';
+                  }
+
+                  if (reportData && this.reportInclude.userComments) {
+                    // From reportData.studentProfile (Knack text fields by cycle)
+                    const sp = reportData.studentProfile || {};
+                    out.userCommentsJson = Object.keys(sp).length ? JSON.stringify(sp) : '';
+                  }
+
+                  if (this.reportInclude.academicProfile) {
+                    try {
+                      const ap = await this.fetchStudentAcademicProfile(email);
+                      const apStudent = ap && ap.student ? ap.student : (ap && ap.data && ap.data.student ? ap.data.student : null);
+                      const apSubjects = ap && ap.subjects ? ap.subjects : (ap && ap.data && ap.data.subjects ? ap.data.subjects : []);
+                      const apUpdatedAt = ap && ap.updatedAt ? ap.updatedAt : (ap && ap.data && ap.data.updatedAt ? ap.data.updatedAt : '');
+
+                      out.academicProfileUpdatedAt = apUpdatedAt || '';
+                      out.priorAttainment = apStudent && apStudent.priorAttainment ? apStudent.priorAttainment : (out.priorAttainment || '');
+
+                      // Flatten up to 15 subjects to useful columns
+                      for (let p = 1; p <= 15; p++) {
+                        const subj = Array.isArray(apSubjects) ? apSubjects.find(x => Number(x.position) === p) : null;
+                        out[`sub${p}_name`] = subj ? subj.subjectName : '';
+                        out[`sub${p}_examType`] = subj ? subj.examType : '';
+                        out[`sub${p}_examBoard`] = subj ? subj.examBoard : '';
+                        out[`sub${p}_MEG`] = subj ? subj.minimumExpectedGrade : '';
+                        out[`sub${p}_STG`] = subj ? subj.subjectTargetGrade : '';
+                        out[`sub${p}_current`] = subj ? subj.currentGrade : '';
+                        out[`sub${p}_target`] = subj ? subj.targetGrade : '';
+                      }
+                    } catch (e) {
+                      out._academicProfileError = e.message;
+                    }
+                  }
+
+                  results[i] = out;
+                  this.reportExportProgress += 1;
+                  this.loadingText = `Fetching data... (${this.reportExportProgress}/${this.reportExportTotal})`;
+                }
+              };
+
+              const workers = Array.from({ length: Math.min(limit, students.length) }, () => worker());
+              await Promise.all(workers);
+
+              const rows = results.filter(Boolean);
+              const schoolName = (this.isSuperUser && this.selectedSchool?.name) ? this.selectedSchool.name : (this.schoolContext?.customerName || 'School');
+              const filename = `VESPA_Report_${schoolName.replace(/\\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.csv`;
+              this.downloadCsv(filename, rows);
+              this.showMessage(`✅ Report downloaded (${rows.length} students)`, 'success');
+              this.closeCreateReportModal();
+            } catch (e) {
+              console.error('Create report failed:', e);
+              this.showMessage('Create report failed: ' + (e.message || String(e)), 'error');
+            } finally {
+              this.reportExporting = false;
+              this.loading = false;
             }
           },
 
@@ -4501,22 +4758,33 @@
             
             <!-- Tabs -->
             <div class="am-tabs">
-              <button 
-                class="am-tab" 
-                :class="{ active: currentTab === 'students' }"
-                @click="switchTab('students')">
-                <span class="am-icon">🎓</span>
-                Students
-                <span v-if="currentTab === 'students'" class="am-tab-count">{{ totalAccounts }}</span>
-              </button>
-              <button 
-                class="am-tab" 
-                :class="{ active: currentTab === 'staff' }"
-                @click="switchTab('staff')">
-                <span class="am-icon">👨‍🏫</span>
-                Staff
-                <span v-if="currentTab === 'staff'" class="am-tab-count">{{ totalAccounts }}</span>
-              </button>
+              <div class="am-tabs-left">
+                <button 
+                  class="am-tab" 
+                  :class="{ active: currentTab === 'students' }"
+                  @click="switchTab('students')">
+                  <span class="am-icon">🎓</span>
+                  Students
+                  <span v-if="currentTab === 'students'" class="am-tab-count">{{ totalAccounts }}</span>
+                </button>
+                <button 
+                  class="am-tab" 
+                  :class="{ active: currentTab === 'staff' }"
+                  @click="switchTab('staff')">
+                  <span class="am-icon">👨‍🏫</span>
+                  Staff
+                  <span v-if="currentTab === 'staff'" class="am-tab-count">{{ totalAccounts }}</span>
+                </button>
+              </div>
+              <div class="am-tabs-right">
+                <button
+                  v-if="currentTab === 'students'"
+                  class="am-tab am-create-report"
+                  @click="openCreateReportModal"
+                  title="Download a report for the currently filtered students">
+                  📄 Create Report
+                </button>
+              </div>
             </div>
             
             <!-- Toolbar -->
@@ -6088,6 +6356,69 @@
               </div>
             </div>
 
+            <!-- Create Report Modal -->
+            <div v-if="showCreateReportModal" class="am-modal-overlay" @click.self="closeCreateReportModal">
+              <div class="am-modal" style="max-width: 760px;">
+                <div class="am-modal-header">
+                  <h3>📄 Create Report (Filtered Students)</h3>
+                  <button @click="closeCreateReportModal" class="am-modal-close">✖</button>
+                </div>
+                <div class="am-modal-body">
+                  <div class="am-modal-description">
+                    Uses your current filters (Year Group / Group / Connected Staff / Search) and downloads a report for the full matching cohort.
+                  </div>
+
+                  <div style="margin-top: 14px; padding: 14px; border: 1px solid #e3e8ef; border-radius: 8px; background: #ffffff;">
+                    <div style="display:grid; grid-template-columns: 180px 1fr; gap: 12px; align-items:center;">
+                      <div style="font-weight:700;">Format</div>
+                      <select v-model="reportFormat" class="am-select-inline" style="padding: 10px;">
+                        <option value="csv">CSV (download)</option>
+                        <option value="pdf">PDF (coming soon)</option>
+                      </select>
+
+                      <div style="font-weight:700;">Academic Year (Profile)</div>
+                      <input v-model="reportAcademicYear" class="am-input-inline" placeholder="e.g. 2025/2026" style="padding: 10px;" />
+                    </div>
+
+                    <div style="margin-top: 14px; border-top: 1px solid #edf1f7; padding-top: 12px;">
+                      <div style="font-weight:700; margin-bottom: 10px;">Include</div>
+                      <div style="display:flex; gap:16px; flex-wrap: wrap;">
+                        <label style="display:flex; align-items:center; gap:10px; font-weight:600; cursor:pointer;">
+                          <input type="checkbox" v-model="reportInclude.vespaResults" />
+                          VESPA Results
+                        </label>
+                        <label style="display:flex; align-items:center; gap:10px; font-weight:600; cursor:pointer;">
+                          <input type="checkbox" v-model="reportInclude.questionnaireResponses" />
+                          Questionnaire responses
+                        </label>
+                        <label style="display:flex; align-items:center; gap:10px; font-weight:600; cursor:pointer;">
+                          <input type="checkbox" v-model="reportInclude.academicProfile" />
+                          Academic Profile
+                        </label>
+                        <label style="display:flex; align-items:center; gap:10px; font-weight:600; cursor:pointer;">
+                          <input type="checkbox" v-model="reportInclude.userComments" />
+                          User Comments
+                        </label>
+                      </div>
+                      <div style="margin-top: 8px; font-size: 12px; color:#666;">
+                        Note: Questionnaire responses and comments are exported as JSON columns (to avoid extremely wide CSVs).
+                      </div>
+                    </div>
+
+                    <div v-if="reportExporting" style="margin-top: 14px; font-size: 13px; color:#333;">
+                      Exporting... {{ reportExportProgress }}/{{ reportExportTotal }}
+                    </div>
+                  </div>
+                </div>
+                <div class="am-modal-footer">
+                  <button @click="closeCreateReportModal" class="am-button secondary">Cancel</button>
+                  <button @click="createReportDownload" class="am-button primary" :disabled="reportExporting">
+                    {{ reportExporting ? 'Preparing...' : 'Download' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <!-- Academic Profile Defaults Modal removed (now lives inside the Academic Profile modal) -->
 
             <!-- Student Academic Profile Quick View Modal -->
@@ -7148,6 +7479,37 @@
           display: flex;
           gap: 12px;
           margin-bottom: 20px;
+          justify-content: space-between;
+          align-items: stretch;
+        }
+
+        .am-tabs-left {
+          display: flex;
+          gap: 12px;
+          align-items: stretch;
+          flex: 1;
+        }
+
+        .am-tabs-right {
+          display: flex;
+          align-items: stretch;
+          justify-content: flex-end;
+          flex: 0 0 auto;
+          min-width: 220px;
+        }
+
+        .am-create-report {
+          flex: 0 0 auto;
+          max-width: none;
+          padding: 16px 18px;
+          background: linear-gradient(135deg, #079baa, #7bd8d0);
+          color: white;
+          border-color: #079baa;
+        }
+
+        .am-create-report:hover {
+          border-color: #067a87;
+          box-shadow: 0 4px 12px rgba(7, 155, 170, 0.25);
         }
         
         .am-tab {
