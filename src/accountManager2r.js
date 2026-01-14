@@ -301,6 +301,18 @@
             apAddSubjectSelectedKey: '',
             apAddSubjectLoading: false,
             apAddSubjectAdding: false,
+            apAddSubjectSearchTimer: null,
+            apAddSubjectFields: {
+              currentGrade: '',
+              targetGrade: '',
+              effortGrade: '',
+              behaviourGrade: '',
+              attendance: ''
+            },
+
+            // Academic Profile: manage existing subjects (delete)
+            apManageSubjectsLoading: false,
+            apManageSubjects: [], // from Dashboard API (has subject id)
             
             // Role management
             showRoleModal: false,
@@ -2205,6 +2217,9 @@
             // Default academic year for subject add (can be edited in modal)
             this.apAddSubjectAcademicYear = this.apAddSubjectAcademicYear || this.apAcademicYear || this.apSnapAcademicYear || this.deriveAcademicYear();
 
+            // Load subject list for delete controls
+            this.refreshApManageSubjects().catch(() => {});
+
             // Mount Academic Profile V2 in the modal
             const mount = async () => {
               // Config for the academic profile bundle
@@ -2275,6 +2290,7 @@
             this.apAddSubjectQuery = '';
             this.apAddSubjectResults = [];
             this.apAddSubjectSelectedKey = '';
+            this.apAddSubjectFields = { currentGrade: '', targetGrade: '', effortGrade: '', behaviourGrade: '', attendance: '' };
             this.showApAddSubjectModal = true;
           },
 
@@ -2285,6 +2301,27 @@
             this.apAddSubjectSelectedKey = '';
             this.apAddSubjectLoading = false;
             this.apAddSubjectAdding = false;
+            this.apAddSubjectSearchTimer = null;
+            this.apAddSubjectFields = { currentGrade: '', targetGrade: '', effortGrade: '', behaviourGrade: '', attendance: '' };
+          },
+
+          formatAlpsKeyDisplay(alpsKey) {
+            const k = String(alpsKey || '').trim();
+            if (!k) return '';
+            if (k.startsWith('A - ')) return k.slice(4); // show friendly subject name
+            if (k.startsWith('AS - ')) return k.slice(5);
+            if (k.startsWith('IB SL - ')) return k.slice(8);
+            if (k.startsWith('IB HL - ')) return k.slice(8);
+            if (k.startsWith('Pre-U - ')) return k.slice(8);
+            if (k.startsWith('Pre-U SC - ')) return k.slice(11);
+            return k;
+          },
+
+          debouncedSearchApAddSubject() {
+            if (this.apAddSubjectSearchTimer) clearTimeout(this.apAddSubjectSearchTimer);
+            this.apAddSubjectSearchTimer = setTimeout(() => {
+              this.searchApAddSubject();
+            }, 250);
           },
 
           async searchApAddSubject() {
@@ -2365,7 +2402,13 @@
                   studentEmail,
                   academicYear,
                   subjectName: alpsKey,
-                  alpsKey
+                  alpsKey,
+                  // Optional snapshot fields (if provided)
+                  currentGrade: (this.apAddSubjectFields.currentGrade || '').trim(),
+                  targetGrade: (this.apAddSubjectFields.targetGrade || '').trim(),
+                  effortGrade: (this.apAddSubjectFields.effortGrade || '').trim(),
+                  behaviourGrade: (this.apAddSubjectFields.behaviourGrade || '').trim(),
+                  subjectAttendance: (this.apAddSubjectFields.attendance || '').trim()
                 })
               });
               const data = await safeJsonParse(resp, 'Academic Profile add subject');
@@ -2382,11 +2425,73 @@
                 if (container) container.innerHTML = '';
                 if (typeof window.initializeAcademicProfileV2 === 'function') window.initializeAcademicProfileV2();
               } catch (_) {}
+
+              // Refresh subject list for delete controls
+              this.refreshApManageSubjects().catch(() => {});
             } catch (e) {
               console.error('Add subject failed:', e);
               this.showMessage('Add subject failed: ' + (e.message || String(e)), 'error');
             } finally {
               this.apAddSubjectAdding = false;
+            }
+          },
+
+          async refreshApManageSubjects() {
+            try {
+              const email = (this.studentAcademicProfileEmail || '').trim().toLowerCase();
+              if (!email) return;
+              const academicYear = (this.apAddSubjectAcademicYear || this.apAcademicYear || this.apSnapAcademicYear || '').trim();
+              this.apManageSubjectsLoading = true;
+              const url = academicYear
+                ? `${this.dashboardApiUrl}/api/academic-profile/${encodeURIComponent(email)}?academic_year=${encodeURIComponent(academicYear)}`
+                : `${this.dashboardApiUrl}/api/academic-profile/${encodeURIComponent(email)}`;
+              const resp = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+              const data = await safeJsonParse(resp, 'Academic Profile (manage subjects) fetch');
+              if (data && data.success && Array.isArray(data.subjects)) {
+                this.apManageSubjects = data.subjects.map(s => ({
+                  id: s.id,
+                  subjectName: s.subjectName || s.subject_name || '',
+                  position: s.position || s.subject_position || null
+                }));
+              } else {
+                this.apManageSubjects = [];
+              }
+            } catch (e) {
+              console.warn('refreshApManageSubjects failed (non-fatal):', e);
+              this.apManageSubjects = [];
+            } finally {
+              this.apManageSubjectsLoading = false;
+            }
+          },
+
+          async deleteApSubject(subject) {
+            try {
+              if (!subject || !subject.id) return;
+              const ok = confirm(`Delete subject "${subject.subjectName || 'Subject'}"?\n\nThis cannot be undone.`);
+              if (!ok) return;
+              const resp = await fetch(`${this.apiUrl}/api/v3/academic-profile/subjects/remove`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-user-email': this.userEmail,
+                  'x-user-id': this.userId
+                },
+                body: JSON.stringify({ subjectId: subject.id })
+              });
+              const data = await safeJsonParse(resp, 'Academic Profile delete subject');
+              if (!data || !data.success) throw new Error(data?.message || 'Delete failed');
+              this.showMessage('✅ Subject deleted', 'success');
+
+              // Refresh both embedded profile + list
+              try {
+                const container = document.querySelector('#student-academic-profile-container');
+                if (container) container.innerHTML = '';
+                if (typeof window.initializeAcademicProfileV2 === 'function') window.initializeAcademicProfileV2();
+              } catch (_) {}
+              this.refreshApManageSubjects().catch(() => {});
+            } catch (e) {
+              console.error('deleteApSubject failed:', e);
+              this.showMessage('Delete subject failed: ' + (e.message || String(e)), 'error');
             }
           },
 
@@ -6928,6 +7033,36 @@
                       Tip: use this when a student picks up a new subject mid-year (MEG/STG recalculates immediately).
                     </small>
                   </div>
+
+                  <!-- Manage subjects (delete) -->
+                  <div v-if="isSuperUser" style="margin-top: 10px; padding: 10px; border: 1px solid #ffe2e2; border-radius: 10px; background: #fff8f8;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                      <div style="font-weight:800; color:#a11;">Manage subjects</div>
+                      <button @click="refreshApManageSubjects" class="am-button secondary" style="padding:6px 10px;">
+                        🔄 Refresh
+                      </button>
+                    </div>
+                    <div v-if="apManageSubjectsLoading" style="margin-top:8px; color:#666; font-size:12px;">Loading subjects...</div>
+                    <div v-else style="margin-top:8px; display:flex; flex-wrap:wrap; gap:8px;">
+                      <div
+                        v-for="s in apManageSubjects"
+                        :key="s.id"
+                        style="display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid #ffd0d0; border-radius:999px; background:#fff;">
+                        <span style="font-weight:700; color:#333;">{{ s.subjectName || '-' }}</span>
+                        <button
+                          @click="deleteApSubject(s)"
+                          title="Delete subject"
+                          style="border:none; background:#c62828; color:#fff; width:22px; height:22px; border-radius:999px; cursor:pointer; font-weight:900; line-height:22px; padding:0;">
+                          ✕
+                        </button>
+                      </div>
+                      <div v-if="!apManageSubjects.length" style="color:#666; font-size:12px;">No subjects found.</div>
+                    </div>
+                    <div style="margin-top:8px; color:#a11; font-size:12px;">
+                      Deleting a subject is permanent. You will be prompted to confirm.
+                    </div>
+                  </div>
+
                   <div id="student-academic-profile-container"></div>
                 </div>
                 <div class="am-modal-footer">
@@ -6954,7 +7089,7 @@
 
                     <div style="font-weight:700;">Search</div>
                     <div style="display:flex; gap:10px;">
-                      <input v-model="apAddSubjectQuery" class="am-input-inline" placeholder="e.g. Arabic, Business, Sport..." />
+                      <input v-model="apAddSubjectQuery" class="am-input-inline" placeholder="e.g. Arabic, Business, Sport..." @input="debouncedSearchApAddSubject" />
                       <button @click="searchApAddSubject" class="am-button secondary" :disabled="apAddSubjectLoading">
                         {{ apAddSubjectLoading ? 'Searching...' : 'Search' }}
                       </button>
@@ -6962,11 +7097,30 @@
 
                     <div style="font-weight:700;">Select</div>
                     <select v-model="apAddSubjectSelectedKey" class="am-select-inline">
-                      <option value="">-- Select a canonical ALPS subject --</option>
+                      <option value="">-- Select subject --</option>
                       <option v-for="row in apAddSubjectResults" :key="row.id" :value="row.alps_key">
-                        {{ row.alps_key }}
+                        {{ formatAlpsKeyDisplay(row.alps_key) }}
                       </option>
                     </select>
+
+                    <div style="grid-column: 1 / -1; margin-top: 6px; font-size: 12px; color:#666;">
+                      This adds the subject and (optionally) sets snapshot fields below. Leave blank to just add the subject.
+                    </div>
+
+                    <div style="font-weight:700;">Current</div>
+                    <input v-model="apAddSubjectFields.currentGrade" class="am-input-inline" placeholder="Optional (e.g. C)" />
+
+                    <div style="font-weight:700;">Target</div>
+                    <input v-model="apAddSubjectFields.targetGrade" class="am-input-inline" placeholder="Optional (e.g. B)" />
+
+                    <div style="font-weight:700;">Effort</div>
+                    <input v-model="apAddSubjectFields.effortGrade" class="am-input-inline" placeholder="Optional (e.g. 5)" />
+
+                    <div style="font-weight:700;">Behaviour</div>
+                    <input v-model="apAddSubjectFields.behaviourGrade" class="am-input-inline" placeholder="Optional (e.g. 7)" />
+
+                    <div style="font-weight:700;">Attendance</div>
+                    <input v-model="apAddSubjectFields.attendance" class="am-input-inline" placeholder="Optional (e.g. 95)" />
                   </div>
                 </div>
                 <div class="am-modal-footer">
