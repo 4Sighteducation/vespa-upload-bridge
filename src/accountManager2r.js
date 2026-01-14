@@ -292,6 +292,15 @@
             academicProfileExists: {}, // email -> boolean
             showStudentAcademicProfileModal: false,
             studentAcademicProfileEmail: null,
+
+            // Academic Profile: quick Add Subject (Account Manager only)
+            showApAddSubjectModal: false,
+            apAddSubjectAcademicYear: '',
+            apAddSubjectQuery: '',
+            apAddSubjectResults: [],
+            apAddSubjectSelectedKey: '',
+            apAddSubjectLoading: false,
+            apAddSubjectAdding: false,
             
             // Role management
             showRoleModal: false,
@@ -2193,6 +2202,8 @@
 
             this.studentAcademicProfileEmail = email;
             this.showStudentAcademicProfileModal = true;
+            // Default academic year for subject add (can be edited in modal)
+            this.apAddSubjectAcademicYear = this.apAddSubjectAcademicYear || this.apAcademicYear || this.apSnapAcademicYear || this.deriveAcademicYear();
 
             // Mount Academic Profile V2 in the modal
             const mount = async () => {
@@ -2248,6 +2259,135 @@
             this.studentAcademicProfileEmail = null;
             const container = document.querySelector('#student-academic-profile-container');
             if (container) container.innerHTML = '';
+          },
+
+          openApAddSubjectModal() {
+            const schoolId = this.getSelectedSchoolUuidForRls();
+            if (!schoolId) {
+              this.showMessage('Select a school first (top-right) to add subjects.', 'warning');
+              return;
+            }
+            if (!this.studentAcademicProfileEmail) {
+              this.showMessage('Open a student Academic Profile first.', 'warning');
+              return;
+            }
+            this.apAddSubjectAcademicYear = (this.apAddSubjectAcademicYear || this.apAcademicYear || this.apSnapAcademicYear || this.deriveAcademicYear()).trim();
+            this.apAddSubjectQuery = '';
+            this.apAddSubjectResults = [];
+            this.apAddSubjectSelectedKey = '';
+            this.showApAddSubjectModal = true;
+          },
+
+          closeApAddSubjectModal() {
+            this.showApAddSubjectModal = false;
+            this.apAddSubjectQuery = '';
+            this.apAddSubjectResults = [];
+            this.apAddSubjectSelectedKey = '';
+            this.apAddSubjectLoading = false;
+            this.apAddSubjectAdding = false;
+          },
+
+          async searchApAddSubject() {
+            try {
+              const q = (this.apAddSubjectQuery || '').trim();
+              if (!q || q.length < 2) {
+                this.apAddSubjectResults = [];
+                return;
+              }
+              this.apAddSubjectLoading = true;
+              const resp = await fetch(
+                `${this.apiUrl}/api/v3/academic-profile/alps-subjects/search?q=${encodeURIComponent(q)}&limit=50`,
+                {
+                  method: 'GET',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-user-email': this.userEmail,
+                    'x-user-id': this.userId
+                  }
+                }
+              );
+              const data = await safeJsonParse(resp, 'ALPS subject search');
+              if (data && data.success) {
+                this.apAddSubjectResults = data.rows || [];
+              } else {
+                throw new Error(data?.message || 'Search failed');
+              }
+            } catch (e) {
+              console.error('ALPS subject search failed:', e);
+              this.showMessage('Subject search failed: ' + (e.message || String(e)), 'error');
+            } finally {
+              this.apAddSubjectLoading = false;
+            }
+          },
+
+          async submitApAddSubject() {
+            try {
+              const schoolId = this.getSelectedSchoolUuidForRls();
+              if (!schoolId) throw new Error('Select a school first.');
+              const studentEmail = (this.studentAcademicProfileEmail || '').trim().toLowerCase();
+              if (!studentEmail) throw new Error('Missing student email.');
+              const academicYear = (this.apAddSubjectAcademicYear || '').trim();
+              if (!academicYear) throw new Error('Academic Year is required.');
+              const alpsKey = (this.apAddSubjectSelectedKey || '').trim();
+              if (!alpsKey) throw new Error('Select a subject first.');
+
+              this.apAddSubjectAdding = true;
+
+              // 1) Ensure it exists in the school's catalogue (optional, but helps future matching/aliases)
+              await fetch(`${this.apiUrl}/api/v3/academic-profile/subject-catalogue/add`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-user-email': this.userEmail,
+                  'x-user-id': this.userId
+                },
+                body: JSON.stringify({
+                  schoolId,
+                  academicYear,
+                  subjectName: alpsKey,
+                  alpsKey,
+                  keyStage: 5,
+                  qualification: 'KS5',
+                  examBoard: 'General',
+                  active: true
+                })
+              }).catch(() => {});
+
+              // 2) Add subject to student profile (calculates MEG/STG immediately)
+              const resp = await fetch(`${this.apiUrl}/api/v3/academic-profile/subjects/add`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-user-email': this.userEmail,
+                  'x-user-id': this.userId
+                },
+                body: JSON.stringify({
+                  studentEmail,
+                  academicYear,
+                  subjectName: alpsKey,
+                  alpsKey
+                })
+              });
+              const data = await safeJsonParse(resp, 'Academic Profile add subject');
+              if (!data || !data.success) {
+                throw new Error(data?.message || 'Failed to add subject');
+              }
+
+              this.showMessage(`✅ Added subject: ${alpsKey}`, 'success');
+              this.closeApAddSubjectModal();
+
+              // Refresh the embedded Academic Profile view
+              try {
+                const container = document.querySelector('#student-academic-profile-container');
+                if (container) container.innerHTML = '';
+                if (typeof window.initializeAcademicProfileV2 === 'function') window.initializeAcademicProfileV2();
+              } catch (_) {}
+            } catch (e) {
+              console.error('Add subject failed:', e);
+              this.showMessage('Add subject failed: ' + (e.message || String(e)), 'error');
+            } finally {
+              this.apAddSubjectAdding = false;
+            }
           },
 
           getSelectedSchoolUuidForRls() {
@@ -6776,10 +6916,64 @@
                   <div class="am-modal-description" style="background:#fff; border:1px solid #e3e8ef; border-radius:8px; padding:12px;">
                     Viewing Academic Profile for <strong>{{ studentAcademicProfileEmail }}</strong>
                   </div>
+                  <div style="margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                    <button
+                      v-if="isSuperUser"
+                      @click="openApAddSubjectModal"
+                      class="am-button secondary"
+                      title="Add a subject to this student's profile (Account Manager only)">
+                      ➕ Add Subject
+                    </button>
+                    <small style="color:#666;">
+                      Tip: use this when a student picks up a new subject mid-year (MEG/STG recalculates immediately).
+                    </small>
+                  </div>
                   <div id="student-academic-profile-container"></div>
                 </div>
                 <div class="am-modal-footer">
                   <button @click="closeStudentAcademicProfileModal" class="am-button secondary">Close</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Academic Profile: Add Subject Modal -->
+            <div v-if="showApAddSubjectModal" class="am-modal-overlay" @click.self="closeApAddSubjectModal">
+              <div class="am-modal" style="max-width: 820px;">
+                <div class="am-modal-header">
+                  <h3>➕ Add Subject (Academic Profile)</h3>
+                  <button @click="closeApAddSubjectModal" class="am-modal-close">✖</button>
+                </div>
+                <div class="am-modal-body">
+                  <div class="am-modal-description" style="background:#fff; border:1px solid #e3e8ef; border-radius:8px; padding:12px;">
+                    Adds a subject to <strong>{{ studentAcademicProfileEmail }}</strong> and calculates MEG/STG immediately.
+                  </div>
+
+                  <div style="margin-top: 12px; display:grid; grid-template-columns: 160px 1fr; gap: 10px; align-items:center;">
+                    <div style="font-weight:700;">Academic Year</div>
+                    <input v-model="apAddSubjectAcademicYear" class="am-input-inline" placeholder="e.g. 2025/2026" />
+
+                    <div style="font-weight:700;">Search</div>
+                    <div style="display:flex; gap:10px;">
+                      <input v-model="apAddSubjectQuery" class="am-input-inline" placeholder="e.g. Arabic, Business, Sport..." />
+                      <button @click="searchApAddSubject" class="am-button secondary" :disabled="apAddSubjectLoading">
+                        {{ apAddSubjectLoading ? 'Searching...' : 'Search' }}
+                      </button>
+                    </div>
+
+                    <div style="font-weight:700;">Select</div>
+                    <select v-model="apAddSubjectSelectedKey" class="am-select-inline">
+                      <option value="">-- Select a canonical ALPS subject --</option>
+                      <option v-for="row in apAddSubjectResults" :key="row.id" :value="row.alps_key">
+                        {{ row.alps_key }}
+                      </option>
+                    </select>
+                  </div>
+                </div>
+                <div class="am-modal-footer">
+                  <button @click="closeApAddSubjectModal" class="am-button secondary">Cancel</button>
+                  <button @click="submitApAddSubject" class="am-button primary" :disabled="apAddSubjectAdding || !apAddSubjectSelectedKey">
+                    {{ apAddSubjectAdding ? 'Adding...' : 'Add Subject' }}
+                  </button>
                 </div>
               </div>
             </div>
