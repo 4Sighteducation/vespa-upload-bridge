@@ -288,10 +288,25 @@
             jobPollingInterval: null,
 
             // Academic Profile quick view (student table)
-            dashboardApiUrl: 'https://vespa-dashboard-9a1f84ee5341.herokuapp.com',
+            dashboardApiUrl: config.dashboardApiUrl || 'https://vespa-dashboard-9a1f84ee5341.herokuapp.com',
             academicProfileExists: {}, // email -> boolean
             showStudentAcademicProfileModal: false,
             studentAcademicProfileEmail: null,
+
+            // UCAS Management (Staff Admin)
+            showUcasManagementModal: false,
+            ucasMgmtTab: 'status', // 'status' | 'template'
+            ucasMgmtAcademicYear: '',
+            ucasMgmtStudentsLoading: false,
+            ucasMgmtStatusesLoading: false,
+            ucasMgmtStudents: [],
+            ucasMgmtStatusByEmail: {}, // email -> { app, appCompletedAt, reference, error }
+            ucasMgmtProgress: { current: 0, total: 0, status: '' },
+            ucasMgmtOnlyYear12Plus: true,
+            ucasMgmtTutorGroup: '',
+            ucasMgmtCentreTemplateLoading: false,
+            ucasMgmtCentreTemplateSaving: false,
+            ucasMgmtCentreTemplateText: '',
 
             // Academic Profile: quick Add Subject (Account Manager only)
             showApAddSubjectModal: false,
@@ -5180,6 +5195,272 @@
           formatDate(dateString) {
             if (!dateString) return 'N/A';
             return new Date(dateString).toLocaleDateString('en-GB');
+          },
+
+          // ========== UCAS MANAGEMENT (Staff Admin) ==========
+          openUcasManagementModal() {
+            if (this.isSuperUser && !this.selectedSchool) {
+              this.showMessage('Select a school first (Super User) to use UCAS Management.', 'info');
+              return;
+            }
+            this.showUcasManagementModal = true;
+            this.ucasMgmtTab = 'status';
+            // Default academic year from existing inputs if present
+            if (!this.ucasMgmtAcademicYear) {
+              this.ucasMgmtAcademicYear = this.reportAcademicYear || this.apAcademicYear || '';
+            }
+            this.ucasMgmtLoadStudents();
+          },
+
+          closeUcasManagementModal() {
+            this.showUcasManagementModal = false;
+            this.ucasMgmtTab = 'status';
+          },
+
+          async ucasMgmtLoadStudents() {
+            this.ucasMgmtStudentsLoading = true;
+            this.ucasMgmtStudents = [];
+            this.ucasMgmtStatusByEmail = {};
+            this.ucasMgmtProgress = { current: 0, total: 0, status: '' };
+
+            try {
+              // Determine which school UUID to use for RLS
+              let schoolUuidForRls = null;
+              if (this.isSuperUser) {
+                if (this.selectedSchool && this.selectedSchool.supabaseUuid) {
+                  schoolUuidForRls = this.selectedSchool.supabaseUuid;
+                }
+              } else {
+                if (this.schoolContext && this.schoolContext.schoolId) {
+                  schoolUuidForRls = this.schoolContext.schoolId;
+                }
+              }
+
+              if (!schoolUuidForRls && !this.isSuperUser) {
+                this.showMessage('Could not determine school context for UCAS Management.', 'error');
+                return;
+              }
+
+              const all = [];
+              const limit = 200;
+              let page = 1;
+              let safety = 0;
+
+              while (safety < 50) {
+                safety += 1;
+                const params = new URLSearchParams({
+                  accountType: 'student',
+                  page: String(page),
+                  limit: String(limit),
+                  search: ''
+                });
+                if (schoolUuidForRls) params.append('emulatedSchoolId', schoolUuidForRls);
+
+                const data = await fetchWithRetry(
+                  `${this.apiUrl}/api/v3/accounts?${params}`,
+                  { method: 'GET', headers: { 'Content-Type': 'application/json' } },
+                  'Load UCAS students',
+                  2
+                );
+
+                if (!data || !data.success) break;
+                const rows = this.deduplicateAccounts(data.accounts || []);
+                if (!rows.length) break;
+                all.push(...rows);
+                if (rows.length < limit) break;
+                page += 1;
+              }
+
+              // Filter + normalize
+              const filtered = all
+                .map(a => ({
+                  email: (a.email || '').trim(),
+                  firstName: a.firstName || '',
+                  lastName: a.lastName || '',
+                  fullName: a.fullName || '',
+                  yearGroup: a.yearGroup || '',
+                  group: a.group || a.tutorGroup || ''
+                }))
+                .filter(a => !!a.email);
+
+              const byYear = filtered.filter(s => {
+                if (!this.ucasMgmtOnlyYear12Plus) return true;
+                const yg = parseInt(String(s.yearGroup || '').replace(/\D/g, ''), 10);
+                return Number.isFinite(yg) ? yg >= 12 : false;
+              });
+
+              // Optional tutor group filter
+              const tg = (this.ucasMgmtTutorGroup || '').trim().toLowerCase();
+              const byGroup = tg
+                ? byYear.filter(s => String(s.group || '').trim().toLowerCase() === tg)
+                : byYear;
+
+              this.ucasMgmtStudents = byGroup;
+              this.showMessage(`Loaded ${this.ucasMgmtStudents.length} students for UCAS Management.`, 'success');
+            } catch (e) {
+              console.error('UCAS Management load students error:', e);
+              this.showMessage(`Failed to load students for UCAS Management: ${e.message}`, 'error');
+            } finally {
+              this.ucasMgmtStudentsLoading = false;
+            }
+          },
+
+          async ucasMgmtRefreshStatuses() {
+            if (!this.ucasMgmtStudents || this.ucasMgmtStudents.length === 0) {
+              this.showMessage('No students loaded yet.', 'info');
+              return;
+            }
+
+            this.ucasMgmtStatusesLoading = true;
+            this.ucasMgmtProgress = { current: 0, total: this.ucasMgmtStudents.length, status: 'Fetching UCAS status…' };
+
+            const roleHeaders = {
+              'Content-Type': 'application/json',
+              'X-User-Role': 'staff',
+              ...(this.userEmail ? { 'X-User-Email': this.userEmail } : {}),
+              ...(this.userId ? { 'X-User-Id': String(this.userId) } : {})
+            };
+
+            const getCompletedAt = (app) => {
+              if (!app) return null;
+              return (
+                app.statementCompletedAt ||
+                app.statement_completed_at ||
+                app.statement_completed ||
+                app.statement_completed_on ||
+                app.statement_completed_time ||
+                null
+              );
+            };
+
+            const getUpdatedAt = (app) => {
+              if (!app) return null;
+              return app.updatedAt || app.updated_at || app.updated || null;
+            };
+
+            const qs = new URLSearchParams();
+            if (this.ucasMgmtAcademicYear) qs.append('academic_year', this.ucasMgmtAcademicYear);
+            const qsStr = qs.toString();
+
+            const concurrency = 6;
+            let idx = 0;
+            const students = this.ucasMgmtStudents.slice();
+
+            const worker = async () => {
+              while (idx < students.length) {
+                const i = idx++;
+                const s = students[i];
+                const email = s.email;
+                this.ucasMgmtProgress.current = i + 1;
+
+                try {
+                  const appUrl = `${this.dashboardApiUrl}/api/academic-profile/${encodeURIComponent(email)}/ucas-application${qsStr ? `?${qsStr}` : ''}`;
+                  const refUrl = `${this.dashboardApiUrl}/api/academic-profile/${encodeURIComponent(email)}/reference/status${qsStr ? `?${qsStr}` : ''}`;
+
+                  const [appRes, refRes] = await Promise.all([
+                    fetch(appUrl, { method: 'GET', headers: roleHeaders }).then(r => safeJsonParse(r, 'Fetch UCAS application')),
+                    fetch(refUrl, { method: 'GET', headers: roleHeaders }).then(r => safeJsonParse(r, 'Fetch reference status'))
+                  ]);
+
+                  const app = appRes && (appRes.data || appRes.application || appRes.record || null);
+                  const reference = refRes && (refRes.data || refRes.reference || refRes.record || null);
+
+                  this.ucasMgmtStatusByEmail[email] = {
+                    app,
+                    appCompletedAt: getCompletedAt(app),
+                    appUpdatedAt: getUpdatedAt(app),
+                    reference,
+                    error: null
+                  };
+                } catch (e) {
+                  this.ucasMgmtStatusByEmail[email] = {
+                    app: null,
+                    appCompletedAt: null,
+                    appUpdatedAt: null,
+                    reference: null,
+                    error: e.message || 'Failed'
+                  };
+                }
+              }
+            };
+
+            try {
+              await Promise.all(Array.from({ length: concurrency }, () => worker()));
+              this.showMessage('UCAS statuses refreshed.', 'success');
+            } catch (e) {
+              console.error('UCAS status refresh error:', e);
+              this.showMessage(`Failed to refresh UCAS statuses: ${e.message}`, 'error');
+            } finally {
+              this.ucasMgmtStatusesLoading = false;
+              this.ucasMgmtProgress.status = '';
+            }
+          },
+
+          ucasMgmtOpenStudentUcas(email) {
+            const clean = String(email || '').trim();
+            if (!clean) return;
+            try {
+              localStorage.setItem('vespa_open_ucas', JSON.stringify({ email: clean, ts: Date.now() }));
+            } catch (_) {}
+            const url = `https://vespaacademy.knack.com/vespa-academy#vespa-coaching-report?email=${encodeURIComponent(clean)}&open=ucas`;
+            window.open(url, '_blank', 'noopener');
+          },
+
+          async ucasMgmtLoadCentreTemplate() {
+            this.ucasMgmtCentreTemplateLoading = true;
+            try {
+              const qs = new URLSearchParams();
+              if (this.ucasMgmtAcademicYear) qs.append('academic_year', this.ucasMgmtAcademicYear);
+              const url = `${this.dashboardApiUrl}/api/ucas-management/centre-template${qs.toString() ? `?${qs.toString()}` : ''}`;
+
+              const res = await fetch(url, {
+                method: 'GET',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-User-Role': 'staff',
+                  ...(this.userEmail ? { 'X-User-Email': this.userEmail } : {}),
+                  ...(this.userId ? { 'X-User-Id': String(this.userId) } : {})
+                }
+              });
+
+              const data = await safeJsonParse(res, 'Load centre template');
+              const text = (data && (data.templateText || data.text || data.template || data.data?.templateText || data.data?.text)) || '';
+              this.ucasMgmtCentreTemplateText = String(text || '');
+            } catch (e) {
+              console.error('Centre template load error:', e);
+              this.showMessage(`Failed to load centre template: ${e.message}`, 'error');
+            } finally {
+              this.ucasMgmtCentreTemplateLoading = false;
+            }
+          },
+
+          async ucasMgmtSaveCentreTemplate() {
+            this.ucasMgmtCentreTemplateSaving = true;
+            try {
+              const url = `${this.dashboardApiUrl}/api/ucas-management/centre-template`;
+              const res = await fetch(url, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-User-Role': 'staff',
+                  ...(this.userEmail ? { 'X-User-Email': this.userEmail } : {}),
+                  ...(this.userId ? { 'X-User-Id': String(this.userId) } : {})
+                },
+                body: JSON.stringify({
+                  academicYear: this.ucasMgmtAcademicYear || null,
+                  templateText: this.ucasMgmtCentreTemplateText || ''
+                })
+              });
+
+              const data = await safeJsonParse(res, 'Save centre template');
+              if (data && data.success === false) throw new Error(data.error || data.message || 'Save failed');
+              this.showMessage('Centre template saved.', 'success');
+            } catch (e) {
+              console.error('Centre template save error:', e);
+              this.showMessage(`Failed to save centre template: ${e.message}`, 'error');
+            } finally {
+              this.ucasMgmtCentreTemplateSaving = false;
+            }
           }
         },
         
@@ -5255,6 +5536,12 @@
                     class="am-button-header"
                     title="Manage school groups">
                     ⚙️ Manage Groups
+                  </button>
+                  <button
+                    @click="openUcasManagementModal"
+                    class="am-button-header"
+                    title="Manage UCAS applications and references (staff admin)">
+                    🎓 UCAS Management
                   </button>
                   <button 
                     @click="openCSVUploadModal" 
@@ -7004,6 +7291,157 @@
                   <button @click="createReportDownload" class="am-button primary" :disabled="reportExporting">
                     {{ reportExporting ? 'Preparing...' : 'Download' }}
                   </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- UCAS Management Modal (Staff Admin) -->
+            <div v-if="showUcasManagementModal" class="am-modal-overlay" @click.self="closeUcasManagementModal">
+              <div class="am-modal am-modal-large" style="max-width: 1100px;">
+                <div class="am-modal-header">
+                  <h3>🎓 UCAS Management</h3>
+                  <button @click="closeUcasManagementModal" class="am-modal-close">✖</button>
+                </div>
+                <div class="am-modal-body">
+                  <div class="am-modal-description" style="background:#fff; border:1px solid #e3e8ef; border-radius:10px; padding:12px;">
+                    Manage UCAS application progress and reference status for your students. This page does not replace the student report; use “Open UCAS” to jump into a student’s application.
+                  </div>
+
+                  <div style="margin-top:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                    <button
+                      class="am-button secondary"
+                      :class="{ active: ucasMgmtTab === 'status' }"
+                      @click="ucasMgmtTab='status'">
+                      📋 Status
+                    </button>
+                    <button
+                      class="am-button secondary"
+                      :class="{ active: ucasMgmtTab === 'template' }"
+                      @click="ucasMgmtTab='template'; ucasMgmtLoadCentreTemplate()">
+                      🏫 Centre template
+                    </button>
+
+                    <div style="margin-left:auto; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                      <label style="display:flex; gap:8px; align-items:center; font-size:13px; color:#333;">
+                        Academic year
+                        <input v-model="ucasMgmtAcademicYear" class="am-input-inline" style="width:160px;" placeholder="e.g. 2025-2026" />
+                      </label>
+                      <label style="display:flex; gap:8px; align-items:center; font-size:13px; color:#333;">
+                        <input type="checkbox" v-model="ucasMgmtOnlyYear12Plus" />
+                        Year 12+
+                      </label>
+                      <label style="display:flex; gap:8px; align-items:center; font-size:13px; color:#333;">
+                        Tutor group
+                        <input v-model="ucasMgmtTutorGroup" class="am-input-inline" style="width:140px;" placeholder="e.g. 12A" />
+                      </label>
+                      <button @click="ucasMgmtLoadStudents" class="am-button secondary" :disabled="ucasMgmtStudentsLoading">
+                        {{ ucasMgmtStudentsLoading ? 'Loading…' : 'Reload students' }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div v-if="ucasMgmtTab === 'status'" style="margin-top: 14px;">
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
+                      <button @click="ucasMgmtRefreshStatuses" class="am-button primary" :disabled="ucasMgmtStatusesLoading || ucasMgmtStudentsLoading || ucasMgmtStudents.length===0">
+                        {{ ucasMgmtStatusesLoading ? 'Refreshing…' : 'Refresh UCAS status' }}
+                      </button>
+                      <div v-if="ucasMgmtStatusesLoading" style="font-size:12px; color:#555;">
+                        {{ ucasMgmtProgress.current }}/{{ ucasMgmtProgress.total }} {{ ucasMgmtProgress.status }}
+                      </div>
+                    </div>
+
+                    <div v-if="ucasMgmtStudentsLoading" class="am-empty-state" style="margin-top:10px;">
+                      Loading students…
+                    </div>
+                    <div v-else-if="ucasMgmtStudents.length === 0" class="am-empty-state" style="margin-top:10px;">
+                      No students found for the current filters.
+                    </div>
+                    <div v-else style="overflow:auto; border:1px solid #e3e8ef; border-radius:12px; background:#fff;">
+                      <table class="am-table" style="min-width: 980px;">
+                        <thead>
+                          <tr>
+                            <th>Student</th>
+                            <th>Email</th>
+                            <th>Year</th>
+                            <th>Tutor group</th>
+                            <th>UCAS application</th>
+                            <th>Personal statement</th>
+                            <th>Teacher reference</th>
+                            <th style="text-align:right;">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="s in ucasMgmtStudents" :key="s.email">
+                            <td style="font-weight:700;">
+                              {{ s.fullName || ((s.firstName || '') + ' ' + (s.lastName || '')).trim() || '—' }}
+                            </td>
+                            <td>{{ s.email }}</td>
+                            <td>{{ s.yearGroup || '—' }}</td>
+                            <td>{{ s.group || '—' }}</td>
+                            <td>
+                              <span v-if="ucasMgmtStatusByEmail[s.email] && ucasMgmtStatusByEmail[s.email].app">
+                                Started
+                              </span>
+                              <span v-else-if="ucasMgmtStatusByEmail[s.email] && ucasMgmtStatusByEmail[s.email].error" style="color:#b71c1c;">
+                                Error
+                              </span>
+                              <span v-else style="color:#666;">Unknown</span>
+                            </td>
+                            <td>
+                              <span v-if="ucasMgmtStatusByEmail[s.email] && ucasMgmtStatusByEmail[s.email].appCompletedAt" style="color:#1b5e20; font-weight:700;">
+                                Completed
+                              </span>
+                              <span v-else-if="ucasMgmtStatusByEmail[s.email] && ucasMgmtStatusByEmail[s.email].app" style="color:#ef6c00; font-weight:700;">
+                                In progress
+                              </span>
+                              <span v-else style="color:#666;">—</span>
+                            </td>
+                            <td>
+                              <span v-if="ucasMgmtStatusByEmail[s.email] && ucasMgmtStatusByEmail[s.email].reference && ucasMgmtStatusByEmail[s.email].reference.status">
+                                {{ ucasMgmtStatusByEmail[s.email].reference.status }}
+                              </span>
+                              <span v-else style="color:#666;">—</span>
+                            </td>
+                            <td style="text-align:right;">
+                              <button class="am-button secondary" style="padding:6px 10px;" @click="ucasMgmtOpenStudentUcas(s.email)">
+                                Open UCAS
+                              </button>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div style="margin-top:10px; font-size:12px; color:#666;">
+                      Notes: Status values depend on the Dashboard API endpoints. If you see “Unknown”, click “Refresh UCAS status”.
+                    </div>
+                  </div>
+
+                  <div v-else style="margin-top: 14px;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+                      <div style="font-weight:800; color:#333;">Centre template (Section 1)</div>
+                      <div style="display:flex; gap:10px; align-items:center;">
+                        <button class="am-button secondary" @click="ucasMgmtLoadCentreTemplate" :disabled="ucasMgmtCentreTemplateLoading">
+                          {{ ucasMgmtCentreTemplateLoading ? 'Loading…' : 'Refresh' }}
+                        </button>
+                        <button class="am-button primary" @click="ucasMgmtSaveCentreTemplate" :disabled="ucasMgmtCentreTemplateSaving">
+                          {{ ucasMgmtCentreTemplateSaving ? 'Saving…' : 'Save template' }}
+                        </button>
+                      </div>
+                    </div>
+                    <div style="margin-top:8px; font-size:12px; color:#666;">
+                      This is the reusable statement about your centre (used across applicants). Only staff admins should edit this.
+                    </div>
+                    <textarea
+                      v-model="ucasMgmtCentreTemplateText"
+                      style="margin-top:10px; width:100%; min-height:260px; resize:vertical; border:1px solid #e3e8ef; border-radius:12px; padding:12px; font-family:inherit; font-size:14px; line-height:1.5;"
+                      placeholder="Write the centre template here…"></textarea>
+                    <div style="margin-top:8px; font-size:12px; color:#666;">
+                      If you see an error on save, the Dashboard backend still needs the `GET/PUT /api/ucas-management/centre-template` endpoints.
+                    </div>
+                  </div>
+                </div>
+                <div class="am-modal-footer">
+                  <button @click="closeUcasManagementModal" class="am-button secondary">Close</button>
                 </div>
               </div>
             </div>
