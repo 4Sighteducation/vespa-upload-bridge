@@ -5409,15 +5409,23 @@
           async ucasMgmtLoadCentreTemplate() {
             this.ucasMgmtCentreTemplateLoading = true;
             try {
+              const establishmentId = this.isSuperUser
+                ? (this.selectedSchool && this.selectedSchool.supabaseUuid ? this.selectedSchool.supabaseUuid : null)
+                : (this.schoolContext && this.schoolContext.schoolId ? this.schoolContext.schoolId : null);
+              if (!establishmentId) {
+                throw new Error('No establishmentId available (select a school first).');
+              }
+
               const qs = new URLSearchParams();
               if (this.ucasMgmtAcademicYear) qs.append('academic_year', this.ucasMgmtAcademicYear);
+              qs.append('establishment_id', establishmentId);
               const url = `${this.dashboardApiUrl}/api/ucas-management/centre-template${qs.toString() ? `?${qs.toString()}` : ''}`;
 
               const res = await fetch(url, {
                 method: 'GET',
                 headers: {
                   'Content-Type': 'application/json',
-                  'X-User-Role': 'staff',
+                  'X-User-Role': 'staff_admin',
                   ...(this.userEmail ? { 'X-User-Email': this.userEmail } : {}),
                   ...(this.userId ? { 'X-User-Id': String(this.userId) } : {})
                 }
@@ -5437,16 +5445,24 @@
           async ucasMgmtSaveCentreTemplate() {
             this.ucasMgmtCentreTemplateSaving = true;
             try {
+              const establishmentId = this.isSuperUser
+                ? (this.selectedSchool && this.selectedSchool.supabaseUuid ? this.selectedSchool.supabaseUuid : null)
+                : (this.schoolContext && this.schoolContext.schoolId ? this.schoolContext.schoolId : null);
+              if (!establishmentId) {
+                throw new Error('No establishmentId available (select a school first).');
+              }
+
               const url = `${this.dashboardApiUrl}/api/ucas-management/centre-template`;
               const res = await fetch(url, {
                 method: 'PUT',
                 headers: {
                   'Content-Type': 'application/json',
-                  'X-User-Role': 'staff',
+                  'X-User-Role': 'staff_admin',
                   ...(this.userEmail ? { 'X-User-Email': this.userEmail } : {}),
                   ...(this.userId ? { 'X-User-Id': String(this.userId) } : {})
                 },
                 body: JSON.stringify({
+                  establishmentId,
                   academicYear: this.ucasMgmtAcademicYear || null,
                   templateText: this.ucasMgmtCentreTemplateText || ''
                 })
