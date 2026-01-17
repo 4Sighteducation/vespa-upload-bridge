@@ -7452,7 +7452,7 @@
                       style="margin-top:10px; width:100%; min-height:260px; resize:vertical; border:1px solid #e3e8ef; border-radius:12px; padding:12px; font-family:inherit; font-size:14px; line-height:1.5;"
                       placeholder="Write the centre template here…"></textarea>
                     <div style="margin-top:8px; font-size:12px; color:#666;">
-                      If you see an error on save, the Dashboard backend still needs the `GET/PUT /api/ucas-management/centre-template` endpoints.
+                      If you see an error on save, the Dashboard backend still needs the GET/PUT /api/ucas-management/centre-template endpoints.
                     </div>
                   </div>
                 </div>
