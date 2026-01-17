@@ -304,6 +304,8 @@
             ucasMgmtProgress: { current: 0, total: 0, status: '' },
             ucasMgmtOnlyYear12Plus: true,
             ucasMgmtTutorGroup: '',
+            ucasMgmtSearch: '',
+            ucasMgmtCompletionFilter: 'all', // all | completed | in_progress | not_started
             ucasMgmtCentreTemplateLoading: false,
             ucasMgmtCentreTemplateSaving: false,
             ucasMgmtCentreTemplateText: '',
@@ -5397,13 +5399,97 @@
           },
 
           ucasMgmtOpenStudentUcas(email) {
+            // Open inside the existing Academic Profile modal (no redirect / new tab)
             const clean = String(email || '').trim();
             if (!clean) return;
             try {
               localStorage.setItem('vespa_open_ucas', JSON.stringify({ email: clean, ts: Date.now() }));
             } catch (_) {}
-            const url = `https://vespaacademy.knack.com/vespa-academy#vespa-coaching-report?email=${encodeURIComponent(clean)}&open=ucas`;
-            window.open(url, '_blank', 'noopener');
+            // Reuse the existing Academic Profile modal mount
+            this.openStudentAcademicProfileModal({ email: clean });
+          },
+
+          ucasMgmtStudentMatchesFilters(s) {
+            if (!s) return false;
+
+            // Search
+            const q = (this.ucasMgmtSearch || '').trim().toLowerCase();
+            if (q) {
+              const hay = `${s.fullName || ''} ${s.firstName || ''} ${s.lastName || ''} ${s.email || ''} ${s.group || ''}`.toLowerCase();
+              if (!hay.includes(q)) return false;
+            }
+
+            // Tutor group (already applied server-side, but keep client-side for responsiveness)
+            const tg = (this.ucasMgmtTutorGroup || '').trim().toLowerCase();
+            if (tg) {
+              if (String(s.group || '').trim().toLowerCase() !== tg) return false;
+            }
+
+            // Completion filter (requires status refresh; otherwise treat as unknown)
+            const f = (this.ucasMgmtCompletionFilter || 'all').toLowerCase();
+            if (f !== 'all') {
+              const st = this.ucasMgmtStatusByEmail && this.ucasMgmtStatusByEmail[s.email] ? this.ucasMgmtStatusByEmail[s.email] : null;
+              const completed = !!(st && st.appCompletedAt);
+              const started = !!(st && st.app);
+
+              if (f === 'completed' && !completed) return false;
+              if (f === 'in_progress' && (completed || !started)) return false;
+              if (f === 'not_started' && started) return false;
+            }
+
+            return true;
+          },
+
+          ucasMgmtFilteredStudentsList() {
+            const rows = Array.isArray(this.ucasMgmtStudents) ? this.ucasMgmtStudents : [];
+            return rows.filter(s => this.ucasMgmtStudentMatchesFilters(s));
+          },
+
+          async ucasMgmtDownloadCsvReport() {
+            try {
+              const establishmentId = this.isSuperUser
+                ? (this.selectedSchool && this.selectedSchool.supabaseUuid ? this.selectedSchool.supabaseUuid : null)
+                : (this.schoolContext && this.schoolContext.schoolId ? this.schoolContext.schoolId : null);
+              if (!establishmentId) throw new Error('No establishmentId available (select a school first).');
+
+              const qs = new URLSearchParams();
+              qs.append('establishment_id', establishmentId);
+              if (this.ucasMgmtAcademicYear) qs.append('academic_year', this.ucasMgmtAcademicYear);
+              if (this.ucasMgmtOnlyYear12Plus) qs.append('year12plus', '1');
+              if ((this.ucasMgmtTutorGroup || '').trim()) qs.append('tutor_group', (this.ucasMgmtTutorGroup || '').trim());
+              if ((this.ucasMgmtCompletionFilter || '').trim()) qs.append('status', (this.ucasMgmtCompletionFilter || 'all').trim());
+              if ((this.ucasMgmtSearch || '').trim()) qs.append('q', (this.ucasMgmtSearch || '').trim());
+
+              const url = `${this.dashboardApiUrl}/api/ucas-management/report.csv?${qs.toString()}`;
+              const res = await fetch(url, {
+                method: 'GET',
+                headers: {
+                  'X-User-Role': 'staff_admin',
+                  ...(this.userEmail ? { 'X-User-Email': this.userEmail } : {}),
+                  ...(this.userId ? { 'X-User-Id': String(this.userId) } : {})
+                }
+              });
+
+              if (!res.ok) {
+                const t = await res.text().catch(() => '');
+                throw new Error(`Download failed (${res.status}): ${t.slice(0, 200)}`);
+              }
+
+              const blob = await res.blob();
+              const fname = `ucas-report-${(this.ucasMgmtAcademicYear || 'current').replace(/[^0-9A-Za-z_-]/g, '') || 'current'}.csv`;
+              const a = document.createElement('a');
+              a.href = URL.createObjectURL(blob);
+              a.download = fname;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+
+              this.showMessage('Report downloaded.', 'success');
+            } catch (e) {
+              console.error('UCAS report download error:', e);
+              this.showMessage(`Failed to download report: ${e.message}`, 'error');
+            }
           },
 
           async ucasMgmtLoadCentreTemplate() {
@@ -7350,6 +7436,19 @@
                         Tutor group
                         <input v-model="ucasMgmtTutorGroup" class="am-input-inline" style="width:140px;" placeholder="e.g. 12A" />
                       </label>
+                      <label style="display:flex; gap:8px; align-items:center; font-size:13px; color:#333;">
+                        Status
+                        <select v-model="ucasMgmtCompletionFilter" class="am-select-inline" style="width:160px;">
+                          <option value="all">All</option>
+                          <option value="completed">Personal statement completed</option>
+                          <option value="in_progress">In progress</option>
+                          <option value="not_started">Not started</option>
+                        </select>
+                      </label>
+                      <label style="display:flex; gap:8px; align-items:center; font-size:13px; color:#333;">
+                        Search
+                        <input v-model="ucasMgmtSearch" class="am-input-inline" style="width:180px;" placeholder="name/email/group…" />
+                      </label>
                       <button @click="ucasMgmtLoadStudents" class="am-button secondary" :disabled="ucasMgmtStudentsLoading">
                         {{ ucasMgmtStudentsLoading ? 'Loading…' : 'Reload students' }}
                       </button>
@@ -7360,6 +7459,9 @@
                     <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
                       <button @click="ucasMgmtRefreshStatuses" class="am-button primary" :disabled="ucasMgmtStatusesLoading || ucasMgmtStudentsLoading || ucasMgmtStudents.length===0">
                         {{ ucasMgmtStatusesLoading ? 'Refreshing…' : 'Refresh UCAS status' }}
+                      </button>
+                      <button @click="ucasMgmtDownloadCsvReport" class="am-button secondary" :disabled="ucasMgmtStudentsLoading">
+                        ⬇️ Generate CSV report
                       </button>
                       <div v-if="ucasMgmtStatusesLoading" style="font-size:12px; color:#555;">
                         {{ ucasMgmtProgress.current }}/{{ ucasMgmtProgress.total }} {{ ucasMgmtProgress.status }}
@@ -7387,7 +7489,7 @@
                           </tr>
                         </thead>
                         <tbody>
-                          <tr v-for="s in ucasMgmtStudents" :key="s.email">
+                          <tr v-for="s in ucasMgmtFilteredStudentsList()" :key="s.email">
                             <td style="font-weight:700;">
                               {{ s.fullName || ((s.firstName || '') + ' ' + (s.lastName || '')).trim() || '—' }}
                             </td>
@@ -7420,7 +7522,7 @@
                             </td>
                             <td style="text-align:right;">
                               <button class="am-button secondary" style="padding:6px 10px;" @click="ucasMgmtOpenStudentUcas(s.email)">
-                                Open UCAS
+                                Open UCAS (modal)
                               </button>
                             </td>
                           </tr>
