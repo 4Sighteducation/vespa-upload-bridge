@@ -304,13 +304,20 @@
             ucasMgmtStatusByEmail: {}, // email -> { app, appCompletedAt, reference, error }
             ucasMgmtStatusesAcademicYear: '', // which academic year the current status map relates to
             ucasMgmtProgress: { current: 0, total: 0, status: '' },
-            ucasMgmtOnlyYear12Plus: true,
+            // UCAS is only relevant for Year 12/13; this is always enforced (no toggle).
+            ucasMgmtYearGroup: '', // '' | '12' | '13'
             ucasMgmtTutorGroup: '',
             ucasMgmtSearch: '',
             ucasMgmtCompletionFilter: 'all', // all | completed | in_progress | not_started
             ucasMgmtCentreTemplateLoading: false,
             ucasMgmtCentreTemplateSaving: false,
             ucasMgmtCentreTemplateText: '',
+            // Student UCAS report modal (per-student)
+            showUcasStudentReportModal: false,
+            ucasStudentReportLoading: false,
+            ucasStudentReportError: '',
+            ucasStudentReportEmail: '',
+            ucasStudentReport: null,
 
             // Academic Profile: quick Add Subject (Account Manager only)
             showApAddSubjectModal: false,
@@ -562,6 +569,27 @@
               } catch (_) {}
             }
             return { total: rows.length, completed, inProgress, notStarted, unknown, referencesDone };
+          },
+
+          ucasMgmtAcademicYearOptions() {
+            // Provide a sensible dropdown; backend treats academic_year as an opaque string.
+            const out = [];
+            try {
+              const now = new Date();
+              const y = now.getFullYear();
+              // UK academic year: if before Aug, still in previous academic year
+              const start = (now.getMonth() + 1) >= 8 ? y : (y - 1);
+              for (let i = 0; i < 5; i += 1) {
+                const a = start - i;
+                out.push(`${a}-${a + 1}`);
+              }
+            } catch (_) {
+              out.push('2025-2026', '2024-2025', '2023-2024');
+            }
+            // Ensure current selection is present
+            const cur = String(this.ucasMgmtAcademicYear || '').trim();
+            if (cur && !out.includes(cur)) out.unshift(cur);
+            return out;
           },
           
           yearGroups() {
@@ -5270,12 +5298,162 @@
             if (!this.ucasMgmtAcademicYear) {
               this.ucasMgmtAcademicYear = this.reportAcademicYear || this.apAcademicYear || '';
             }
+            if (!this.ucasMgmtAcademicYear) {
+              // fall back to dropdown default
+              try {
+                const opts = this.ucasMgmtAcademicYearOptions || [];
+                if (Array.isArray(opts) && opts.length) this.ucasMgmtAcademicYear = opts[0];
+              } catch (_) {}
+            }
             this.ucasMgmtLoadStudents();
           },
 
           closeUcasManagementModal() {
             this.showUcasManagementModal = false;
             this.ucasMgmtTab = 'status';
+          },
+
+          closeUcasStudentReportModal() {
+            this.showUcasStudentReportModal = false;
+            this.ucasStudentReportLoading = false;
+            this.ucasStudentReportError = '';
+            this.ucasStudentReportEmail = '';
+            this.ucasStudentReport = null;
+          },
+
+          _ucasReportPickFirstChoice(offers) {
+            const arr = Array.isArray(offers) ? offers : [];
+            if (!arr.length) return null;
+            // Prefer explicit ranking=1
+            const ranked = arr.slice().sort((a, b) => {
+              const ra = Number(a && (a.ranking ?? a.rank));
+              const rb = Number(b && (b.ranking ?? b.rank));
+              const na = Number.isFinite(ra) ? ra : 999;
+              const nb = Number.isFinite(rb) ? rb : 999;
+              return na - nb;
+            });
+            return ranked[0] || null;
+          },
+
+          _ucasReportCombinedStatement(answers) {
+            const a = (answers && typeof answers === 'object') ? answers : {};
+            const q1 = String(a.q1 ?? a.question1 ?? a.answer1 ?? '').trim();
+            const q2 = String(a.q2 ?? a.question2 ?? a.answer2 ?? '').trim();
+            const q3 = String(a.q3 ?? a.question3 ?? a.answer3 ?? '').trim();
+            const combined = [q1, q2, q3].filter(Boolean).join('\n\n');
+            return { q1, q2, q3, combined };
+          },
+
+          _ucasReportGroupSection3(contribs, subjects) {
+            const rows = Array.isArray(contribs) ? contribs : [];
+            const subj = Array.isArray(subjects) ? subjects : [];
+            const subjectNames = subj.map(s => String(s && s.subjectName ? s.subjectName : '').trim()).filter(Boolean);
+
+            const normalize = (s) => String(s || '').trim().toLowerCase();
+            const bestSubjectLabel = (subjectKey) => {
+              const key = String(subjectKey || '').trim();
+              if (!key) return 'Subject reference';
+              const hit = subjectNames.find(n => normalize(n) === normalize(key));
+              return hit || key;
+            };
+
+            const bySubject = new Map();
+            for (const c of rows) {
+              const k = bestSubjectLabel(c && c.subjectKey ? c.subjectKey : '');
+              if (!bySubject.has(k)) bySubject.set(k, []);
+              bySubject.get(k).push(c);
+            }
+            return Array.from(bySubject.entries()).map(([subject, items]) => ({
+              subject,
+              items: items.slice().sort((a, b) => String(a?.authorName || a?.authorEmail || '').localeCompare(String(b?.authorName || b?.authorEmail || '')))
+            }));
+          },
+
+          async ucasMgmtOpenStudentReport(email) {
+            const clean = String(email || '').trim().toLowerCase();
+            if (!clean) return;
+
+            try {
+              // If we already have status info, enforce "statement started" immediately.
+              const cached = this.ucasMgmtStatusByEmail && this.ucasMgmtStatusByEmail[clean] ? this.ucasMgmtStatusByEmail[clean] : null;
+              const cachedChars = cached ? Number(cached.statementChars || 0) : 0;
+              if (cached && cachedChars <= 0) {
+                this.showMessage('This student has not started their personal statement yet.', 'info');
+                return;
+              }
+
+              this.showUcasStudentReportModal = true;
+              this.ucasStudentReportLoading = true;
+              this.ucasStudentReportError = '';
+              this.ucasStudentReportEmail = clean;
+              this.ucasStudentReport = null;
+
+              const qs = new URLSearchParams();
+              if (this.ucasMgmtAcademicYear) qs.append('academic_year', this.ucasMgmtAcademicYear);
+              const qsStr = qs.toString();
+
+              const roleHeaders = {
+                'Content-Type': 'application/json',
+                'X-User-Role': 'staff',
+                ...(this.userEmail ? { 'X-User-Email': this.userEmail } : {}),
+                ...(this.userId ? { 'X-User-Id': String(this.userId) } : {})
+              };
+
+              const profileUrl = `${this.dashboardApiUrl}/api/academic-profile/${encodeURIComponent(clean)}${qsStr ? `?${qsStr}` : ''}`;
+              const appUrl = `${this.dashboardApiUrl}/api/academic-profile/${encodeURIComponent(clean)}/ucas-application${qsStr ? `?${qsStr}` : ''}`;
+              const refUrl = `${this.dashboardApiUrl}/api/academic-profile/${encodeURIComponent(clean)}/reference/full${qsStr ? `?${qsStr}` : ''}`;
+
+              const [profileRes, appRes, refRes] = await Promise.all([
+                fetch(profileUrl, { method: 'GET', headers: roleHeaders }).then(r => safeJsonParse(r, 'Fetch academic profile')),
+                fetch(appUrl, { method: 'GET', headers: roleHeaders }).then(r => safeJsonParse(r, 'Fetch UCAS application')),
+                fetch(refUrl, { method: 'GET', headers: roleHeaders }).then(r => safeJsonParse(r, 'Fetch reference full'))
+              ]);
+
+              if (!profileRes || !profileRes.success) throw new Error(profileRes?.error || 'Failed to load academic profile');
+              const profile = profileRes;
+              const student = profile.student || {};
+              const subjects = Array.isArray(profile.subjects) ? profile.subjects : [];
+              const offers = Array.isArray(student.universityOffers) ? student.universityOffers : [];
+              const firstChoice = this._ucasReportPickFirstChoice(offers);
+
+              const app = appRes && (appRes.data?.application || appRes.data?.app || appRes.data || appRes.application || appRes.record || null);
+              const statement = this._ucasReportCombinedStatement(app && typeof app === 'object' ? (app.answers || app.answers_json || {}) : {});
+              const startedChars = statement.combined.length;
+              if (startedChars <= 0) {
+                this.closeUcasStudentReportModal();
+                this.showMessage('This student has not started their personal statement yet.', 'info');
+                return;
+              }
+
+              const reference = refRes && (refRes.data || refRes.reference || refRes.record || null);
+              const section1Text = reference && (reference.section1Text || reference.section1_text) ? (reference.section1Text || reference.section1_text) : '';
+              const section2 = reference && Array.isArray(reference.section2) ? reference.section2 : [];
+              const section3 = reference && Array.isArray(reference.section3) ? reference.section3 : [];
+
+              this.ucasStudentReport = {
+                student: {
+                  name: student.name || clean,
+                  email: clean,
+                  yearGroup: student.yearGroup || '',
+                  tutorGroup: student.tutorGroup || '',
+                  school: student.school || ''
+                },
+                academicYear: this.ucasMgmtAcademicYear || '',
+                subjects,
+                firstChoice,
+                statement,
+                reference: {
+                  section1Text: String(section1Text || '').trim(),
+                  section2,
+                  section3Grouped: this._ucasReportGroupSection3(section3, subjects)
+                }
+              };
+            } catch (e) {
+              console.error('UCAS report error:', e);
+              this.ucasStudentReportError = e.message || String(e);
+            } finally {
+              this.ucasStudentReportLoading = false;
+            }
           },
 
           async ucasMgmtLoadStudents() {
@@ -5346,11 +5524,17 @@
 
               this.ucasMgmtAllStudents = normalized;
 
+              // UCAS is only relevant for Y12/Y13
               const byYear = normalized.filter(s => {
-                if (!this.ucasMgmtOnlyYear12Plus) return true;
                 const yg = parseInt(String(s.yearGroup || '').replace(/\D/g, ''), 10);
                 return Number.isFinite(yg) ? yg >= 12 : false;
               });
+
+              // Optional filter: Year group dropdown (12/13)
+              const ygFilter = String(this.ucasMgmtYearGroup || '').trim();
+              const byYearAndFilter = ygFilter
+                ? byYear.filter(s => String(s.yearGroup || '').replace(/\D/g, '') === ygFilter)
+                : byYear;
 
               // If academic year changed, clear cached statuses (they're year-specific)
               const yearKey = String(this.ucasMgmtAcademicYear || '').trim();
@@ -5360,7 +5544,7 @@
                 this.ucasMgmtCompletionFilter = 'all';
               }
 
-              this.ucasMgmtStudents = byYear;
+              this.ucasMgmtStudents = byYearAndFilter;
               this.showMessage(`Loaded ${this.ucasMgmtStudents.length} students for UCAS Management.`, 'success');
             } catch (e) {
               console.error('UCAS Management load students error:', e);
@@ -5714,7 +5898,6 @@
               const qs = new URLSearchParams();
               qs.append('establishment_id', establishmentId);
               if (this.ucasMgmtAcademicYear) qs.append('academic_year', this.ucasMgmtAcademicYear);
-              if (this.ucasMgmtOnlyYear12Plus) qs.append('year12plus', '1');
               if ((this.ucasMgmtTutorGroup || '').trim()) qs.append('tutor_group', (this.ucasMgmtTutorGroup || '').trim());
               if ((this.ucasMgmtCompletionFilter || '').trim()) qs.append('status', (this.ucasMgmtCompletionFilter || 'all').trim());
               if ((this.ucasMgmtSearch || '').trim()) qs.append('q', (this.ucasMgmtSearch || '').trim());
@@ -7687,14 +7870,18 @@
                     <div class="ucas-ui-filter-row">
                       <div class="ucas-ui-filter-group">
                         <div class="ucas-ui-filter-label">Academic year</div>
-                        <input v-model="ucasMgmtAcademicYear" class="ucas-ui-filter-input" style="width:170px;" placeholder="e.g. 2025-2026" />
+                        <select v-model="ucasMgmtAcademicYear" class="ucas-ui-filter-select" style="width:170px;">
+                          <option v-for="y in ucasMgmtAcademicYearOptions" :key="y" :value="y">{{ y }}</option>
+                        </select>
                       </div>
 
                       <div class="ucas-ui-filter-group">
-                        <label class="ucas-ui-filter-checkbox">
-                          <input type="checkbox" v-model="ucasMgmtOnlyYear12Plus" />
-                          <span>Year 12+ only</span>
-                        </label>
+                        <div class="ucas-ui-filter-label">Year group</div>
+                        <select v-model="ucasMgmtYearGroup" class="ucas-ui-filter-select" style="width:150px;">
+                          <option value="">Year 12–13</option>
+                          <option value="12">Year 12</option>
+                          <option value="13">Year 13</option>
+                        </select>
                       </div>
 
                       <div class="ucas-ui-filter-group">
@@ -7819,6 +8006,15 @@
                                 Open UCAS
                               </button>
                               <button
+                                class="ucas-ui-btn ucas-ui-btn-secondary ucas-ui-btn-table"
+                                style="margin-left:8px;"
+                                :disabled="!(ucasMgmtStatusByEmail[s.email] && (ucasMgmtStatusByEmail[s.email].statementChars > 0))"
+                                :title="(ucasMgmtStatusByEmail[s.email] && (ucasMgmtStatusByEmail[s.email].statementChars > 0)) ? 'View report' : 'Available once the student has started their statement'"
+                                @click="ucasMgmtOpenStudentReport(s.email)"
+                              >
+                                View report
+                              </button>
+                              <button
                                 v-if="ucasMgmtStatusByEmail[s.email] && ucasMgmtStatusByEmail[s.email].statementStatus === 'completed'"
                                 class="ucas-ui-btn ucas-ui-btn-secondary ucas-ui-btn-table"
                                 style="margin-left:8px;"
@@ -7864,6 +8060,115 @@
                 </div>
                 <div class="am-modal-footer">
                   <button @click="closeUcasManagementModal" class="am-button secondary">Close</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- UCAS Student Report Modal (Staff Admin) -->
+            <div v-if="showUcasStudentReportModal" class="am-modal-overlay" @click.self="closeUcasStudentReportModal">
+              <div class="am-modal am-modal-large ucas-report-modal" style="max-width: 980px;">
+                <div class="am-modal-header">
+                  <h3>📝 UCAS Report</h3>
+                  <button @click="closeUcasStudentReportModal" class="am-modal-close">✖</button>
+                </div>
+                <div class="am-modal-body">
+                  <div v-if="ucasStudentReportLoading" class="am-empty-state">Loading report…</div>
+                  <div v-else-if="ucasStudentReportError" class="am-empty-state" style="color:#b91c1c;">
+                    {{ ucasStudentReportError }}
+                  </div>
+                  <div v-else-if="!ucasStudentReport" class="am-empty-state">No report data.</div>
+                  <div v-else class="ucas-report">
+                    <div class="ucas-report-header">
+                      <div>
+                        <div class="ucas-report-title">{{ ucasStudentReport.student.name }}</div>
+                        <div class="ucas-report-sub">
+                          {{ ucasStudentReport.student.email }}
+                          <span v-if="ucasStudentReport.academicYear"> — {{ ucasStudentReport.academicYear }}</span>
+                        </div>
+                        <div class="ucas-report-sub" v-if="ucasStudentReport.student.school">
+                          {{ ucasStudentReport.student.school }}
+                        </div>
+                      </div>
+                      <div class="ucas-report-meta">
+                        <div v-if="ucasStudentReport.student.yearGroup"><b>Year:</b> {{ ucasStudentReport.student.yearGroup }}</div>
+                        <div v-if="ucasStudentReport.student.tutorGroup"><b>Tutor group:</b> {{ ucasStudentReport.student.tutorGroup }}</div>
+                      </div>
+                    </div>
+
+                    <div class="ucas-report-card">
+                      <div class="ucas-report-card-title">Subjects (Current → Target)</div>
+                      <table class="ucas-report-table">
+                        <thead>
+                          <tr>
+                            <th>Subject</th>
+                            <th style="width:120px;">Current</th>
+                            <th style="width:120px;">Target</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="subj in (ucasStudentReport.subjects || [])" :key="subj.id || subj.subjectName">
+                            <td>{{ subj.subjectName || '—' }}</td>
+                            <td>{{ subj.currentGrade || '—' }}</td>
+                            <td>{{ subj.targetGrade || '—' }}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div class="ucas-report-card">
+                      <div class="ucas-report-card-title">UCAS #1 choice</div>
+                      <div v-if="ucasStudentReport.firstChoice" class="ucas-report-grid">
+                        <div><b>University:</b> {{ ucasStudentReport.firstChoice.universityName || ucasStudentReport.firstChoice.university_name || '—' }}</div>
+                        <div><b>Course:</b> {{ ucasStudentReport.firstChoice.courseTitle || ucasStudentReport.firstChoice.course_title || '—' }}</div>
+                        <div><b>Offer:</b> {{ ucasStudentReport.firstChoice.offer || ucasStudentReport.firstChoice.offerText || '—' }}</div>
+                        <div><b>UCAS points offer:</b> {{ (ucasStudentReport.firstChoice.ucasPoints ?? ucasStudentReport.firstChoice.ucas_points) || '—' }}</div>
+                      </div>
+                      <div v-else class="ucas-report-muted">No university offers recorded.</div>
+                    </div>
+
+                    <div class="ucas-report-card">
+                      <div class="ucas-report-card-title">Personal statement</div>
+                      <div class="ucas-report-box">{{ ucasStudentReport.statement.combined || '' }}</div>
+                    </div>
+
+                    <div class="ucas-report-card">
+                      <div class="ucas-report-card-title">Staff contributions</div>
+
+                      <div class="ucas-report-section">
+                        <div class="ucas-report-section-title">Section 1 — Centre template</div>
+                        <div class="ucas-report-box">{{ (ucasStudentReport.reference.section1Text || '').trim() || '—' }}</div>
+                      </div>
+
+                      <div class="ucas-report-section" v-if="ucasStudentReport.reference.section2 && ucasStudentReport.reference.section2.length">
+                        <div class="ucas-report-section-title">Section 2 — Extenuating circumstances</div>
+                        <div v-for="c in ucasStudentReport.reference.section2" :key="c.id" class="ucas-report-paragraph">
+                          <div class="ucas-report-paragraph-title">
+                            {{ c.authorName || c.authorEmail || 'Staff' }}
+                          </div>
+                          <div class="ucas-report-box">{{ c.text || '' }}</div>
+                        </div>
+                      </div>
+
+                      <div class="ucas-report-section">
+                        <div class="ucas-report-section-title">Subject teacher references</div>
+                        <div v-if="ucasStudentReport.reference.section3Grouped && ucasStudentReport.reference.section3Grouped.length">
+                          <div v-for="g in ucasStudentReport.reference.section3Grouped" :key="g.subject" class="ucas-report-subject">
+                            <div class="ucas-report-subject-title">{{ g.subject }}</div>
+                            <div v-for="c in (g.items || [])" :key="c.id" class="ucas-report-paragraph">
+                              <div class="ucas-report-paragraph-title">
+                                {{ c.authorName || c.authorEmail || 'Teacher' }}
+                              </div>
+                              <div class="ucas-report-box">{{ c.text || '' }}</div>
+                            </div>
+                          </div>
+                        </div>
+                        <div v-else class="ucas-report-muted">No subject teacher references submitted yet.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="am-modal-footer">
+                  <button @click="closeUcasStudentReportModal" class="am-button secondary">Close</button>
                 </div>
               </div>
             </div>
@@ -9248,6 +9553,127 @@
         .ucas-ui-reference-detail{
           font-size:11px;
           color: var(--text-secondary);
+        }
+
+        /* UCAS Student Report modal */
+        .ucas-report-modal .am-modal-header{
+          background: linear-gradient(135deg, #3E3285 0%, #4a3d9e 100%);
+          color:#fff;
+        }
+        .ucas-report-modal .am-modal-header h3{ color:#fff; }
+        .ucas-report{
+          display:flex;
+          flex-direction:column;
+          gap:14px;
+        }
+        .ucas-report-header{
+          display:flex;
+          justify-content:space-between;
+          gap:16px;
+          flex-wrap:wrap;
+          background:#fff;
+          border:1px solid #e2e8f0;
+          border-radius:12px;
+          padding:14px 16px;
+        }
+        .ucas-report-title{
+          font-size:18px;
+          font-weight:800;
+          color:#0f172a;
+        }
+        .ucas-report-sub{
+          font-size:12px;
+          color:#64748b;
+          margin-top:2px;
+        }
+        .ucas-report-meta{
+          font-size:12px;
+          color:#334155;
+          display:flex;
+          flex-direction:column;
+          gap:6px;
+          min-width: 220px;
+        }
+        .ucas-report-card{
+          background:#fff;
+          border:1px solid #e2e8f0;
+          border-radius:12px;
+          padding:14px 16px;
+        }
+        .ucas-report-card-title{
+          font-size:13px;
+          font-weight:800;
+          color:#0f172a;
+          margin-bottom:10px;
+        }
+        .ucas-report-table{
+          width:100%;
+          border-collapse:collapse;
+          font-size:13px;
+        }
+        .ucas-report-table th,
+        .ucas-report-table td{
+          padding:10px 12px;
+          border-bottom:1px solid #f1f5f9;
+          text-align:left;
+        }
+        .ucas-report-table th{
+          background:#f8fafc;
+          font-size:11px;
+          text-transform:uppercase;
+          letter-spacing:.5px;
+          color:#64748b;
+          font-weight:800;
+        }
+        .ucas-report-grid{
+          display:grid;
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          gap:10px 14px;
+          font-size:13px;
+          color:#0f172a;
+        }
+        .ucas-report-box{
+          border:1px solid #e2e8f0;
+          border-radius:10px;
+          background:#f8fafc;
+          padding:12px;
+          font-size:13px;
+          line-height:1.5;
+          white-space:pre-wrap;
+          color:#0f172a;
+        }
+        .ucas-report-muted{
+          font-size:13px;
+          color:#64748b;
+        }
+        .ucas-report-section{
+          margin-top:12px;
+        }
+        .ucas-report-section-title{
+          font-size:12px;
+          font-weight:800;
+          color:#334155;
+          text-transform:uppercase;
+          letter-spacing:.5px;
+          margin-bottom:8px;
+        }
+        .ucas-report-paragraph{
+          margin-top:10px;
+        }
+        .ucas-report-paragraph-title{
+          font-size:12px;
+          font-weight:800;
+          color:#1f2937;
+          margin-bottom:6px;
+        }
+        .ucas-report-subject{
+          margin-top:12px;
+        }
+        .ucas-report-subject-title{
+          font-size:13px;
+          font-weight:900;
+          color:#0f172a;
+          margin-bottom:6px;
         }
         .ucas-mgmt-intro{
           background:#fff;
