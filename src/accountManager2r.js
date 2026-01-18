@@ -299,8 +299,10 @@
             ucasMgmtAcademicYear: '',
             ucasMgmtStudentsLoading: false,
             ucasMgmtStatusesLoading: false,
-            ucasMgmtStudents: [],
+            ucasMgmtStudents: [], // base list (e.g., Year 12+ filter applied)
+            ucasMgmtAllStudents: [], // raw loaded (post-normalisation, pre Year12+/filters)
             ucasMgmtStatusByEmail: {}, // email -> { app, appCompletedAt, reference, error }
+            ucasMgmtStatusesAcademicYear: '', // which academic year the current status map relates to
             ucasMgmtProgress: { current: 0, total: 0, status: '' },
             ucasMgmtOnlyYear12Plus: true,
             ucasMgmtTutorGroup: '',
@@ -503,6 +505,48 @@
           
           hasSelectedAccounts() {
             return this.selectedAccounts.length > 0;
+          },
+
+          // UCAS Management helpers
+          ucasMgmtHasAnyStatus() {
+            try {
+              return Object.keys(this.ucasMgmtStatusByEmail || {}).length > 0;
+            } catch (_) {
+              return false;
+            }
+          },
+
+          ucasMgmtTutorGroupOptions() {
+            const rows = Array.isArray(this.ucasMgmtStudents) ? this.ucasMgmtStudents : [];
+            const set = new Set();
+            for (const s of rows) {
+              const g = String((s && (s.group || s.tutorGroup)) || '').trim();
+              if (g) set.add(g);
+            }
+            return Array.from(set).sort((a, b) => a.localeCompare(b));
+          },
+
+          ucasMgmtCounts() {
+            const rows = Array.isArray(this.ucasMgmtStudents) ? this.ucasMgmtStudents : [];
+            const statusMap = this.ucasMgmtStatusByEmail || {};
+            let completed = 0;
+            let inProgress = 0;
+            let notStarted = 0;
+            let unknown = 0;
+            for (const s of rows) {
+              const key = String((s && s.email) || '').trim().toLowerCase();
+              const st = key ? statusMap[key] : null;
+              if (!st) {
+                unknown += 1;
+                continue;
+              }
+              const hasApp = !!st.app;
+              const isCompleted = !!st.appCompletedAt;
+              if (isCompleted) completed += 1;
+              else if (hasApp) inProgress += 1;
+              else notStarted += 1;
+            }
+            return { total: rows.length, completed, inProgress, notStarted, unknown };
           },
           
           yearGroups() {
@@ -5222,7 +5266,7 @@
           async ucasMgmtLoadStudents() {
             this.ucasMgmtStudentsLoading = true;
             this.ucasMgmtStudents = [];
-            this.ucasMgmtStatusByEmail = {};
+            this.ucasMgmtAllStudents = [];
             this.ucasMgmtProgress = { current: 0, total: 0, status: '' };
 
             try {
@@ -5266,7 +5310,7 @@
                 );
 
                 if (!data || !data.success) break;
-                const rows = this.deduplicateAccounts(data.accounts || []);
+                const rows = this.deduplicateAccounts((data.accounts || data.data?.accounts || data.rows || []) || []);
                 if (!rows.length) break;
                 all.push(...rows);
                 if (rows.length < limit) break;
@@ -5274,30 +5318,34 @@
               }
 
               // Filter + normalize
-              const filtered = all
+              const normalized = all
                 .map(a => ({
-                  email: (a.email || '').trim(),
+                  email: (a.email || '').trim().toLowerCase(),
                   firstName: a.firstName || '',
                   lastName: a.lastName || '',
                   fullName: a.fullName || '',
                   yearGroup: a.yearGroup || '',
-                  group: a.group || a.tutorGroup || ''
+                  group: String(a.tutorGroup || a.group || '').trim()
                 }))
                 .filter(a => !!a.email);
 
-              const byYear = filtered.filter(s => {
+              this.ucasMgmtAllStudents = normalized;
+
+              const byYear = normalized.filter(s => {
                 if (!this.ucasMgmtOnlyYear12Plus) return true;
                 const yg = parseInt(String(s.yearGroup || '').replace(/\D/g, ''), 10);
                 return Number.isFinite(yg) ? yg >= 12 : false;
               });
 
-              // Optional tutor group filter
-              const tg = (this.ucasMgmtTutorGroup || '').trim().toLowerCase();
-              const byGroup = tg
-                ? byYear.filter(s => String(s.group || '').trim().toLowerCase() === tg)
-                : byYear;
+              // If academic year changed, clear cached statuses (they're year-specific)
+              const yearKey = String(this.ucasMgmtAcademicYear || '').trim();
+              if (this.ucasMgmtStatusesAcademicYear !== yearKey) {
+                this.ucasMgmtStatusByEmail = {};
+                this.ucasMgmtStatusesAcademicYear = yearKey;
+                this.ucasMgmtCompletionFilter = 'all';
+              }
 
-              this.ucasMgmtStudents = byGroup;
+              this.ucasMgmtStudents = byYear;
               this.showMessage(`Loaded ${this.ucasMgmtStudents.length} students for UCAS Management.`, 'success');
             } catch (e) {
               console.error('UCAS Management load students error:', e);
@@ -5314,6 +5362,7 @@
             }
 
             this.ucasMgmtStatusesLoading = true;
+            this.ucasMgmtStatusesAcademicYear = String(this.ucasMgmtAcademicYear || '').trim();
             this.ucasMgmtProgress = { current: 0, total: this.ucasMgmtStudents.length, status: 'Fetching UCAS status…' };
 
             const roleHeaders = {
@@ -5331,6 +5380,10 @@
                 app.statement_completed ||
                 app.statement_completed_on ||
                 app.statement_completed_time ||
+                app.completedAt ||
+                app.completed_at ||
+                app.finalisedAt ||
+                app.finalised_at ||
                 null
               );
             };
@@ -5352,7 +5405,7 @@
               while (idx < students.length) {
                 const i = idx++;
                 const s = students[i];
-                const email = s.email;
+                const email = String(s.email || '').trim().toLowerCase();
                 this.ucasMgmtProgress.current = i + 1;
 
                 try {
@@ -5364,7 +5417,7 @@
                     fetch(refUrl, { method: 'GET', headers: roleHeaders }).then(r => safeJsonParse(r, 'Fetch reference status'))
                   ]);
 
-                  const app = appRes && (appRes.data || appRes.application || appRes.record || null);
+                  const app = appRes && (appRes.data?.application || appRes.data?.app || appRes.data || appRes.application || appRes.record || null);
                   const reference = refRes && (refRes.data || refRes.reference || refRes.record || null);
 
                   this.ucasMgmtStatusByEmail[email] = {
@@ -5428,7 +5481,12 @@
             // Completion filter (requires status refresh; otherwise treat as unknown)
             const f = (this.ucasMgmtCompletionFilter || 'all').toLowerCase();
             if (f !== 'all') {
-              const st = this.ucasMgmtStatusByEmail && this.ucasMgmtStatusByEmail[s.email] ? this.ucasMgmtStatusByEmail[s.email] : null;
+              // If we haven't fetched any statuses yet, don't pretend the filter is "working"
+              // (otherwise everything looks "broken" / empty).
+              if (!this.ucasMgmtHasAnyStatus) return true;
+
+              const key = String((s && s.email) || '').trim().toLowerCase();
+              const st = (this.ucasMgmtStatusByEmail && key) ? (this.ucasMgmtStatusByEmail[key] || null) : null;
               const completed = !!(st && st.appCompletedAt);
               const started = !!(st && st.app);
 
@@ -7399,17 +7457,17 @@
 
             <!-- UCAS Management Modal (Staff Admin) -->
             <div v-if="showUcasManagementModal" class="am-modal-overlay" @click.self="closeUcasManagementModal">
-              <div class="am-modal am-modal-large" style="max-width: 1100px;">
+              <div class="am-modal am-modal-large ucas-mgmt-modal" style="max-width: 1200px;">
                 <div class="am-modal-header">
                   <h3>🎓 UCAS Management</h3>
                   <button @click="closeUcasManagementModal" class="am-modal-close">✖</button>
                 </div>
                 <div class="am-modal-body">
-                  <div class="am-modal-description" style="background:#fff; border:1px solid #e3e8ef; border-radius:10px; padding:12px;">
-                    Manage UCAS application progress and reference status for your students. This page does not replace the student report; use “Open UCAS” to jump into a student’s application.
+                  <div class="am-modal-description ucas-mgmt-intro">
+                    Manage UCAS application progress and reference status for your students. Use “Open UCAS” to jump into a student’s application.
                   </div>
 
-                  <div style="margin-top:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                  <div class="ucas-mgmt-tabs">
                     <button
                       class="am-button secondary"
                       :class="{ active: ucasMgmtTab === 'status' }"
@@ -7422,48 +7480,70 @@
                       @click="ucasMgmtTab='template'; ucasMgmtLoadCentreTemplate()">
                       🏫 Centre template
                     </button>
+                  </div>
 
-                    <div style="margin-left:auto; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                      <label style="display:flex; gap:8px; align-items:center; font-size:13px; color:#333;">
-                        Academic year
-                        <input v-model="ucasMgmtAcademicYear" class="am-input-inline" style="width:160px;" placeholder="e.g. 2025-2026" />
-                      </label>
-                      <label style="display:flex; gap:8px; align-items:center; font-size:13px; color:#333;">
-                        <input type="checkbox" v-model="ucasMgmtOnlyYear12Plus" />
-                        Year 12+
-                      </label>
-                      <label style="display:flex; gap:8px; align-items:center; font-size:13px; color:#333;">
-                        Tutor group
-                        <input v-model="ucasMgmtTutorGroup" class="am-input-inline" style="width:140px;" placeholder="e.g. 12A" />
-                      </label>
-                      <label style="display:flex; gap:8px; align-items:center; font-size:13px; color:#333;">
-                        Status
-                        <select v-model="ucasMgmtCompletionFilter" class="am-select-inline" style="width:160px;">
+                  <div class="ucas-mgmt-filterbar">
+                    <div class="ucas-mgmt-filterrow">
+                      <div class="ucas-mgmt-filtergroup">
+                        <div class="ucas-mgmt-label">Academic year</div>
+                        <input v-model="ucasMgmtAcademicYear" class="am-input-inline ucas-mgmt-input" style="width:170px;" placeholder="e.g. 2025-2026" />
+                      </div>
+
+                      <div class="ucas-mgmt-filtergroup">
+                        <label class="ucas-mgmt-checkbox">
+                          <input type="checkbox" v-model="ucasMgmtOnlyYear12Plus" />
+                          <span>Year 12+</span>
+                        </label>
+                      </div>
+
+                      <div class="ucas-mgmt-filtergroup">
+                        <div class="ucas-mgmt-label">Tutor group</div>
+                        <select v-model="ucasMgmtTutorGroup" class="am-select-inline ucas-mgmt-input" style="width:190px;">
+                          <option value="">All tutor groups</option>
+                          <option v-for="g in ucasMgmtTutorGroupOptions" :key="g" :value="g">{{ g }}</option>
+                        </select>
+                      </div>
+
+                      <div class="ucas-mgmt-filtergroup">
+                        <div class="ucas-mgmt-label">Status</div>
+                        <select v-model="ucasMgmtCompletionFilter" class="am-select-inline ucas-mgmt-input" style="width:220px;" :disabled="!ucasMgmtHasAnyStatus">
                           <option value="all">All</option>
                           <option value="completed">Personal statement completed</option>
                           <option value="in_progress">In progress</option>
                           <option value="not_started">Not started</option>
                         </select>
-                      </label>
-                      <label style="display:flex; gap:8px; align-items:center; font-size:13px; color:#333;">
-                        Search
-                        <input v-model="ucasMgmtSearch" class="am-input-inline" style="width:180px;" placeholder="name/email/group…" />
-                      </label>
-                      <button @click="ucasMgmtLoadStudents" class="am-button secondary" :disabled="ucasMgmtStudentsLoading">
-                        {{ ucasMgmtStudentsLoading ? 'Loading…' : 'Reload students' }}
-                      </button>
+                        <div v-if="!ucasMgmtHasAnyStatus" class="ucas-mgmt-hint">Click “Refresh UCAS status” to enable status filtering.</div>
+                      </div>
+
+                      <div class="ucas-mgmt-filtergroup ucas-mgmt-grow">
+                        <div class="ucas-mgmt-label">Search student</div>
+                        <input v-model="ucasMgmtSearch" class="am-input-inline ucas-mgmt-input" placeholder="Search by name or email…" />
+                      </div>
+
+                      <div class="ucas-mgmt-filtergroup ucas-mgmt-actions">
+                        <button @click="ucasMgmtLoadStudents" class="am-button secondary" :disabled="ucasMgmtStudentsLoading">
+                          {{ ucasMgmtStudentsLoading ? 'Loading…' : 'Reload students' }}
+                        </button>
+                      </div>
                     </div>
                   </div>
 
                   <div v-if="ucasMgmtTab === 'status'" style="margin-top: 14px;">
-                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
+                    <div class="ucas-mgmt-toolbar">
                       <button @click="ucasMgmtRefreshStatuses" class="am-button primary" :disabled="ucasMgmtStatusesLoading || ucasMgmtStudentsLoading || ucasMgmtStudents.length===0">
                         {{ ucasMgmtStatusesLoading ? 'Refreshing…' : 'Refresh UCAS status' }}
                       </button>
                       <button @click="ucasMgmtDownloadCsvReport" class="am-button secondary" :disabled="ucasMgmtStudentsLoading">
                         ⬇️ Generate CSV report
                       </button>
-                      <div v-if="ucasMgmtStatusesLoading" style="font-size:12px; color:#555;">
+                      <div class="ucas-mgmt-counts" v-if="ucasMgmtStudents && ucasMgmtStudents.length">
+                        <span class="ucas-mgmt-pill">Total: {{ ucasMgmtCounts.total }}</span>
+                        <span class="ucas-mgmt-pill ucas-mgmt-pill--good">Completed: {{ ucasMgmtCounts.completed }}</span>
+                        <span class="ucas-mgmt-pill ucas-mgmt-pill--warn">In progress: {{ ucasMgmtCounts.inProgress }}</span>
+                        <span class="ucas-mgmt-pill ucas-mgmt-pill--muted">Not started: {{ ucasMgmtCounts.notStarted }}</span>
+                        <span class="ucas-mgmt-pill ucas-mgmt-pill--muted" v-if="ucasMgmtCounts.unknown">Unknown: {{ ucasMgmtCounts.unknown }}</span>
+                      </div>
+                      <div v-if="ucasMgmtStatusesLoading" class="ucas-mgmt-progress">
                         {{ ucasMgmtProgress.current }}/{{ ucasMgmtProgress.total }} {{ ucasMgmtProgress.status }}
                       </div>
                     </div>
@@ -7503,7 +7583,7 @@
                               <span v-else-if="ucasMgmtStatusByEmail[s.email] && ucasMgmtStatusByEmail[s.email].error" style="color:#b71c1c;">
                                 Error
                               </span>
-                              <span v-else style="color:#666;">Unknown</span>
+                              <span v-else style="color:#666;">{{ ucasMgmtHasAnyStatus ? 'Not started' : 'Unknown' }}</span>
                             </td>
                             <td>
                               <span v-if="ucasMgmtStatusByEmail[s.email] && ucasMgmtStatusByEmail[s.email].appCompletedAt" style="color:#1b5e20; font-weight:700;">
@@ -8616,6 +8696,108 @@
           align-items: center;
           gap: 12px;
           font-weight: 700;
+        }
+
+        /* ========== UCAS Management (Staff Admin) ========== */
+        .ucas-mgmt-modal .am-modal-header{
+          background: linear-gradient(135deg, #3E3285 0%, #4a3d9e 100%);
+          color: #fff;
+        }
+        .ucas-mgmt-modal .am-modal-header h3{ color:#fff; }
+        .ucas-mgmt-intro{
+          background:#fff;
+          border:1px solid #e3e8ef;
+          border-radius:12px;
+          padding:12px;
+        }
+        .ucas-mgmt-tabs{
+          margin-top:12px;
+          display:flex;
+          gap:10px;
+          align-items:center;
+          flex-wrap:wrap;
+        }
+        .ucas-mgmt-filterbar{
+          margin-top:12px;
+          background:#fff;
+          border:1px solid #e3e8ef;
+          border-radius:12px;
+          padding:14px;
+        }
+        .ucas-mgmt-filterrow{
+          display:flex;
+          gap:14px;
+          align-items:flex-end;
+          flex-wrap:wrap;
+        }
+        .ucas-mgmt-filtergroup{
+          display:flex;
+          flex-direction:column;
+          gap:6px;
+        }
+        .ucas-mgmt-grow{
+          flex:1;
+          min-width:240px;
+        }
+        .ucas-mgmt-label{
+          font-size:11px;
+          font-weight:700;
+          color:#64748b;
+          text-transform:uppercase;
+          letter-spacing:.5px;
+        }
+        .ucas-mgmt-input{
+          padding:10px 12px;
+        }
+        .ucas-mgmt-checkbox{
+          display:flex;
+          align-items:center;
+          gap:10px;
+          padding:10px 12px;
+          background:#f1f5f9;
+          border:1px solid #e2e8f0;
+          border-radius:10px;
+          font-weight:700;
+          color:#334155;
+          cursor:pointer;
+          user-select:none;
+        }
+        .ucas-mgmt-checkbox input{ width:16px; height:16px; }
+        .ucas-mgmt-actions{ margin-left:auto; }
+        .ucas-mgmt-hint{
+          font-size:11px;
+          color:#64748b;
+        }
+        .ucas-mgmt-toolbar{
+          display:flex;
+          gap:10px;
+          align-items:center;
+          flex-wrap:wrap;
+          margin-bottom:10px;
+        }
+        .ucas-mgmt-counts{
+          display:flex;
+          gap:8px;
+          flex-wrap:wrap;
+          align-items:center;
+          margin-left:auto;
+        }
+        .ucas-mgmt-pill{
+          font-size:12px;
+          font-weight:800;
+          padding:6px 10px;
+          border-radius:999px;
+          background:#f1f5f9;
+          border:1px solid #e2e8f0;
+          color:#334155;
+          white-space:nowrap;
+        }
+        .ucas-mgmt-pill--good{ background:#ecfdf5; border-color:#a7f3d0; color:#047857; }
+        .ucas-mgmt-pill--warn{ background:#fffbeb; border-color:#fde68a; color:#b45309; }
+        .ucas-mgmt-pill--muted{ background:#f8fafc; border-color:#e2e8f0; color:#64748b; }
+        .ucas-mgmt-progress{
+          font-size:12px;
+          color:#475569;
         }
         
         .am-icon {
