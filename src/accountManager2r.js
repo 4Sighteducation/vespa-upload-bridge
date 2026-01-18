@@ -5363,7 +5363,28 @@
 
             this.ucasMgmtStatusesLoading = true;
             this.ucasMgmtStatusesAcademicYear = String(this.ucasMgmtAcademicYear || '').trim();
-            this.ucasMgmtProgress = { current: 0, total: this.ucasMgmtStudents.length, status: 'Fetching UCAS status…' };
+
+            // IMPORTANT: Refresh only the currently filtered list (tutor group / search),
+            // otherwise it feels like nothing is connected and can take a long time on large schools.
+            const filteredList = this.ucasMgmtFilteredStudentsList && typeof this.ucasMgmtFilteredStudentsList === 'function'
+              ? this.ucasMgmtFilteredStudentsList()
+              : [];
+            const baseList = (Array.isArray(filteredList) && filteredList.length)
+              ? filteredList
+              : (Array.isArray(this.ucasMgmtStudents) ? this.ucasMgmtStudents : []);
+
+            // Deduplicate by email just in case
+            const seen = new Set();
+            const studentsToFetch = [];
+            for (const s of baseList) {
+              const email = String(s?.email || '').trim().toLowerCase();
+              if (!email) continue;
+              if (seen.has(email)) continue;
+              seen.add(email);
+              studentsToFetch.push({ ...s, email });
+            }
+
+            this.ucasMgmtProgress = { current: 0, total: studentsToFetch.length, status: 'Fetching UCAS status…' };
 
             const roleHeaders = {
               'Content-Type': 'application/json',
@@ -5399,7 +5420,7 @@
 
             const concurrency = 6;
             let idx = 0;
-            const students = this.ucasMgmtStudents.slice();
+            const students = studentsToFetch.slice();
 
             const worker = async () => {
               while (idx < students.length) {
