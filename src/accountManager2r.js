@@ -533,6 +533,7 @@
             let inProgress = 0;
             let notStarted = 0;
             let unknown = 0;
+            let referencesDone = 0;
             for (const s of rows) {
               const key = String((s && s.email) || '').trim().toLowerCase();
               const st = key ? statusMap[key] : null;
@@ -549,8 +550,18 @@
               else if (status === 'in_progress') inProgress += 1;
               else if (status) notStarted += 1;
               else unknown += 1;
+
+              // Reference "done" is based on backend finalisation
+              try {
+                const r = st.reference || null;
+                const rStatus = String((r && r.status) || '').toLowerCase();
+                const finalisedAt = r && (r.finalisedAt || r.finalised_at);
+                if (finalisedAt || rStatus === 'finalised' || rStatus === 'complete' || rStatus === 'completed') {
+                  referencesDone += 1;
+                }
+              } catch (_) {}
             }
-            return { total: rows.length, completed, inProgress, notStarted, unknown };
+            return { total: rows.length, completed, inProgress, notStarted, unknown, referencesDone };
           },
           
           yearGroups() {
@@ -5544,6 +5555,55 @@
             this.openStudentAcademicProfileModal({ email: clean });
           },
 
+          ucasMgmtApplicationBadge(email) {
+            const key = String(email || '').trim().toLowerCase();
+            const st = (this.ucasMgmtStatusByEmail && key) ? (this.ucasMgmtStatusByEmail[key] || null) : null;
+            if (!st) return { cls: 'ucas-status-badge muted', label: this.ucasMgmtHasAnyStatus ? 'Not started' : 'Unknown', detail: '' };
+            if (st.error) return { cls: 'ucas-status-badge danger', label: 'Error', detail: '' };
+            return st.applicationStarted
+              ? { cls: 'ucas-status-badge info', label: 'Started', detail: '' }
+              : { cls: 'ucas-status-badge muted', label: 'Not started', detail: '' };
+          },
+
+          ucasMgmtStatementBadge(email) {
+            const key = String(email || '').trim().toLowerCase();
+            const st = (this.ucasMgmtStatusByEmail && key) ? (this.ucasMgmtStatusByEmail[key] || null) : null;
+            if (!st) return { cls: 'ucas-status-badge muted', label: '—', detail: '' };
+            const ss = String(st.statementStatus || '').toLowerCase();
+            if (ss === 'completed') return { cls: 'ucas-status-badge success', label: 'Completed', detail: '' };
+            if (ss === 'in_progress') return { cls: 'ucas-status-badge warning', label: 'In progress', detail: '' };
+            if (ss === 'not_started') return { cls: 'ucas-status-badge muted', label: 'Not started', detail: '' };
+            return { cls: 'ucas-status-badge muted', label: '—', detail: '' };
+          },
+
+          ucasMgmtReferenceSummary(email) {
+            const key = String(email || '').trim().toLowerCase();
+            const st = (this.ucasMgmtStatusByEmail && key) ? (this.ucasMgmtStatusByEmail[key] || null) : null;
+            const r = st && st.reference ? st.reference : null;
+
+            const templateDone = !!(this.ucasMgmtCentreTemplateText && String(this.ucasMgmtCentreTemplateText).trim());
+            const invites = (r && Array.isArray(r.invites)) ? r.invites : [];
+            const hasSec2 = invites.some(i => (String(i.status || '').toLowerCase() === 'submitted') && Array.isArray(i.allowedSections) && i.allowedSections.includes(2));
+            const hasSec3 = invites.some(i => (String(i.status || '').toLowerCase() === 'submitted') && Array.isArray(i.allowedSections) && i.allowedSections.includes(3));
+            const doneCount = (templateDone ? 1 : 0) + (hasSec2 ? 1 : 0) + (hasSec3 ? 1 : 0);
+
+            if (!r) return { cls: 'ucas-status-badge muted', label: '—', detail: '' };
+            const status = String(r.status || '').toLowerCase();
+            const finalisedAt = r.finalisedAt || r.finalised_at;
+            if (finalisedAt || status === 'finalised' || status === 'complete' || status === 'completed') {
+              return { cls: 'ucas-status-badge success', label: 'Complete', detail: `${Math.max(1, doneCount)}/3 sections` };
+            }
+            if (status === 'in_progress') {
+              return { cls: 'ucas-status-badge warning', label: 'In progress', detail: `${doneCount}/3 sections` };
+            }
+            if (status === 'not_started') {
+              // If centre template exists, this is still "in progress" from a workflow perspective (1/3 already done)
+              if (templateDone) return { cls: 'ucas-status-badge warning', label: 'In progress', detail: `${doneCount}/3 sections` };
+              return { cls: 'ucas-status-badge muted', label: 'Pending', detail: `${doneCount}/3 sections` };
+            }
+            return { cls: 'ucas-status-badge muted', label: status ? status.replace(/_/g, ' ') : '—', detail: `${doneCount}/3 sections` };
+          },
+
           async ucasMgmtRequestEdits(email) {
             const clean = String(email || '').trim().toLowerCase();
             if (!clean) return;
@@ -7584,87 +7644,108 @@
                   <button @click="closeUcasManagementModal" class="am-modal-close">✖</button>
                 </div>
                 <div class="am-modal-body">
-                  <div class="am-modal-description ucas-mgmt-intro">
+                  <div class="ucas-ui-intro">
                     Manage UCAS application progress and reference status for your students. Use “Open UCAS” to jump into a student’s application.
                   </div>
 
-                  <div class="ucas-mgmt-tabs">
+                  <div class="ucas-ui-tabs">
                     <button
-                      class="am-button secondary"
+                      class="ucas-ui-tab"
                       :class="{ active: ucasMgmtTab === 'status' }"
                       @click="ucasMgmtTab='status'">
-                      📋 Status
+                      📋 Student status
                     </button>
                     <button
-                      class="am-button secondary"
+                      class="ucas-ui-tab"
                       :class="{ active: ucasMgmtTab === 'template' }"
                       @click="ucasMgmtTab='template'; ucasMgmtLoadCentreTemplate()">
                       🏫 Centre template
                     </button>
                   </div>
 
-                  <div class="ucas-mgmt-filterbar">
-                    <div class="ucas-mgmt-filterrow">
-                      <div class="ucas-mgmt-filtergroup">
-                        <div class="ucas-mgmt-label">Academic year</div>
-                        <input v-model="ucasMgmtAcademicYear" class="am-input-inline ucas-mgmt-input" style="width:170px;" placeholder="e.g. 2025-2026" />
+                  <div class="ucas-ui-filter-bar">
+                    <div class="ucas-ui-filter-row">
+                      <div class="ucas-ui-filter-group">
+                        <div class="ucas-ui-filter-label">Academic year</div>
+                        <input v-model="ucasMgmtAcademicYear" class="ucas-ui-filter-input" style="width:170px;" placeholder="e.g. 2025-2026" />
                       </div>
 
-                      <div class="ucas-mgmt-filtergroup">
-                        <label class="ucas-mgmt-checkbox">
+                      <div class="ucas-ui-filter-group">
+                        <label class="ucas-ui-filter-checkbox">
                           <input type="checkbox" v-model="ucasMgmtOnlyYear12Plus" />
-                          <span>Year 12+</span>
+                          <span>Year 12+ only</span>
                         </label>
                       </div>
 
-                      <div class="ucas-mgmt-filtergroup">
-                        <div class="ucas-mgmt-label">Tutor group</div>
-                        <select v-model="ucasMgmtTutorGroup" class="am-select-inline ucas-mgmt-input" style="width:190px;">
+                      <div class="ucas-ui-filter-group">
+                        <div class="ucas-ui-filter-label">Tutor group</div>
+                        <select v-model="ucasMgmtTutorGroup" class="ucas-ui-filter-select" style="width:190px;">
                           <option value="">All tutor groups</option>
                           <option v-for="g in ucasMgmtTutorGroupOptions" :key="g" :value="g">{{ g }}</option>
                         </select>
                       </div>
 
-                      <div class="ucas-mgmt-filtergroup">
-                        <div class="ucas-mgmt-label">Status</div>
-                        <select v-model="ucasMgmtCompletionFilter" class="am-select-inline ucas-mgmt-input" style="width:220px;" :disabled="!ucasMgmtHasAnyStatus">
-                          <option value="all">All</option>
-                          <option value="completed">Personal statement completed</option>
+                      <div class="ucas-ui-filter-group">
+                        <div class="ucas-ui-filter-label">Personal statement status</div>
+                        <select v-model="ucasMgmtCompletionFilter" class="ucas-ui-filter-select" style="width:240px;" :disabled="!ucasMgmtHasAnyStatus">
+                          <option value="all">All students</option>
+                          <option value="completed">Completed</option>
                           <option value="in_progress">In progress</option>
                           <option value="not_started">Not started</option>
                         </select>
-                        <div v-if="!ucasMgmtHasAnyStatus" class="ucas-mgmt-hint">Click “Refresh UCAS status” to enable status filtering.</div>
+                        <div v-if="!ucasMgmtHasAnyStatus" class="ucas-ui-hint">Click “Refresh UCAS status” to enable status filtering.</div>
                       </div>
 
-                      <div class="ucas-mgmt-filtergroup ucas-mgmt-grow">
-                        <div class="ucas-mgmt-label">Search student</div>
-                        <input v-model="ucasMgmtSearch" class="am-input-inline ucas-mgmt-input" placeholder="Search by name or email…" />
+                      <div class="ucas-ui-filter-group grow">
+                        <div class="ucas-ui-filter-label">Search</div>
+                        <input v-model="ucasMgmtSearch" class="ucas-ui-filter-input" placeholder="Search by name or email…" />
                       </div>
 
-                      <div class="ucas-mgmt-filtergroup ucas-mgmt-actions">
-                        <button @click="ucasMgmtLoadStudents" class="am-button secondary" :disabled="ucasMgmtStudentsLoading">
-                          {{ ucasMgmtStudentsLoading ? 'Loading…' : 'Reload students' }}
+                      <div class="ucas-ui-filter-group">
+                        <button @click="ucasMgmtLoadStudents" class="ucas-ui-btn ucas-ui-btn-secondary" :disabled="ucasMgmtStudentsLoading">
+                          {{ ucasMgmtStudentsLoading ? 'Loading…' : 'Reload' }}
                         </button>
                       </div>
                     </div>
                   </div>
 
                   <div v-if="ucasMgmtTab === 'status'" style="margin-top: 14px;">
-                    <div class="ucas-mgmt-toolbar">
-                      <button @click="ucasMgmtRefreshStatuses" class="am-button primary" :disabled="ucasMgmtStatusesLoading || ucasMgmtStudentsLoading || ucasMgmtStudents.length===0">
-                        {{ ucasMgmtStatusesLoading ? 'Refreshing…' : 'Refresh UCAS status' }}
-                      </button>
-                      <button @click="ucasMgmtDownloadCsvReport" class="am-button secondary" :disabled="ucasMgmtStudentsLoading">
-                        ⬇️ Generate CSV report
-                      </button>
-                      <div class="ucas-mgmt-counts" v-if="ucasMgmtStudents && ucasMgmtStudents.length">
-                        <span class="ucas-mgmt-pill">Total: {{ ucasMgmtCounts.total }}</span>
-                        <span class="ucas-mgmt-pill ucas-mgmt-pill--good">Completed: {{ ucasMgmtCounts.completed }}</span>
-                        <span class="ucas-mgmt-pill ucas-mgmt-pill--warn">In progress: {{ ucasMgmtCounts.inProgress }}</span>
-                        <span class="ucas-mgmt-pill ucas-mgmt-pill--muted">Not started: {{ ucasMgmtCounts.notStarted }}</span>
-                        <span class="ucas-mgmt-pill ucas-mgmt-pill--muted" v-if="ucasMgmtCounts.unknown">Unknown: {{ ucasMgmtCounts.unknown }}</span>
+                    <!-- Stats Row -->
+                    <div class="ucas-ui-stats-row" v-if="ucasMgmtStudents && ucasMgmtStudents.length">
+                      <div class="ucas-ui-stat-card">
+                        <div class="ucas-ui-stat-value">{{ ucasMgmtCounts.total }}</div>
+                        <div class="ucas-ui-stat-label">Total students</div>
                       </div>
-                      <div v-if="ucasMgmtStatusesLoading" class="ucas-mgmt-progress">
+                      <div class="ucas-ui-stat-card success">
+                        <div class="ucas-ui-stat-value">{{ ucasMgmtCounts.completed }}</div>
+                        <div class="ucas-ui-stat-label">Personal statement completed</div>
+                      </div>
+                      <div class="ucas-ui-stat-card warning">
+                        <div class="ucas-ui-stat-value">{{ ucasMgmtCounts.inProgress }}</div>
+                        <div class="ucas-ui-stat-label">Personal statement in progress</div>
+                      </div>
+                      <div class="ucas-ui-stat-card">
+                        <div class="ucas-ui-stat-value">{{ ucasMgmtCounts.notStarted }}</div>
+                        <div class="ucas-ui-stat-label">Personal statement not started</div>
+                      </div>
+                      <div class="ucas-ui-stat-card info">
+                        <div class="ucas-ui-stat-value">{{ ucasMgmtCounts.referencesDone }}</div>
+                        <div class="ucas-ui-stat-label">References done</div>
+                      </div>
+                    </div>
+
+                    <!-- Action Bar -->
+                    <div class="ucas-ui-action-bar">
+                      <div class="ucas-ui-action-group">
+                        <button @click="ucasMgmtRefreshStatuses" class="ucas-ui-btn ucas-ui-btn-primary" :disabled="ucasMgmtStatusesLoading || ucasMgmtStudentsLoading || ucasMgmtStudents.length===0">
+                          {{ ucasMgmtStatusesLoading ? 'Refreshing…' : 'Refresh UCAS status' }}
+                        </button>
+                        <button @click="ucasMgmtDownloadCsvReport" class="ucas-ui-btn ucas-ui-btn-secondary" :disabled="ucasMgmtStudentsLoading">
+                          Export CSV
+                        </button>
+                      </div>
+                      <div v-if="ucasMgmtStatusesLoading" class="ucas-ui-progress-indicator">
+                        <span class="ucas-ui-spinner"></span>
                         {{ ucasMgmtProgress.current }}/{{ ucasMgmtProgress.total }} {{ ucasMgmtProgress.status }}
                       </div>
                     </div>
@@ -7675,12 +7756,12 @@
                     <div v-else-if="ucasMgmtStudents.length === 0" class="am-empty-state" style="margin-top:10px;">
                       No students found for the current filters.
                     </div>
-                    <div v-else style="overflow:auto; border:1px solid #e3e8ef; border-radius:12px; background:#fff;">
-                      <table class="am-table" style="min-width: 980px;">
+                    <div v-else class="ucas-ui-table-container">
+                      <div class="ucas-ui-table-scroll">
+                      <table class="ucas-ui-table">
                         <thead>
                           <tr>
                             <th>Student</th>
-                            <th>Email</th>
                             <th>Year</th>
                             <th>Tutor group</th>
                             <th>UCAS application</th>
@@ -7691,49 +7772,36 @@
                         </thead>
                         <tbody>
                           <tr v-for="s in ucasMgmtFilteredStudentsList()" :key="s.email">
-                            <td style="font-weight:700;">
-                              {{ s.fullName || ((s.firstName || '') + ' ' + (s.lastName || '')).trim() || '—' }}
+                            <td>
+                              <div class="ucas-ui-student-name">{{ s.fullName || ((s.firstName || '') + ' ' + (s.lastName || '')).trim() || '—' }}</div>
+                              <div class="ucas-ui-student-email">{{ s.email }}</div>
                             </td>
-                            <td>{{ s.email }}</td>
                             <td>{{ s.yearGroup || '—' }}</td>
                             <td>{{ s.group || '—' }}</td>
                             <td>
-                              <template v-if="ucasMgmtStatusByEmail[s.email]">
-                                <span v-if="ucasMgmtStatusByEmail[s.email].error" class="ucas-pill ucas-pill--danger">Error</span>
-                                <span v-else-if="ucasMgmtStatusByEmail[s.email].applicationStarted" class="ucas-pill ucas-pill--info">Started</span>
-                                <span v-else class="ucas-pill ucas-pill--muted">Not started</span>
-                              </template>
-                              <span v-else class="ucas-pill ucas-pill--muted">{{ ucasMgmtHasAnyStatus ? 'Not started' : 'Unknown' }}</span>
+                              <span :class="ucasMgmtApplicationBadge(s.email).cls">{{ ucasMgmtApplicationBadge(s.email).label }}</span>
                             </td>
                             <td>
-                              <template v-if="ucasMgmtStatusByEmail[s.email]">
-                                <span v-if="ucasMgmtStatusByEmail[s.email].statementStatus === 'completed'" class="ucas-pill ucas-pill--good">
-                                  Completed
-                                </span>
-                                <span v-else-if="ucasMgmtStatusByEmail[s.email].statementStatus === 'in_progress'" class="ucas-pill ucas-pill--warn">
-                                  In progress
-                                </span>
-                                <span v-else-if="ucasMgmtStatusByEmail[s.email].statementStatus === 'not_started'" class="ucas-pill ucas-pill--muted">
-                                  Not started
-                                </span>
-                                <span v-else class="ucas-pill ucas-pill--muted">—</span>
-                              </template>
-                              <span v-else class="ucas-pill ucas-pill--muted">—</span>
+                              <span :class="ucasMgmtStatementBadge(s.email).cls">{{ ucasMgmtStatementBadge(s.email).label }}</span>
                             </td>
                             <td>
-                              <span v-if="ucasMgmtStatusByEmail[s.email] && ucasMgmtStatusByEmail[s.email].reference && ucasMgmtStatusByEmail[s.email].reference.status">
-                                <span class="ucas-pill ucas-pill--muted">{{ ucasMgmtStatusByEmail[s.email].reference.status }}</span>
-                              </span>
-                              <span v-else class="ucas-pill ucas-pill--muted">—</span>
+                              <div class="ucas-ui-reference-status">
+                                <div class="ucas-ui-reference-main">
+                                  <span :class="ucasMgmtReferenceSummary(s.email).cls">{{ ucasMgmtReferenceSummary(s.email).label }}</span>
+                                </div>
+                                <div class="ucas-ui-reference-detail" v-if="ucasMgmtReferenceSummary(s.email).detail">
+                                  {{ ucasMgmtReferenceSummary(s.email).detail }}
+                                </div>
+                              </div>
                             </td>
                             <td style="text-align:right;">
-                              <button class="am-button secondary" style="padding:6px 10px;" @click="ucasMgmtOpenStudentUcas(s.email)">
-                                Open UCAS (modal)
+                              <button class="ucas-ui-btn ucas-ui-btn-secondary ucas-ui-btn-table" @click="ucasMgmtOpenStudentUcas(s.email)">
+                                Open UCAS
                               </button>
                               <button
                                 v-if="ucasMgmtStatusByEmail[s.email] && ucasMgmtStatusByEmail[s.email].statementStatus === 'completed'"
-                                class="am-button secondary"
-                                style="padding:6px 10px; margin-left:8px;"
+                                class="ucas-ui-btn ucas-ui-btn-secondary ucas-ui-btn-table"
+                                style="margin-left:8px;"
                                 @click="ucasMgmtRequestEdits(s.email)"
                                 title="Request further edits (unmark complete and notify student)"
                               >
@@ -7743,6 +7811,7 @@
                           </tr>
                         </tbody>
                       </table>
+                      </div>
                     </div>
                     <div style="margin-top:10px; font-size:12px; color:#666;">
                       Notes: Status values depend on the Dashboard API endpoints. If you see “Unknown”, click “Refresh UCAS status”.
@@ -8834,11 +8903,332 @@
         }
 
         /* ========== UCAS Management (Staff Admin) ========== */
+        /* Scoped “exemplar” UI */
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
+
         .ucas-mgmt-modal .am-modal-header{
           background: linear-gradient(135deg, #3E3285 0%, #4a3d9e 100%);
           color: #fff;
         }
         .ucas-mgmt-modal .am-modal-header h3{ color:#fff; }
+        .ucas-mgmt-modal{
+          --bg:#f8f9fc;
+          --card:#ffffff;
+          --text:#1a1a2e;
+          --text-secondary:#64748b;
+          --text-muted:#94a3b8;
+          --border:#e2e8f0;
+          --border-light:#f1f5f9;
+          --primary:#3E3285;
+          --primary-hover:#2d2461;
+          --primary-light:#f0eef8;
+          --success:#059669;
+          --success-light:#ecfdf5;
+          --success-border:#a7f3d0;
+          --warning:#d97706;
+          --warning-light:#fffbeb;
+          --warning-border:#fde68a;
+          --danger:#dc2626;
+          --danger-light:#fef2f2;
+          --info:#0284c7;
+          --info-light:#e0f2fe;
+          --radius:12px;
+          --radius-sm:8px;
+          --radius-lg:16px;
+          --shadow-sm:0 1px 2px rgba(0,0,0,0.05);
+          --shadow-xl:0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+          --transition:0.2s ease;
+          font-family: 'DM Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+          border-radius: var(--radius-lg);
+          box-shadow: var(--shadow-xl);
+          overflow: hidden;
+        }
+        .ucas-mgmt-modal .am-modal-body{
+          background: var(--bg);
+          padding: 24px;
+        }
+        .ucas-mgmt-modal .am-modal-close{
+          width:36px;
+          height:36px;
+          border-radius:50%;
+          border:none;
+          background: rgba(255,255,255,0.15);
+          color:#fff;
+          cursor:pointer;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          transition: all var(--transition);
+        }
+        .ucas-mgmt-modal .am-modal-close:hover{ background: rgba(255,255,255,0.25); }
+
+        .ucas-ui-intro{
+          background:#fff;
+          border:1px solid var(--border);
+          border-radius: var(--radius);
+          padding: 12px 14px;
+          color: var(--text-secondary);
+          margin-bottom: 14px;
+        }
+
+        /* Tabs */
+        .ucas-ui-tabs{
+          display:flex;
+          gap:4px;
+          background: var(--border-light);
+          padding:4px;
+          border-radius: var(--radius);
+          width: fit-content;
+          margin-bottom: 14px;
+        }
+        .ucas-ui-tab{
+          padding:10px 16px;
+          border:none;
+          background: transparent;
+          border-radius: var(--radius-sm);
+          font-family: inherit;
+          font-size:14px;
+          font-weight: 700;
+          color: var(--text-secondary);
+          cursor:pointer;
+          transition: all var(--transition);
+          display:inline-flex;
+          align-items:center;
+          gap:8px;
+        }
+        .ucas-ui-tab:hover{
+          color: var(--text);
+          background: rgba(255,255,255,0.5);
+        }
+        .ucas-ui-tab.active{
+          background:#fff;
+          color: var(--primary);
+          box-shadow: var(--shadow-sm);
+        }
+
+        /* Filter bar */
+        .ucas-ui-filter-bar{
+          background:#fff;
+          border:1px solid var(--border);
+          border-radius: var(--radius);
+          padding:16px;
+          margin-bottom: 14px;
+        }
+        .ucas-ui-filter-row{
+          display:flex;
+          gap:16px;
+          align-items:flex-end;
+          flex-wrap:wrap;
+        }
+        .ucas-ui-filter-group{
+          display:flex;
+          flex-direction:column;
+          gap:6px;
+        }
+        .ucas-ui-filter-group.grow{
+          flex:1;
+          min-width:220px;
+        }
+        .ucas-ui-filter-label{
+          font-size:11px;
+          font-weight: 700;
+          color: var(--text-secondary);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        .ucas-ui-filter-input,
+        .ucas-ui-filter-select{
+          padding:8px 12px;
+          border:1px solid var(--border);
+          border-radius: var(--radius-sm);
+          font-family: inherit;
+          font-size:14px;
+          color: var(--text);
+          background:#fff;
+          transition: all var(--transition);
+          min-width: 140px;
+        }
+        .ucas-ui-filter-input:focus,
+        .ucas-ui-filter-select:focus{
+          outline:none;
+          border-color: var(--primary);
+          box-shadow: 0 0 0 3px var(--primary-light);
+        }
+        .ucas-ui-filter-input::placeholder{ color: var(--text-muted); }
+        .ucas-ui-filter-checkbox{
+          display:flex;
+          align-items:center;
+          gap:8px;
+          padding:8px 12px;
+          background: var(--border-light);
+          border-radius: var(--radius-sm);
+          cursor:pointer;
+          transition: all var(--transition);
+          border: 1px solid transparent;
+        }
+        .ucas-ui-filter-checkbox:hover{
+          background: var(--primary-light);
+          border-color: var(--border);
+        }
+        .ucas-ui-filter-checkbox input{ width:16px; height:16px; accent-color: var(--primary); }
+        .ucas-ui-filter-checkbox span{ font-size:13px; font-weight:600; color: var(--text); }
+        .ucas-ui-hint{ font-size:11px; color: var(--text-secondary); }
+
+        /* Buttons */
+        .ucas-ui-btn{
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          gap:8px;
+          padding:10px 16px;
+          border-radius: var(--radius-sm);
+          font-family: inherit;
+          font-size:13px;
+          font-weight: 700;
+          cursor:pointer;
+          transition: all var(--transition);
+          border:none;
+          white-space: nowrap;
+        }
+        .ucas-ui-btn:disabled{ opacity:0.55; cursor:not-allowed; }
+        .ucas-ui-btn-primary{ background: var(--primary); color:#fff; }
+        .ucas-ui-btn-primary:hover:not(:disabled){ background: var(--primary-hover); }
+        .ucas-ui-btn-secondary{ background:#fff; color: var(--text); border:1px solid var(--border); }
+        .ucas-ui-btn-secondary:hover:not(:disabled){ background: var(--border-light); border-color:#cbd5e1; }
+        .ucas-ui-btn-table{ padding: 6px 12px; font-size: 12px; }
+
+        /* Stats cards */
+        .ucas-ui-stats-row{
+          display:grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap:12px;
+          margin-bottom: 14px;
+        }
+        .ucas-ui-stat-card{
+          background:#fff;
+          border:1px solid var(--border);
+          border-radius: var(--radius);
+          padding: 16px;
+          text-align:center;
+        }
+        .ucas-ui-stat-value{
+          font-size:28px;
+          font-weight:800;
+          color: var(--text);
+          line-height:1;
+          margin-bottom:4px;
+        }
+        .ucas-ui-stat-label{
+          font-size:12px;
+          color: var(--text-secondary);
+          font-weight:600;
+        }
+        .ucas-ui-stat-card.success .ucas-ui-stat-value{ color: var(--success); }
+        .ucas-ui-stat-card.warning .ucas-ui-stat-value{ color: var(--warning); }
+        .ucas-ui-stat-card.info .ucas-ui-stat-value{ color: var(--info); }
+
+        /* Action bar */
+        .ucas-ui-action-bar{
+          display:flex;
+          align-items:center;
+          justify-content: space-between;
+          gap:16px;
+          margin-bottom: 14px;
+          flex-wrap:wrap;
+        }
+        .ucas-ui-action-group{
+          display:flex;
+          gap:10px;
+          align-items:center;
+          flex-wrap:wrap;
+        }
+        .ucas-ui-progress-indicator{
+          display:flex;
+          align-items:center;
+          gap:12px;
+          padding: 12px 16px;
+          background: var(--info-light);
+          border-radius: var(--radius-sm);
+          font-size:13px;
+          color: var(--info);
+          font-weight: 700;
+        }
+        .ucas-ui-spinner{
+          width:18px;
+          height:18px;
+          border:2px solid rgba(2,132,199,0.2);
+          border-top-color: var(--info);
+          border-radius:50%;
+          animation: ucasSpin 0.7s linear infinite;
+        }
+        @keyframes ucasSpin{ to { transform: rotate(360deg); } }
+
+        /* Table */
+        .ucas-ui-table-container{
+          background:#fff;
+          border:1px solid var(--border);
+          border-radius: var(--radius);
+          overflow:hidden;
+        }
+        .ucas-ui-table-scroll{ overflow-x:auto; }
+        .ucas-ui-table{
+          width:100%;
+          border-collapse: collapse;
+          min-width: 980px;
+        }
+        .ucas-ui-table th,
+        .ucas-ui-table td{
+          padding: 12px 16px;
+          text-align:left;
+          border-bottom: 1px solid var(--border-light);
+          font-size: 14px;
+          color: var(--text);
+        }
+        .ucas-ui-table th{
+          background: var(--border-light);
+          font-size: 11px;
+          font-weight: 800;
+          color: var(--text-secondary);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          position: sticky;
+          top: 0;
+          z-index: 1;
+        }
+        .ucas-ui-table tbody tr{ transition: background var(--transition); }
+        .ucas-ui-table tbody tr:hover{ background: var(--border-light); }
+        .ucas-ui-table tbody tr:last-child td{ border-bottom:none; }
+
+        .ucas-ui-student-name{ font-weight: 800; color: var(--text); }
+        .ucas-ui-student-email{ font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+        /* Status badge */
+        .ucas-status-badge{
+          display:inline-flex;
+          align-items:center;
+          gap:6px;
+          padding:4px 10px;
+          border-radius:20px;
+          font-size:12px;
+          font-weight:800;
+          white-space: nowrap;
+        }
+        .ucas-status-badge.success{ background: var(--success-light); color: var(--success); }
+        .ucas-status-badge.warning{ background: var(--warning-light); color: var(--warning); }
+        .ucas-status-badge.muted{ background: var(--border-light); color: var(--text-muted); }
+        .ucas-status-badge.info{ background: var(--info-light); color: var(--info); }
+        .ucas-status-badge.danger{ background: var(--danger-light); color: var(--danger); }
+
+        /* Reference status detail */
+        .ucas-ui-reference-status{
+          display:flex;
+          flex-direction: column;
+          gap:4px;
+        }
+        .ucas-ui-reference-detail{
+          font-size:11px;
+          color: var(--text-secondary);
+        }
         .ucas-mgmt-intro{
           background:#fff;
           border:1px solid #e3e8ef;
