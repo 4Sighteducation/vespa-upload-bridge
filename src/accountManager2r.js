@@ -540,11 +540,15 @@
                 unknown += 1;
                 continue;
               }
-              const hasApp = !!st.app;
-              const isCompleted = !!st.appCompletedAt;
-              if (isCompleted) completed += 1;
-              else if (hasApp) inProgress += 1;
-              else notStarted += 1;
+              // Counts reflect PERSONAL STATEMENT progress:
+              // - completed: explicitly marked complete
+              // - inProgress: >= MIN chars and not complete
+              // - notStarted: < MIN chars (including 0)
+              const status = String(st.statementStatus || '').toLowerCase();
+              if (status === 'completed') completed += 1;
+              else if (status === 'in_progress') inProgress += 1;
+              else if (status) notStarted += 1;
+              else unknown += 1;
             }
             return { total: rows.length, completed, inProgress, notStarted, unknown };
           },
@@ -5414,6 +5418,52 @@
               return app.updatedAt || app.updated_at || app.updated || null;
             };
 
+            // Statement progress rules (your definitions)
+            const STATEMENT_MIN_CHARS = 350;
+
+            const getStatementCharCount = (app) => {
+              try {
+                const a = (app && typeof app === 'object' ? (app.answers || app.answers_json || {}) : {}) || {};
+                const q1 = (a.q1 ?? a.question1 ?? '') || '';
+                const q2 = (a.q2 ?? a.question2 ?? '') || '';
+                const q3 = (a.q3 ?? a.question3 ?? '') || '';
+                return String(q1).length + String(q2).length + String(q3).length;
+              } catch (_) {
+                return 0;
+              }
+            };
+
+            const getStatementStatus = (app, completedAt) => {
+              const chars = getStatementCharCount(app);
+              if (completedAt) return 'completed';
+              if (chars >= STATEMENT_MIN_CHARS) return 'in_progress';
+              return 'not_started';
+            };
+
+            // UCAS Application started = course selected and/or offer grades entered
+            const getApplicationStarted = (app) => {
+              try {
+                if (!app || typeof app !== 'object') return false;
+                const selectedCourseKey = String(app.selectedCourseKey || app.selected_course_key || '').trim();
+                if (selectedCourseKey) return true;
+
+                const req = app.requirementsByCourse || app.requirements_by_course || {};
+                if (req && typeof req === 'object') {
+                  for (const k of Object.keys(req)) {
+                    const inner = req[k];
+                    if (!inner || typeof inner !== 'object') continue;
+                    for (const sk of Object.keys(inner)) {
+                      const v = String(inner[sk] || '').trim();
+                      if (v) return true;
+                    }
+                  }
+                }
+                return false;
+              } catch (_) {
+                return false;
+              }
+            };
+
             const qs = new URLSearchParams();
             if (this.ucasMgmtAcademicYear) qs.append('academic_year', this.ucasMgmtAcademicYear);
             const qsStr = qs.toString();
@@ -5441,10 +5491,18 @@
                   const app = appRes && (appRes.data?.application || appRes.data?.app || appRes.data || appRes.application || appRes.record || null);
                   const reference = refRes && (refRes.data || refRes.reference || refRes.record || null);
 
+                  const appCompletedAt = getCompletedAt(app);
+                  const statementChars = getStatementCharCount(app);
+                  const statementStatus = getStatementStatus(app, appCompletedAt);
+                  const applicationStarted = getApplicationStarted(app);
+
                   this.ucasMgmtStatusByEmail[email] = {
                     app,
-                    appCompletedAt: getCompletedAt(app),
+                    appCompletedAt,
                     appUpdatedAt: getUpdatedAt(app),
+                    applicationStarted,
+                    statementChars,
+                    statementStatus,
                     reference,
                     error: null
                   };
@@ -5453,6 +5511,9 @@
                     app: null,
                     appCompletedAt: null,
                     appUpdatedAt: null,
+                    applicationStarted: false,
+                    statementChars: 0,
+                    statementStatus: '',
                     reference: null,
                     error: e.message || 'Failed'
                   };
@@ -5483,6 +5544,47 @@
             this.openStudentAcademicProfileModal({ email: clean });
           },
 
+          async ucasMgmtRequestEdits(email) {
+            const clean = String(email || '').trim().toLowerCase();
+            if (!clean) return;
+            try {
+              const ok = confirm(`Request further edits for ${clean}?\n\nThis will unmark their personal statement as complete and email the student.`);
+              if (!ok) return;
+
+              const qs = new URLSearchParams();
+              if (this.ucasMgmtAcademicYear) qs.append('academic_year', this.ucasMgmtAcademicYear);
+              const url = `${this.dashboardApiUrl}/api/academic-profile/${encodeURIComponent(clean)}/ucas-application/request-edits${qs.toString() ? `?${qs.toString()}` : ''}`;
+
+              const res = await fetch(url, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-User-Role': 'staff_admin',
+                  ...(this.userEmail ? { 'X-User-Email': this.userEmail } : {}),
+                  ...(this.userId ? { 'X-User-Id': String(this.userId) } : {})
+                },
+                body: JSON.stringify({ academicYear: this.ucasMgmtAcademicYear || null })
+              });
+              const data = await safeJsonParse(res, 'Request UCAS edits');
+              if (!data || !data.success) throw new Error(data?.error || data?.message || 'Request failed');
+
+              // Update local cache so UI reflects change immediately
+              const st = this.ucasMgmtStatusByEmail && this.ucasMgmtStatusByEmail[clean] ? this.ucasMgmtStatusByEmail[clean] : null;
+              if (st) {
+                st.appCompletedAt = null;
+                // Recompute statement status from current chars
+                const chars = Number(st.statementChars) || 0;
+                st.statementStatus = chars >= 350 ? 'in_progress' : 'not_started';
+                this.ucasMgmtStatusByEmail[clean] = { ...st };
+              }
+
+              this.showMessage(`Requested edits from ${clean} (student notified).`, 'success');
+            } catch (e) {
+              console.error('Request edits error:', e);
+              this.showMessage(`Failed to request edits: ${e.message || e}`, 'error');
+            }
+          },
+
           ucasMgmtStudentMatchesFilters(s) {
             if (!s) return false;
 
@@ -5508,12 +5610,10 @@
 
               const key = String((s && s.email) || '').trim().toLowerCase();
               const st = (this.ucasMgmtStatusByEmail && key) ? (this.ucasMgmtStatusByEmail[key] || null) : null;
-              const completed = !!(st && st.appCompletedAt);
-              const started = !!(st && st.app);
-
-              if (f === 'completed' && !completed) return false;
-              if (f === 'in_progress' && (completed || !started)) return false;
-              if (f === 'not_started' && started) return false;
+              const ss = String(st && st.statementStatus ? st.statementStatus : '').toLowerCase();
+              if (f === 'completed' && ss !== 'completed') return false;
+              if (f === 'in_progress' && ss !== 'in_progress') return false;
+              if (f === 'not_started' && ss !== 'not_started') return false;
             }
 
             return true;
@@ -7598,32 +7698,46 @@
                             <td>{{ s.yearGroup || '—' }}</td>
                             <td>{{ s.group || '—' }}</td>
                             <td>
-                              <span v-if="ucasMgmtStatusByEmail[s.email] && ucasMgmtStatusByEmail[s.email].app">
-                                Started
-                              </span>
-                              <span v-else-if="ucasMgmtStatusByEmail[s.email] && ucasMgmtStatusByEmail[s.email].error" style="color:#b71c1c;">
-                                Error
-                              </span>
-                              <span v-else style="color:#666;">{{ ucasMgmtHasAnyStatus ? 'Not started' : 'Unknown' }}</span>
+                              <template v-if="ucasMgmtStatusByEmail[s.email]">
+                                <span v-if="ucasMgmtStatusByEmail[s.email].error" class="ucas-pill ucas-pill--danger">Error</span>
+                                <span v-else-if="ucasMgmtStatusByEmail[s.email].applicationStarted" class="ucas-pill ucas-pill--info">Started</span>
+                                <span v-else class="ucas-pill ucas-pill--muted">Not started</span>
+                              </template>
+                              <span v-else class="ucas-pill ucas-pill--muted">{{ ucasMgmtHasAnyStatus ? 'Not started' : 'Unknown' }}</span>
                             </td>
                             <td>
-                              <span v-if="ucasMgmtStatusByEmail[s.email] && ucasMgmtStatusByEmail[s.email].appCompletedAt" style="color:#1b5e20; font-weight:700;">
-                                Completed
-                              </span>
-                              <span v-else-if="ucasMgmtStatusByEmail[s.email] && ucasMgmtStatusByEmail[s.email].app" style="color:#ef6c00; font-weight:700;">
-                                In progress
-                              </span>
-                              <span v-else style="color:#666;">—</span>
+                              <template v-if="ucasMgmtStatusByEmail[s.email]">
+                                <span v-if="ucasMgmtStatusByEmail[s.email].statementStatus === 'completed'" class="ucas-pill ucas-pill--good">
+                                  Completed
+                                </span>
+                                <span v-else-if="ucasMgmtStatusByEmail[s.email].statementStatus === 'in_progress'" class="ucas-pill ucas-pill--warn">
+                                  In progress
+                                </span>
+                                <span v-else-if="ucasMgmtStatusByEmail[s.email].statementStatus === 'not_started'" class="ucas-pill ucas-pill--muted">
+                                  Not started
+                                </span>
+                                <span v-else class="ucas-pill ucas-pill--muted">—</span>
+                              </template>
+                              <span v-else class="ucas-pill ucas-pill--muted">—</span>
                             </td>
                             <td>
                               <span v-if="ucasMgmtStatusByEmail[s.email] && ucasMgmtStatusByEmail[s.email].reference && ucasMgmtStatusByEmail[s.email].reference.status">
-                                {{ ucasMgmtStatusByEmail[s.email].reference.status }}
+                                <span class="ucas-pill ucas-pill--muted">{{ ucasMgmtStatusByEmail[s.email].reference.status }}</span>
                               </span>
-                              <span v-else style="color:#666;">—</span>
+                              <span v-else class="ucas-pill ucas-pill--muted">—</span>
                             </td>
                             <td style="text-align:right;">
                               <button class="am-button secondary" style="padding:6px 10px;" @click="ucasMgmtOpenStudentUcas(s.email)">
                                 Open UCAS (modal)
+                              </button>
+                              <button
+                                v-if="ucasMgmtStatusByEmail[s.email] && ucasMgmtStatusByEmail[s.email].statementStatus === 'completed'"
+                                class="am-button secondary"
+                                style="padding:6px 10px; margin-left:8px;"
+                                @click="ucasMgmtRequestEdits(s.email)"
+                                title="Request further edits (unmark complete and notify student)"
+                              >
+                                Request edits
                               </button>
                             </td>
                           </tr>
@@ -8820,6 +8934,24 @@
           font-size:12px;
           color:#475569;
         }
+
+        /* UCAS status pills (table) */
+        .ucas-pill{
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          padding:6px 10px;
+          border-radius:999px;
+          font-size:12px;
+          font-weight:800;
+          border:1px solid transparent;
+          white-space:nowrap;
+        }
+        .ucas-pill--info{ background:#e0f2fe; border-color:#bae6fd; color:#0369a1; }
+        .ucas-pill--good{ background:#ecfdf5; border-color:#a7f3d0; color:#047857; }
+        .ucas-pill--warn{ background:#fffbeb; border-color:#fde68a; color:#b45309; }
+        .ucas-pill--danger{ background:#fef2f2; border-color:#fecaca; color:#b91c1c; }
+        .ucas-pill--muted{ background:#f8fafc; border-color:#e2e8f0; color:#64748b; }
         
         .am-icon {
           font-size: 1em;
