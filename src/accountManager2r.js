@@ -5475,66 +5475,86 @@
               }
             };
 
-            const qs = new URLSearchParams();
-            if (this.ucasMgmtAcademicYear) qs.append('academic_year', this.ucasMgmtAcademicYear);
-            const qsStr = qs.toString();
+            const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-            const concurrency = 6;
-            let idx = 0;
-            const students = studentsToFetch.slice();
+            const applyStatuses = (statuses) => {
+              const entries = statuses && typeof statuses === 'object' ? Object.entries(statuses) : [];
+              for (const [emailRaw, stRaw] of entries) {
+                const email = String(emailRaw || '').trim().toLowerCase();
+                if (!email) continue;
+                const app = stRaw ? (stRaw.app || null) : null;
+                const reference = stRaw ? (stRaw.reference || null) : null;
 
-            const worker = async () => {
-              while (idx < students.length) {
-                const i = idx++;
-                const s = students[i];
-                const email = String(s.email || '').trim().toLowerCase();
-                this.ucasMgmtProgress.current = i + 1;
+                const appCompletedAt = getCompletedAt(app);
+                const statementChars = getStatementCharCount(app);
+                const statementStatus = getStatementStatus(app, appCompletedAt);
+                const applicationStarted = getApplicationStarted(app);
 
-                try {
-                  const appUrl = `${this.dashboardApiUrl}/api/academic-profile/${encodeURIComponent(email)}/ucas-application${qsStr ? `?${qsStr}` : ''}`;
-                  const refUrl = `${this.dashboardApiUrl}/api/academic-profile/${encodeURIComponent(email)}/reference/status${qsStr ? `?${qsStr}` : ''}`;
-
-                  const [appRes, refRes] = await Promise.all([
-                    fetch(appUrl, { method: 'GET', headers: roleHeaders }).then(r => safeJsonParse(r, 'Fetch UCAS application')),
-                    fetch(refUrl, { method: 'GET', headers: roleHeaders }).then(r => safeJsonParse(r, 'Fetch reference status'))
-                  ]);
-
-                  const app = appRes && (appRes.data?.application || appRes.data?.app || appRes.data || appRes.application || appRes.record || null);
-                  const reference = refRes && (refRes.data || refRes.reference || refRes.record || null);
-
-                  const appCompletedAt = getCompletedAt(app);
-                  const statementChars = getStatementCharCount(app);
-                  const statementStatus = getStatementStatus(app, appCompletedAt);
-                  const applicationStarted = getApplicationStarted(app);
-
-                  this.ucasMgmtStatusByEmail[email] = {
-                    app,
-                    appCompletedAt,
-                    appUpdatedAt: getUpdatedAt(app),
-                    applicationStarted,
-                    statementChars,
-                    statementStatus,
-                    reference,
-                    error: null
-                  };
-                } catch (e) {
-                  this.ucasMgmtStatusByEmail[email] = {
-                    app: null,
-                    appCompletedAt: null,
-                    appUpdatedAt: null,
-                    applicationStarted: false,
-                    statementChars: 0,
-                    statementStatus: '',
-                    reference: null,
-                    error: e.message || 'Failed'
-                  };
-                }
+                this.ucasMgmtStatusByEmail[email] = {
+                  app,
+                  appCompletedAt,
+                  appUpdatedAt: getUpdatedAt(app),
+                  applicationStarted,
+                  statementChars,
+                  statementStatus,
+                  reference,
+                  error: null
+                };
               }
             };
 
             try {
-              await Promise.all(Array.from({ length: concurrency }, () => worker()));
-              this.showMessage('UCAS statuses refreshed.', 'success');
+              // Server-side bulk job (much faster for large cohorts)
+              const startUrl = `${this.dashboardApiUrl}/api/ucas-management/statuses/start`;
+              const startRes = await fetch(startUrl, {
+                method: 'POST',
+                headers: roleHeaders,
+                body: JSON.stringify({
+                  academicYear: this.ucasMgmtAcademicYear || 'current',
+                  emails: studentsToFetch.map(s => String(s.email || '').trim().toLowerCase()).filter(Boolean)
+                })
+              }).then(r => safeJsonParse(r, 'Start UCAS status job'));
+
+              // Redis disabled fallback returns full data
+              const maybeInline = startRes && startRes.data && startRes.data.statuses ? startRes.data : null;
+              if (maybeInline && maybeInline.statuses) {
+                applyStatuses(maybeInline.statuses);
+                this.ucasMgmtProgress.current = studentsToFetch.length;
+                this.ucasMgmtProgress.status = 'Complete';
+                this.showMessage('UCAS statuses refreshed.', 'success');
+                return;
+              }
+
+              const jobId = startRes && startRes.data && startRes.data.jobId ? String(startRes.data.jobId) : '';
+              if (!jobId) throw new Error(startRes?.error || startRes?.message || 'Could not start status job');
+
+              const pollUrl = `${this.dashboardApiUrl}/api/ucas-management/statuses/${encodeURIComponent(jobId)}`;
+              const startedAt = Date.now();
+
+              while (true) {
+                const pollRes = await fetch(pollUrl, { method: 'GET', headers: roleHeaders }).then(r => safeJsonParse(r, 'Poll UCAS status job'));
+                const d = pollRes && pollRes.data ? pollRes.data : null;
+                const status = String((d && d.status) || '').toLowerCase();
+                const prog = (d && d.progress) ? d.progress : null;
+                this.ucasMgmtProgress.current = Number(prog && prog.current ? prog.current : 0) || 0;
+                this.ucasMgmtProgress.total = Number(prog && prog.total ? prog.total : studentsToFetch.length) || studentsToFetch.length;
+                this.ucasMgmtProgress.status = status ? status : 'running';
+
+                if (status === 'complete') {
+                  applyStatuses(d && d.statuses ? d.statuses : {});
+                  this.showMessage('UCAS statuses refreshed.', 'success');
+                  break;
+                }
+                if (status === 'error') {
+                  throw new Error((d && d.error) ? d.error : 'Status job failed');
+                }
+
+                // Safety: avoid infinite loop if something goes wrong
+                if (Date.now() - startedAt > 10 * 60 * 1000) {
+                  throw new Error('Status job timed out');
+                }
+                await wait(900);
+              }
             } catch (e) {
               console.error('UCAS status refresh error:', e);
               this.showMessage(`Failed to refresh UCAS statuses: ${e.message}`, 'error');
