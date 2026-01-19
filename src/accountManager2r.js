@@ -5582,6 +5582,8 @@
               const section1Text = reference && (reference.section1Text || reference.section1_text) ? (reference.section1Text || reference.section1_text) : '';
               const section2 = reference && Array.isArray(reference.section2) ? reference.section2 : [];
               const section3 = reference && Array.isArray(reference.section3) ? reference.section3 : [];
+              const tutorCompiledSection3 = reference && (reference.tutorCompiledSection3 || reference.tutor_compiled_section3) ? (reference.tutorCompiledSection3 || reference.tutor_compiled_section3) : '';
+              const tutorCompiledCompletedAt = reference && (reference.tutorCompiledCompletedAt || reference.tutor_compiled_completed_at) ? (reference.tutorCompiledCompletedAt || reference.tutor_compiled_completed_at) : null;
 
               this.ucasStudentReport = {
                 student: {
@@ -5598,6 +5600,8 @@
                 reference: {
                   section1Text: String(section1Text || '').trim(),
                   section2,
+                  tutorCompiledSection3: String(tutorCompiledSection3 || '').trim(),
+                  tutorCompiledCompletedAt,
                   section3Grouped: this._ucasReportGroupSection3(section3, subjects)
                 }
               };
@@ -5947,15 +5951,22 @@
             if (!r) return { cls: 'ucas-status-badge muted', label: '—', detail: '' };
             const status = String(r.status || '').toLowerCase();
             const finalisedAt = r.finalisedAt || r.finalised_at;
+            const tutorCompletedAt = r.tutorCompiledCompletedAt || r.tutor_compiled_completed_at;
+            const tutorText = String(r.tutorCompiledSection3 || r.tutor_compiled_section3 || '').trim();
+            const tutorHasDraft = tutorText.length > 0;
             if (finalisedAt || status === 'finalised' || status === 'complete' || status === 'completed') {
               return { cls: 'ucas-status-badge success', label: 'Complete', detail: `${Math.max(1, doneCount)}/3 sections` };
             }
+            if (tutorCompletedAt) {
+              return { cls: 'ucas-status-badge success', label: 'Ready', detail: `${doneCount}/3 sections · tutor complete` };
+            }
             if (status === 'in_progress') {
-              return { cls: 'ucas-status-badge warning', label: 'In progress', detail: `${doneCount}/3 sections` };
+              const extra = tutorHasDraft ? ' · tutor drafting' : '';
+              return { cls: 'ucas-status-badge warning', label: 'In progress', detail: `${doneCount}/3 sections${extra}` };
             }
             if (status === 'not_started') {
               // If centre template exists, this is still "in progress" from a workflow perspective (1/3 already done)
-              if (templateDone) return { cls: 'ucas-status-badge warning', label: 'In progress', detail: `${doneCount}/3 sections` };
+              if (templateDone || tutorHasDraft) return { cls: 'ucas-status-badge warning', label: 'In progress', detail: `${doneCount}/3 sections${tutorHasDraft ? ' · tutor drafting' : ''}` };
               return { cls: 'ucas-status-badge muted', label: 'Pending', detail: `${doneCount}/3 sections` };
             }
             return { cls: 'ucas-status-badge muted', label: status ? status.replace(/_/g, ' ') : '—', detail: `${doneCount}/3 sections` };
@@ -8304,6 +8315,13 @@
 
                       <div class="ucas-report-section">
                         <div class="ucas-report-section-title">Subject teacher references</div>
+                        <div v-if="(ucasStudentReport.reference.tutorCompiledSection3 || '').trim()" style="margin-bottom: 12px;">
+                          <div class="ucas-report-section-title" style="margin-top: 0;">Tutor compiled reference (final narrative)</div>
+                          <div class="ucas-report-box">{{ (ucasStudentReport.reference.tutorCompiledSection3 || '').trim() }}</div>
+                          <div class="ucas-report-muted" v-if="ucasStudentReport.reference.tutorCompiledCompletedAt" style="margin-top:6px;">
+                            Marked complete: {{ ucasStudentReport.reference.tutorCompiledCompletedAt }}
+                          </div>
+                        </div>
                         <div v-if="ucasStudentReport.reference.section3Grouped && ucasStudentReport.reference.section3Grouped.length">
                           <div v-for="g in ucasStudentReport.reference.section3Grouped" :key="g.subject" class="ucas-report-subject">
                             <div class="ucas-report-subject-title">{{ g.subject }}</div>
