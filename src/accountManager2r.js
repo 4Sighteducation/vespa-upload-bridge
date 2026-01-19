@@ -2491,9 +2491,17 @@
                 this.apAddSubjectResults = [];
                 return;
               }
+              const schoolId = this.getSelectedSchoolUuidForRls();
+              const academicYear = (this.apAddSubjectAcademicYear || '').trim();
               this.apAddSubjectLoading = true;
+              const params = new URLSearchParams({
+                q,
+                limit: '50'
+              });
+              if (schoolId) params.set('schoolId', schoolId);
+              if (academicYear) params.set('academicYear', academicYear);
               const resp = await fetch(
-                `${this.apiUrl}/api/v3/academic-profile/alps-subjects/search?q=${encodeURIComponent(q)}&limit=50`,
+                `${this.apiUrl}/api/v3/academic-profile/alps-subjects/search?${params.toString()}`,
                 {
                   method: 'GET',
                   headers: {
@@ -2506,6 +2514,9 @@
               const data = await safeJsonParse(resp, 'ALPS subject search');
               if (data && data.success) {
                 this.apAddSubjectResults = data.rows || [];
+                if (!this.apAddSubjectResults.length) {
+                  this.showMessage('No subjects found. Try a different search term.', 'info');
+                }
               } else {
                 throw new Error(data?.message || 'Search failed');
               }
