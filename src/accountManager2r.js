@@ -2459,7 +2459,7 @@
               return true;
             } catch (e) {
               const msg = e?.message || String(e);
-              if (/academic_profile not found/i.test(msg)) return false;
+              if (/not found/i.test(msg) || /academic_profile not found/i.test(msg)) return false;
               console.warn('Academic Profile existence check failed (non-fatal):', e);
               return true;
             }
