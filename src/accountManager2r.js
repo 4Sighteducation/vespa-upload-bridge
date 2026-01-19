@@ -8235,7 +8235,7 @@
 
             <!-- Student Academic Profile Quick View Modal -->
             <div v-if="showStudentAcademicProfileModal" class="am-modal-overlay" @click.self="closeStudentAcademicProfileModal">
-              <div class="am-modal am-modal-large">
+              <div class="am-modal am-modal-large am-modal-wide">
                 <div class="am-modal-header">
                   <h3>🎯 Academic Profile</h3>
                   <button @click="closeStudentAcademicProfileModal" class="am-modal-close">✖</button>
@@ -10482,6 +10482,11 @@
         
         .am-modal-large {
           max-width: 900px;
+        }
+        
+        .am-modal-wide {
+          max-width: 1200px;
+          width: 95%;
         }
         
         .am-modal-description {
