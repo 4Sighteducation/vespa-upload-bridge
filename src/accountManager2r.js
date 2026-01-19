@@ -335,6 +335,11 @@
               behaviourGrade: '',
               attendance: ''
             },
+            apAddSubjectPending: false,
+            showApCreateProfileModal: false,
+            apCreateProfilePriorAttainment: '',
+            apCreateProfileSaving: false,
+            apCreateProfileError: '',
 
             // Academic Profile: manage existing subjects (delete)
             apManageSubjectsLoading: false,
@@ -2417,6 +2422,11 @@
             this.apAddSubjectAdding = false;
             this.apAddSubjectSearchTimer = null;
             this.apAddSubjectFields = { currentGrade: '', targetGrade: '', effortGrade: '', behaviourGrade: '', attendance: '' };
+            this.apAddSubjectPending = false;
+            this.showApCreateProfileModal = false;
+            this.apCreateProfilePriorAttainment = '';
+            this.apCreateProfileSaving = false;
+            this.apCreateProfileError = '';
           },
 
           async checkAcademicProfileExistsForYear(studentEmail, academicYear) {
@@ -2492,7 +2502,7 @@
             }
           },
 
-          async submitApAddSubject() {
+          async performApAddSubject() {
             try {
               const schoolId = this.getSelectedSchoolUuidForRls();
               if (!schoolId) throw new Error('Select a school first.');
@@ -2502,15 +2512,6 @@
               if (!academicYear) throw new Error('Academic Year is required.');
               const alpsKey = (this.apAddSubjectSelectedKey || '').trim();
               if (!alpsKey) throw new Error('Select a subject first.');
-
-              const profileExists = await this.checkAcademicProfileExistsForYear(studentEmail, academicYear);
-              if (!profileExists) {
-                this.showMessage(
-                  `No academic profile found for ${studentEmail} (${academicYear}). Create the profile first (KS5 upload or snapshot), then add subjects.`,
-                  'error'
-                );
-                return;
-              }
 
               this.apAddSubjectAdding = true;
 
@@ -2584,6 +2585,71 @@
               this.showMessage('Add subject failed: ' + (e.message || String(e)), 'error');
             } finally {
               this.apAddSubjectAdding = false;
+            }
+          },
+
+          async submitApAddSubject() {
+            try {
+              const studentEmail = (this.studentAcademicProfileEmail || '').trim().toLowerCase();
+              const academicYear = (this.apAddSubjectAcademicYear || '').trim();
+              const profileExists = await this.checkAcademicProfileExistsForYear(studentEmail, academicYear);
+              if (!profileExists) {
+                this.apAddSubjectPending = true;
+                this.apCreateProfileError = '';
+                this.showApCreateProfileModal = true;
+                return;
+              }
+              await this.performApAddSubject();
+            } catch (e) {
+              console.error('Add subject precheck failed:', e);
+              this.showMessage('Add subject failed: ' + (e.message || String(e)), 'error');
+            }
+          },
+
+          async confirmApCreateProfile() {
+            try {
+              const schoolId = this.getSelectedSchoolUuidForRls();
+              if (!schoolId) throw new Error('Select a school first.');
+              const studentEmail = (this.studentAcademicProfileEmail || '').trim().toLowerCase();
+              if (!studentEmail) throw new Error('Missing student email.');
+              const academicYear = (this.apAddSubjectAcademicYear || '').trim();
+              if (!academicYear) throw new Error('Academic Year is required.');
+
+              const priorRaw = String(this.apCreateProfilePriorAttainment || '').trim();
+              if (!priorRaw) throw new Error('GCSE prior attainment is required.');
+              const priorAttainment = Number(priorRaw);
+              if (!Number.isFinite(priorAttainment)) throw new Error('GCSE prior attainment must be a number (e.g. 6.7).');
+
+              this.apCreateProfileSaving = true;
+              const resp = await fetch(`${this.apiUrl}/api/v3/academic-profile/profile/create`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-user-email': this.userEmail,
+                  'x-user-id': this.userId
+                },
+                body: JSON.stringify({
+                  schoolId,
+                  studentEmail,
+                  academicYear,
+                  priorAttainment
+                })
+              });
+              const data = await safeJsonParse(resp, 'Academic Profile create');
+              if (!data || !data.success) throw new Error(data?.message || 'Failed to create profile');
+
+              this.showMessage('✅ Academic Profile created', 'success');
+              this.showApCreateProfileModal = false;
+              this.apCreateProfilePriorAttainment = '';
+              this.apAddSubjectPending = false;
+
+              await this.performApAddSubject();
+            } catch (e) {
+              console.error('Create profile failed:', e);
+              this.apCreateProfileError = e.message || String(e);
+              this.showMessage('Create profile failed: ' + (e.message || String(e)), 'error');
+            } finally {
+              this.apCreateProfileSaving = false;
             }
           },
 
@@ -8350,6 +8416,44 @@
                   <button @click="closeApAddSubjectModal" class="am-button secondary">Cancel</button>
                   <button @click="submitApAddSubject" class="am-button primary" :disabled="apAddSubjectAdding || !apAddSubjectSelectedKey">
                     {{ apAddSubjectAdding ? 'Adding...' : 'Add Subject' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Academic Profile: Create Profile (Prior Attainment) -->
+            <div v-if="showApCreateProfileModal" class="am-modal-overlay" @click.self="showApCreateProfileModal = false">
+              <div class="am-modal" style="max-width: 520px;">
+                <div class="am-modal-header">
+                  <h3>➕ Create Academic Profile</h3>
+                  <button @click="showApCreateProfileModal = false" class="am-modal-close">✖</button>
+                </div>
+                <div class="am-modal-body">
+                  <div class="am-modal-description" style="background:#fff; border:1px solid #e3e8ef; border-radius:8px; padding:12px;">
+                    This student doesn’t have an Academic Profile for <strong>{{ apAddSubjectAcademicYear }}</strong>.
+                    Enter GCSE prior attainment to create it, then we’ll add the subject.
+                  </div>
+
+                  <div style="margin-top: 12px; display:grid; grid-template-columns: 160px 1fr; gap: 10px; align-items:center;">
+                    <div style="font-weight:700;">Student</div>
+                    <div>{{ studentAcademicProfileEmail }}</div>
+
+                    <div style="font-weight:700;">GCSE Prior Attainment</div>
+                    <input
+                      v-model="apCreateProfilePriorAttainment"
+                      class="am-input-inline"
+                      placeholder="e.g. 6.7"
+                    />
+                  </div>
+
+                  <div v-if="apCreateProfileError" style="margin-top:10px; color:#c62828; font-size:12px;">
+                    {{ apCreateProfileError }}
+                  </div>
+                </div>
+                <div class="am-modal-footer">
+                  <button @click="showApCreateProfileModal = false" class="am-button secondary">Cancel</button>
+                  <button @click="confirmApCreateProfile" class="am-button primary" :disabled="apCreateProfileSaving">
+                    {{ apCreateProfileSaving ? 'Creating...' : 'Create Profile' }}
                   </button>
                 </div>
               </div>
