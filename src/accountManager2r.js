@@ -2319,7 +2319,7 @@
             this.studentAcademicProfileEmail = email;
             this.showStudentAcademicProfileModal = true;
             // Default academic year for subject add (can be edited in modal)
-            this.apAddSubjectAcademicYear = this.apAddSubjectAcademicYear || this.apAcademicYear || this.apSnapAcademicYear || this.deriveAcademicYear();
+            this.apAddSubjectAcademicYear = this.deriveAcademicYear();
 
             // Load subject list for delete controls
             this.refreshApManageSubjects().catch(() => {});
@@ -2390,12 +2390,22 @@
               this.showMessage('Open a student Academic Profile first.', 'warning');
               return;
             }
-            this.apAddSubjectAcademicYear = (this.apAddSubjectAcademicYear || this.apAcademicYear || this.apSnapAcademicYear || this.deriveAcademicYear()).trim();
+            this.apAddSubjectAcademicYear = this.deriveAcademicYear();
             this.apAddSubjectQuery = '';
             this.apAddSubjectResults = [];
             this.apAddSubjectSelectedKey = '';
             this.apAddSubjectFields = { currentGrade: '', targetGrade: '', effortGrade: '', behaviourGrade: '', attendance: '' };
             this.showApAddSubjectModal = true;
+            this.checkAcademicProfileExistsForYear(this.studentAcademicProfileEmail, this.apAddSubjectAcademicYear)
+              .then((exists) => {
+                if (!exists) {
+                  this.showMessage(
+                    `No academic profile found for ${this.apAddSubjectAcademicYear}. Create the profile first (KS5 upload or snapshot) or change the year.`,
+                    'warning'
+                  );
+                }
+              })
+              .catch(() => {});
           },
 
           closeApAddSubjectModal() {
@@ -2407,6 +2417,27 @@
             this.apAddSubjectAdding = false;
             this.apAddSubjectSearchTimer = null;
             this.apAddSubjectFields = { currentGrade: '', targetGrade: '', effortGrade: '', behaviourGrade: '', attendance: '' };
+          },
+
+          async checkAcademicProfileExistsForYear(studentEmail, academicYear) {
+            const email = (studentEmail || '').trim().toLowerCase();
+            const year = (academicYear || '').trim();
+            if (!email || !year) return true;
+
+            try {
+              const url = `${this.dashboardApiUrl}/api/academic-profile/${encodeURIComponent(email)}?academic_year=${encodeURIComponent(year)}`;
+              const resp = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+              const data = await safeJsonParse(resp, 'Academic Profile existence check');
+              if (data && data.success) return true;
+              const message = String(data?.message || data?.error || '');
+              if (/not found/i.test(message)) return false;
+              return true;
+            } catch (e) {
+              const msg = e?.message || String(e);
+              if (/academic_profile not found/i.test(msg)) return false;
+              console.warn('Academic Profile existence check failed (non-fatal):', e);
+              return true;
+            }
           },
 
           formatAlpsKeyDisplay(alpsKey) {
@@ -2472,6 +2503,15 @@
               const alpsKey = (this.apAddSubjectSelectedKey || '').trim();
               if (!alpsKey) throw new Error('Select a subject first.');
 
+              const profileExists = await this.checkAcademicProfileExistsForYear(studentEmail, academicYear);
+              if (!profileExists) {
+                this.showMessage(
+                  `No academic profile found for ${studentEmail} (${academicYear}). Create the profile first (KS5 upload or snapshot), then add subjects.`,
+                  'error'
+                );
+                return;
+              }
+
               this.apAddSubjectAdding = true;
 
               // 1) Ensure it exists in the school's catalogue (optional, but helps future matching/aliases)
@@ -2503,6 +2543,7 @@
                   'x-user-id': this.userId
                 },
                 body: JSON.stringify({
+                  schoolId,
                   studentEmail,
                   academicYear,
                   subjectName: alpsKey,
@@ -2517,7 +2558,13 @@
               });
               const data = await safeJsonParse(resp, 'Academic Profile add subject');
               if (!data || !data.success) {
-                throw new Error(data?.message || 'Failed to add subject');
+                const message = data?.message || 'Failed to add subject';
+                if (/academic_profile not found/i.test(message)) {
+                  throw new Error(
+                    'No academic profile found for this student/year. Create the Academic Profile first (KS5 upload or snapshot) or choose the correct Academic Year, then try again.'
+                  );
+                }
+                throw new Error(message);
               }
 
               this.showMessage(`✅ Added subject: ${alpsKey}`, 'success');
@@ -2617,7 +2664,14 @@
             try {
               const resp = await fetch(
                 `${this.apiUrl}/api/v3/academic-profile/settings?schoolId=${encodeURIComponent(schoolId)}`,
-                { method: 'GET', headers: { 'Content-Type': 'application/json' } }
+                {
+                  method: 'GET',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-user-email': this.userEmail,
+                    'x-user-id': this.userId
+                  }
+                }
               );
               const data = await safeJsonParse(resp, 'Academic Profile school settings load');
               if (data && data.success && data.settings) {
@@ -2663,7 +2717,11 @@
                 `${this.apiUrl}/api/v3/academic-profile/settings`,
                 {
                   method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-user-email': this.userEmail,
+                    'x-user-id': this.userId
+                  },
                   body: JSON.stringify({
                     schoolId,
                     studentsShowMeg: !!this.apSchoolSettings.studentsShowMeg,
@@ -2924,8 +2982,8 @@
             this.apSnapSubjectMapping = null;
             this.apSnapIdentifierColumn = null;
             this.apPopulateTargetFromStg = !!(this.apSchoolSettings && this.apSchoolSettings.defaultPopulateTargetFromStg);
-            if (!this.apAcademicYear) this.apAcademicYear = this.deriveAcademicYear();
-            if (!this.apSnapAcademicYear) this.apSnapAcademicYear = this.apAcademicYear;
+            this.apAcademicYear = this.deriveAcademicYear();
+            this.apSnapAcademicYear = this.apAcademicYear;
           },
 
           closeAcademicProfileUploadModal() {
@@ -2969,8 +3027,8 @@
                 byNorm[normalizeHeaderKey(k)] = row[k];
               });
 
-              const upnValue = (byNorm['upn'] || '').trim ? byNorm['upn'].trim() : (byNorm['upn'] || '');
-              const ulnValue = (byNorm['uln'] || '').trim ? byNorm['uln'].trim() : (byNorm['uln'] || '');
+              const upnValue = String(byNorm['upn'] ?? '').trim();
+              const ulnValue = String(byNorm['uln'] ?? '').trim();
 
               const out = {
                 // Treat ULN as a synonym for UPN in templates/uploads (UCI is separate)
@@ -3026,8 +3084,8 @@
                 byNorm[normalizeHeaderKey(k)] = row[k];
               });
 
-              const upnValue = (byNorm['upn'] || '').trim ? byNorm['upn'].trim() : (byNorm['upn'] || '');
-              const ulnValue = (byNorm['uln'] || '').trim ? byNorm['uln'].trim() : (byNorm['uln'] || '');
+              const upnValue = String(byNorm['upn'] ?? '').trim();
+              const ulnValue = String(byNorm['uln'] ?? '').trim();
 
               const out = {
                 // Treat ULN as a synonym for UPN in templates/uploads (UCI is separate)
