@@ -2346,7 +2346,12 @@
                 forceEditable: true, // staff admin / super user editing
                 defaultVisible: true,
                 forcedStudentEmail: email,
-                mode: 'inline'
+                mode: 'inline',
+                onCreateProfile: () => {
+                  try {
+                    this.openApAddSubjectModal();
+                  } catch (_) {}
+                }
               };
 
               // Ensure the correct academic profile bundle is present before initializing
