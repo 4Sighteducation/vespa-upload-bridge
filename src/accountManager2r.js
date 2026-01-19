@@ -292,6 +292,9 @@
             academicProfileExists: {}, // email -> boolean
             showStudentAcademicProfileModal: false,
             studentAcademicProfileEmail: null,
+            studentAcademicProfileName: '',
+            studentAcademicProfileYearGroup: '',
+            studentAcademicProfileTutorGroup: '',
 
             // UCAS Management (Staff Admin)
             showUcasManagementModal: false,
@@ -2322,6 +2325,10 @@
             }
 
             this.studentAcademicProfileEmail = email;
+            const fullName = (account?.fullName || account?.name || `${account?.firstName || ''} ${account?.lastName || ''}`).trim();
+            this.studentAcademicProfileName = fullName;
+            this.studentAcademicProfileYearGroup = (account?.yearGroup || '').toString().trim();
+            this.studentAcademicProfileTutorGroup = (account?.tutorGroup || account?.group || '').toString().trim();
             this.showStudentAcademicProfileModal = true;
             // Default academic year for subject add (can be edited in modal)
             this.apAddSubjectAcademicYear = this.deriveAcademicYear();
@@ -2381,6 +2388,9 @@
           closeStudentAcademicProfileModal() {
             this.showStudentAcademicProfileModal = false;
             this.studentAcademicProfileEmail = null;
+            this.studentAcademicProfileName = '';
+            this.studentAcademicProfileYearGroup = '';
+            this.studentAcademicProfileTutorGroup = '';
             const container = document.querySelector('#student-academic-profile-container');
             if (container) container.innerHTML = '';
           },
@@ -2632,7 +2642,10 @@
                   schoolId,
                   studentEmail,
                   academicYear,
-                  priorAttainment
+                  priorAttainment,
+                  studentName: (this.studentAcademicProfileName || '').trim(),
+                  yearGroup: (this.studentAcademicProfileYearGroup || '').trim(),
+                  tutorGroup: (this.studentAcademicProfileTutorGroup || '').trim()
                 })
               });
               const data = await safeJsonParse(resp, 'Academic Profile create');
@@ -8437,6 +8450,15 @@
                   <div style="margin-top: 12px; display:grid; grid-template-columns: 160px 1fr; gap: 10px; align-items:center;">
                     <div style="font-weight:700;">Student</div>
                     <div>{{ studentAcademicProfileEmail }}</div>
+
+                    <div style="font-weight:700;">Name</div>
+                    <div>{{ studentAcademicProfileName || '—' }}</div>
+
+                    <div style="font-weight:700;">Year Group</div>
+                    <div>{{ studentAcademicProfileYearGroup || '—' }}</div>
+
+                    <div style="font-weight:700;">Tutor Group</div>
+                    <div>{{ studentAcademicProfileTutorGroup || '—' }}</div>
 
                     <div style="font-weight:700;">GCSE Prior Attainment</div>
                     <input
