@@ -227,6 +227,8 @@
             // Search & filters
             searchQuery: '',
             searchDebounceTimer: null, // For auto-search on typing
+            activitySearchQuery: '',
+            activitySearchDebounceTimer: null,
             selectedYearGroup: '',
             selectedGroup: '', // Tutor group filter (students)
             selectedStaffGroup: '', // Group filter for staff
@@ -246,6 +248,10 @@
             totalAccounts: 0,
             currentPage: 1,
             pageSize: 50,
+            activities: [],
+            totalActivities: 0,
+            activityPage: 1,
+            activityPageSize: 50,
             
             // Selection
             selectedAccounts: [],
@@ -254,6 +260,8 @@
             // Editing
             editingAccount: null,
             editForm: {},
+            editingActivityId: null,
+            activityEditForm: {},
             
             // Connection management
             showConnectionModal: false,
@@ -854,6 +862,15 @@
               this.loadAccounts();
             }, 300); // 300ms delay
           },
+          
+          debouncedActivitySearch() {
+            if (this.activitySearchDebounceTimer) {
+              clearTimeout(this.activitySearchDebounceTimer);
+            }
+            this.activitySearchDebounceTimer = setTimeout(() => {
+              this.loadActivities();
+            }, 300);
+          },
 
           // ========== CONNECTED STAFF FILTER (STUDENTS) ==========
           
@@ -973,6 +990,10 @@
             this.loadingText = 'Loading accounts...';
             
             try {
+              if (this.currentTab === 'activities') {
+                this.loading = false;
+                return;
+              }
               // Determine which school UUID to use for RLS
               let schoolUuidForRls = null;
               
@@ -1106,6 +1127,50 @@
               this.loading = false;
             }
           },
+
+          async loadActivities() {
+            if (!this.isSuperUser) {
+              this.showMessage('Activities manager is super user only.', 'error');
+              return;
+            }
+            if (!this.userEmail || !this.userId) {
+              this.showMessage('Authentication context missing (userEmail/userId). Please refresh.', 'error');
+              return;
+            }
+            this.loading = true;
+            this.loadingText = 'Loading activities...';
+            try {
+              const params = new URLSearchParams({
+                search: this.activitySearchQuery || '',
+                page: this.activityPage,
+                limit: this.activityPageSize
+              });
+              const data = await fetchWithRetry(
+                `${this.apiUrl}/api/v3/accounts/activities?${params.toString()}`,
+                {
+                  method: 'GET',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Email': this.userEmail,
+                    'X-User-Id': String(this.userId)
+                  }
+                },
+                'Load activities',
+                3
+              );
+              if (data.success) {
+                this.activities = data.activities || [];
+                this.totalActivities = data.total || 0;
+              } else {
+                throw new Error(data.message || 'Failed to load activities');
+              }
+            } catch (error) {
+              console.error('Load activities error:', error);
+              this.showMessage('Failed to load activities: ' + error.message, 'error');
+            } finally {
+              this.loading = false;
+            }
+          },
           
           // ========== INLINE EDITING ==========
           
@@ -1130,6 +1195,74 @@
             }
             
             debugLog('Started editing', account);
+          },
+
+          startEditActivity(activity) {
+            this.editingActivityId = activity.id;
+            this.activityEditForm = {
+              name: activity.name || '',
+              name_cy: activity.name_cy || '',
+              book: activity.book || '',
+              month: activity.month || '',
+              theme: activity.theme || '',
+              knack_activity_id: activity.knack_activity_id || '',
+              knack_id: activity.knack_id || '',
+              slides_url_cy: activity.slides_url_cy || '',
+              slides_embed_cy: activity.slides_embed_cy || ''
+            };
+          },
+
+          cancelEditActivity() {
+            this.editingActivityId = null;
+            this.activityEditForm = {};
+          },
+
+          async saveActivity(activity) {
+            if (!activity || !this.editingActivityId) return;
+            if (!this.userEmail || !this.userId) {
+              this.showMessage('Authentication context missing (userEmail/userId). Please refresh.', 'error');
+              return;
+            }
+            this.loading = true;
+            this.loadingText = 'Saving activity...';
+            try {
+              const payload = {
+                name: this.activityEditForm.name,
+                name_cy: this.activityEditForm.name_cy,
+                book: this.activityEditForm.book,
+                month: this.activityEditForm.month,
+                theme: this.activityEditForm.theme,
+                knack_activity_id: this.activityEditForm.knack_activity_id,
+                knack_id: this.activityEditForm.knack_id,
+                slides_url_cy: this.activityEditForm.slides_url_cy,
+                slides_embed_cy: this.activityEditForm.slides_embed_cy
+              };
+              const response = await fetch(
+                `${this.apiUrl}/api/v3/accounts/activities/${encodeURIComponent(activity.id)}`,
+                {
+                  method: 'PATCH',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Email': this.userEmail,
+                    'X-User-Id': String(this.userId)
+                  },
+                  body: JSON.stringify(payload)
+                }
+              );
+              const data = await safeJsonParse(response, 'Save activity');
+              if (!data.success) {
+                throw new Error(data.message || 'Save failed');
+              }
+              const updated = data.activity || payload;
+              this.activities = this.activities.map(item => (item.id === activity.id ? { ...item, ...updated } : item));
+              this.cancelEditActivity();
+              this.showMessage('Activity updated.', 'success');
+            } catch (error) {
+              console.error('Save activity error:', error);
+              this.showMessage('Failed to save activity: ' + error.message, 'error');
+            } finally {
+              this.loading = false;
+            }
           },
           
           async loadAllDepartments() {
@@ -5415,6 +5548,7 @@
             this.allSelected = false;
             this.editingAccount = null;
             this.currentPage = 1;
+            this.editingActivityId = null;
             // Clear search and filters when switching tabs
             this.searchQuery = '';
             this.selectedYearGroup = '';
@@ -5423,6 +5557,12 @@
             this.selectedConnectedStaffType = '';
             this.selectedConnectedStaffEmail = '';
             debugLog('Tab switched, filters cleared', { newTab: tab });
+            if (tab === 'activities') {
+              this.activitySearchQuery = '';
+              this.activityPage = 1;
+              this.loadActivities();
+              return;
+            }
             this.loadAccounts();
           },
           
@@ -6303,6 +6443,15 @@
                   Staff
                   <span v-if="currentTab === 'staff'" class="am-tab-count">{{ totalAccounts }}</span>
                 </button>
+                <button 
+                  v-if="isSuperUser"
+                  class="am-tab" 
+                  :class="{ active: currentTab === 'activities' }"
+                  @click="switchTab('activities')">
+                  <span class="am-icon">🧩</span>
+                  Activities
+                  <span v-if="currentTab === 'activities'" class="am-tab-count">{{ totalActivities }}</span>
+                </button>
               </div>
               <div class="am-tabs-right">
                 <button
@@ -6318,6 +6467,22 @@
             <!-- Toolbar -->
             <div class="am-toolbar">
               <div class="am-toolbar-left">
+                <template v-if="currentTab === 'activities'">
+                  <div class="am-search-box">
+                    <input 
+                      type="text" 
+                      v-model="activitySearchQuery"
+                      @input="debouncedActivitySearch"
+                      @keyup.enter="loadActivities"
+                      placeholder="Search activities (name, Welsh, ID)..."
+                      class="am-search-input"
+                    />
+                    <button @click="loadActivities" class="am-search-btn">
+                      🔍
+                    </button>
+                  </div>
+                </template>
+                <template v-else>
                 <!-- School selector (super user only) -->
                 <select 
                   v-if="isSuperUser" 
@@ -6504,11 +6669,84 @@
                     🔍
                   </button>
                 </div>
+                </template>
               </div>
             </div>
             
             <!-- Data Table -->
-            <div class="am-table-container">
+            <div v-if="currentTab === 'activities'" class="am-table-container">
+              <div class="am-activities-note">
+                Super user access to Supabase activities. Changes save immediately.
+              </div>
+              <table class="am-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Welsh Name</th>
+                    <th>Book</th>
+                    <th>Month</th>
+                    <th>Activity ID</th>
+                    <th>Welsh URL</th>
+                    <th>Welsh Embed</th>
+                    <th class="am-th-actions">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="activities.length === 0 && !loading">
+                    <td colspan="8" class="am-td-empty">
+                      No activities found. Try a different search.
+                    </td>
+                  </tr>
+                  <tr v-for="activity in activities" :key="activity.id" class="am-tr">
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.name || '-' }}</span>
+                      <input v-else v-model="activityEditForm.name" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.name_cy || '-' }}</span>
+                      <input v-else v-model="activityEditForm.name_cy" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.book || '-' }}</span>
+                      <input v-else v-model="activityEditForm.book" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.month || '-' }}</span>
+                      <input v-else v-model="activityEditForm.month" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.knack_activity_id || '-' }}</span>
+                      <input v-else v-model="activityEditForm.knack_activity_id" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.slides_url_cy || '-' }}</span>
+                      <input v-else v-model="activityEditForm.slides_url_cy" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.slides_embed_cy ? 'Embed HTML set' : '-' }}</span>
+                      <textarea v-else v-model="activityEditForm.slides_embed_cy" class="am-textarea-inline"></textarea>
+                    </td>
+                    <td class="am-td-actions">
+                      <div v-if="editingActivityId === activity.id" class="am-action-group">
+                        <button @click="saveActivity(activity)" class="am-button-icon success" title="Save">
+                          ✓
+                        </button>
+                        <button @click="cancelEditActivity" class="am-button-icon danger" title="Cancel">
+                          ✖
+                        </button>
+                      </div>
+                      <div v-else class="am-action-group">
+                        <button @click="startEditActivity(activity)" class="am-button-icon" title="Edit">
+                          ✏️
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div v-else class="am-table-container">
               <table class="am-table">
                 <thead>
                   <tr>
@@ -6749,7 +6987,24 @@
             </div>
             
             <!-- Pagination -->
-            <div v-if="totalAccounts > pageSize" class="am-pagination">
+            <div v-if="currentTab === 'activities' && totalActivities > activityPageSize" class="am-pagination">
+              <button 
+                @click="activityPage--; loadActivities();"
+                :disabled="activityPage === 1"
+                class="am-button secondary">
+                ← Previous
+              </button>
+              <span class="am-page-info">
+                Page {{ activityPage }} of {{ Math.ceil(totalActivities / activityPageSize) }}
+              </span>
+              <button 
+                @click="activityPage++; loadActivities();"
+                :disabled="activityPage >= Math.ceil(totalActivities / activityPageSize)"
+                class="am-button secondary">
+                Next →
+              </button>
+            </div>
+            <div v-if="currentTab !== 'activities' && totalAccounts > pageSize" class="am-pagination">
               <button 
                 @click="currentPage--; loadAccounts();"
                 :disabled="currentPage === 1"
@@ -10816,6 +11071,28 @@
         .am-page-info {
           font-weight: 600;
           color: #666;
+        }
+
+        /* ========== Activities Admin ========== */
+        .am-activities-note {
+          background: #f5f7fa;
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+          padding: 12px 16px;
+          margin-bottom: 12px;
+          font-size: 13px;
+          color: #334155;
+        }
+
+        .am-textarea-inline {
+          width: 100%;
+          min-height: 80px;
+          padding: 8px 10px;
+          border: 1px solid #e0e0e0;
+          border-radius: 6px;
+          font-size: 12px;
+          font-family: inherit;
+          resize: vertical;
         }
         
         /* ========== Empty State ========== */
