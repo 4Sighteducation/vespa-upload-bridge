@@ -229,6 +229,13 @@
             searchDebounceTimer: null, // For auto-search on typing
             activitySearchQuery: '',
             activitySearchDebounceTimer: null,
+            activityFilterLanguage: 'all', // all | welsh | english
+            activityFilterBook: '',
+            activityFilterLevel: '',
+            activityFilterTheme: '',
+            activityBookOptions: [],
+            activityLevelOptions: [],
+            activityThemeOptions: [],
             selectedYearGroup: '',
             selectedGroup: '', // Tutor group filter (students)
             selectedStaffGroup: '', // Group filter for staff
@@ -262,6 +269,20 @@
             editForm: {},
             editingActivityId: null,
             activityEditForm: {},
+            showAddActivityModal: false,
+            addActivityForm: {
+              name: '',
+              name_cy: '',
+              book: '',
+              month: '',
+              level: '',
+              theme: '',
+              vespa_category: '',
+              knack_activity_id: '',
+              knack_id: '',
+              slides_url_cy: '',
+              slides_embed_cy: ''
+            },
             
             // Connection management
             showConnectionModal: false,
@@ -1145,6 +1166,14 @@
                 page: this.activityPage,
                 limit: this.activityPageSize
               });
+              if (this.activityFilterLanguage) {
+                params.append('lang', this.activityFilterLanguage);
+              } else {
+                params.append('lang', 'all');
+              }
+              if (this.activityFilterBook) params.append('book', this.activityFilterBook);
+              if (this.activityFilterLevel) params.append('level', this.activityFilterLevel);
+              if (this.activityFilterTheme) params.append('theme', this.activityFilterTheme);
               const data = await fetchWithRetry(
                 `${this.apiUrl}/api/v3/accounts/activities?${params.toString()}`,
                 {
@@ -1161,6 +1190,7 @@
               if (data.success) {
                 this.activities = data.activities || [];
                 this.totalActivities = data.total || 0;
+                this.updateActivityFilterOptions();
               } else {
                 throw new Error(data.message || 'Failed to load activities');
               }
@@ -1170,6 +1200,23 @@
             } finally {
               this.loading = false;
             }
+          },
+
+          updateActivityFilterOptions() {
+            const books = new Set();
+            const levels = new Set();
+            const themes = new Set();
+            (this.activities || []).forEach(activity => {
+              const book = (activity.book || '').trim();
+              const level = (activity.level || '').trim();
+              const theme = (activity.theme || '').trim();
+              if (book) books.add(book);
+              if (level) levels.add(level);
+              if (theme) themes.add(theme);
+            });
+            this.activityBookOptions = Array.from(books).sort();
+            this.activityLevelOptions = Array.from(levels).sort();
+            this.activityThemeOptions = Array.from(themes).sort();
           },
           
           // ========== INLINE EDITING ==========
@@ -1204,7 +1251,9 @@
               name_cy: activity.name_cy || '',
               book: activity.book || '',
               month: activity.month || '',
+              level: activity.level || '',
               theme: activity.theme || '',
+              vespa_category: activity.vespa_category || '',
               knack_activity_id: activity.knack_activity_id || '',
               knack_id: activity.knack_id || '',
               slides_url_cy: activity.slides_url_cy || '',
@@ -1231,7 +1280,9 @@
                 name_cy: this.activityEditForm.name_cy,
                 book: this.activityEditForm.book,
                 month: this.activityEditForm.month,
+                level: this.activityEditForm.level,
                 theme: this.activityEditForm.theme,
+                vespa_category: this.activityEditForm.vespa_category,
                 knack_activity_id: this.activityEditForm.knack_activity_id,
                 knack_id: this.activityEditForm.knack_id,
                 slides_url_cy: this.activityEditForm.slides_url_cy,
@@ -1260,6 +1311,108 @@
             } catch (error) {
               console.error('Save activity error:', error);
               this.showMessage('Failed to save activity: ' + error.message, 'error');
+            } finally {
+              this.loading = false;
+            }
+          },
+
+          openAddActivityModal() {
+            if (!this.isSuperUser) return;
+            this.showAddActivityModal = true;
+            this.resetAddActivityForm();
+          },
+
+          closeAddActivityModal() {
+            this.showAddActivityModal = false;
+          },
+
+          resetAddActivityForm() {
+            this.addActivityForm = {
+              name: '',
+              name_cy: '',
+              book: '',
+              month: '',
+              level: '',
+              theme: '',
+              vespa_category: '',
+              knack_activity_id: '',
+              knack_id: '',
+              slides_url_cy: '',
+              slides_embed_cy: ''
+            };
+          },
+
+          async createActivity() {
+            if (!this.userEmail || !this.userId) {
+              this.showMessage('Authentication context missing (userEmail/userId). Please refresh.', 'error');
+              return;
+            }
+            if (!this.addActivityForm.name) {
+              this.showMessage('Activity name is required.', 'error');
+              return;
+            }
+            this.loading = true;
+            this.loadingText = 'Creating activity...';
+            try {
+              const response = await fetch(
+                `${this.apiUrl}/api/v3/accounts/activities`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Email': this.userEmail,
+                    'X-User-Id': String(this.userId)
+                  },
+                  body: JSON.stringify(this.addActivityForm)
+                }
+              );
+              const data = await safeJsonParse(response, 'Create activity');
+              if (!data.success) {
+                throw new Error(data.message || 'Create failed');
+              }
+              this.showMessage('Activity created.', 'success');
+              this.closeAddActivityModal();
+              this.activityPage = 1;
+              await this.loadActivities();
+            } catch (error) {
+              console.error('Create activity error:', error);
+              this.showMessage('Failed to create activity: ' + error.message, 'error');
+            } finally {
+              this.loading = false;
+            }
+          },
+
+          async deleteActivity(activity) {
+            if (!activity || !activity.id) return;
+            const ok = confirm(`Delete activity "${activity.name || activity.id}"? This cannot be undone.`);
+            if (!ok) return;
+            if (!this.userEmail || !this.userId) {
+              this.showMessage('Authentication context missing (userEmail/userId). Please refresh.', 'error');
+              return;
+            }
+            this.loading = true;
+            this.loadingText = 'Deleting activity...';
+            try {
+              const response = await fetch(
+                `${this.apiUrl}/api/v3/accounts/activities/${encodeURIComponent(activity.id)}`,
+                {
+                  method: 'DELETE',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Email': this.userEmail,
+                    'X-User-Id': String(this.userId)
+                  }
+                }
+              );
+              const data = await safeJsonParse(response, 'Delete activity');
+              if (!data.success) {
+                throw new Error(data.message || 'Delete failed');
+              }
+              this.showMessage('Activity deleted.', 'success');
+              await this.loadActivities();
+            } catch (error) {
+              console.error('Delete activity error:', error);
+              this.showMessage('Failed to delete activity: ' + error.message, 'error');
             } finally {
               this.loading = false;
             }
@@ -5560,6 +5713,10 @@
             if (tab === 'activities') {
               this.activitySearchQuery = '';
               this.activityPage = 1;
+              this.activityFilterLanguage = 'all';
+              this.activityFilterBook = '';
+              this.activityFilterLevel = '';
+              this.activityFilterTheme = '';
               this.loadActivities();
               return;
             }
@@ -6468,6 +6625,23 @@
             <div class="am-toolbar">
               <div class="am-toolbar-left">
                 <template v-if="currentTab === 'activities'">
+                  <select v-model="activityFilterLanguage" @change="loadActivities" class="am-select">
+                    <option value="all">All Languages</option>
+                    <option value="welsh">Welsh Only</option>
+                    <option value="english">English Only</option>
+                  </select>
+                  <select v-model="activityFilterBook" @change="loadActivities" class="am-select">
+                    <option value="">All Books</option>
+                    <option v-for="book in activityBookOptions" :key="book" :value="book">{{ book }}</option>
+                  </select>
+                  <select v-model="activityFilterLevel" @change="loadActivities" class="am-select">
+                    <option value="">All Levels</option>
+                    <option v-for="level in activityLevelOptions" :key="level" :value="level">{{ level }}</option>
+                  </select>
+                  <select v-model="activityFilterTheme" @change="loadActivities" class="am-select">
+                    <option value="">All Themes</option>
+                    <option v-for="theme in activityThemeOptions" :key="theme" :value="theme">{{ theme }}</option>
+                  </select>
                   <div class="am-search-box">
                     <input 
                       type="text" 
@@ -6481,6 +6655,9 @@
                       🔍
                     </button>
                   </div>
+                  <button @click="openAddActivityModal" class="am-button primary">
+                    ➕ Add Activity
+                  </button>
                 </template>
                 <template v-else>
                 <!-- School selector (super user only) -->
@@ -6684,6 +6861,8 @@
                     <th>Name</th>
                     <th>Welsh Name</th>
                     <th>Book</th>
+                    <th>Level</th>
+                    <th>Theme</th>
                     <th>Month</th>
                     <th>Activity ID</th>
                     <th>Welsh URL</th>
@@ -6693,7 +6872,7 @@
                 </thead>
                 <tbody>
                   <tr v-if="activities.length === 0 && !loading">
-                    <td colspan="8" class="am-td-empty">
+                    <td colspan="10" class="am-td-empty">
                       No activities found. Try a different search.
                     </td>
                   </tr>
@@ -6709,6 +6888,14 @@
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
                       <span v-if="editingActivityId !== activity.id">{{ activity.book || '-' }}</span>
                       <input v-else v-model="activityEditForm.book" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.level || '-' }}</span>
+                      <input v-else v-model="activityEditForm.level" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.theme || '-' }}</span>
+                      <input v-else v-model="activityEditForm.theme" class="am-input-inline" />
                     </td>
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
                       <span v-if="editingActivityId !== activity.id">{{ activity.month || '-' }}</span>
@@ -6738,6 +6925,9 @@
                       <div v-else class="am-action-group">
                         <button @click="startEditActivity(activity)" class="am-button-icon" title="Edit">
                           ✏️
+                        </button>
+                        <button @click="deleteActivity(activity)" class="am-button-icon danger" title="Delete">
+                          🗑️
                         </button>
                       </div>
                     </td>
@@ -7022,6 +7212,68 @@
               </button>
             </div>
             
+            <!-- Add Activity Modal (Super User) -->
+            <div v-if="showAddActivityModal" class="am-modal-overlay" @click.self="closeAddActivityModal">
+              <div class="am-modal">
+                <div class="am-modal-header">
+                  <h3>➕ Add Activity</h3>
+                  <button @click="closeAddActivityModal" class="am-modal-close">✖</button>
+                </div>
+                <div class="am-modal-body">
+                  <div class="am-form-grid">
+                    <div class="am-form-group">
+                      <label>Activity Name *</label>
+                      <input v-model="addActivityForm.name" class="am-input" placeholder="e.g. 6 Types of Goal" />
+                    </div>
+                    <div class="am-form-group">
+                      <label>Welsh Name</label>
+                      <input v-model="addActivityForm.name_cy" class="am-input" />
+                    </div>
+                    <div class="am-form-group">
+                      <label>Book</label>
+                      <input v-model="addActivityForm.book" class="am-input" />
+                    </div>
+                    <div class="am-form-group">
+                      <label>Level</label>
+                      <input v-model="addActivityForm.level" class="am-input" />
+                    </div>
+                    <div class="am-form-group">
+                      <label>Theme</label>
+                      <input v-model="addActivityForm.theme" class="am-input" />
+                    </div>
+                    <div class="am-form-group">
+                      <label>Month</label>
+                      <input v-model="addActivityForm.month" class="am-input" />
+                    </div>
+                    <div class="am-form-group">
+                      <label>VESPA Category</label>
+                      <input v-model="addActivityForm.vespa_category" class="am-input" placeholder="Vision / Effort / Systems / Practice / Attitude" />
+                    </div>
+                    <div class="am-form-group">
+                      <label>Knack Activity ID</label>
+                      <input v-model="addActivityForm.knack_activity_id" class="am-input" />
+                    </div>
+                    <div class="am-form-group">
+                      <label>Knack Record ID</label>
+                      <input v-model="addActivityForm.knack_id" class="am-input" />
+                    </div>
+                    <div class="am-form-group am-form-wide">
+                      <label>Welsh Slides URL</label>
+                      <input v-model="addActivityForm.slides_url_cy" class="am-input" />
+                    </div>
+                    <div class="am-form-group am-form-wide">
+                      <label>Welsh Slides Embed HTML</label>
+                      <textarea v-model="addActivityForm.slides_embed_cy" class="am-textarea-inline"></textarea>
+                    </div>
+                  </div>
+                </div>
+                <div class="am-modal-footer">
+                  <button @click="closeAddActivityModal" class="am-button secondary">Cancel</button>
+                  <button @click="createActivity" class="am-button primary">Create</button>
+                </div>
+              </div>
+            </div>
+
             <!-- Connection Management Modal -->
             <div v-if="showConnectionModal" class="am-modal-overlay" @click.self="closeConnectionModal">
               <div class="am-modal">
@@ -10924,6 +11176,16 @@
         
         .am-form-group .am-select {
           width: 100%;
+        }
+
+        .am-form-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          gap: 16px;
+        }
+
+        .am-form-wide {
+          grid-column: 1 / -1;
         }
         
         @keyframes am-slideUp {

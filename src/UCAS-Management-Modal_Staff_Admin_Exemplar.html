@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UCAS Management — Staff Admin Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f8f9fc;
+      --card: #ffffff;
+      --text: #1a1a2e;
+      --text-secondary: #64748b;
+      --text-muted: #94a3b8;
+      --border: #e2e8f0;
+      --border-light: #f1f5f9;
+      --primary: #3E3285;
+      --primary-hover: #2d2461;
+      --primary-light: #f0eef8;
+      --success: #059669;
+      --success-light: #ecfdf5;
+      --success-border: #a7f3d0;
+      --warning: #d97706;
+      --warning-light: #fffbeb;
+      --warning-border: #fde68a;
+      --danger: #dc2626;
+      --danger-light: #fef2f2;
+      --info: #0284c7;
+      --info-light: #e0f2fe;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --radius-lg: 16px;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+      --shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+      --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+      --shadow-xl: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+      --transition: 0.2s ease;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+      background: #1a1a2e;
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    /* Modal Overlay */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 1000;
+    }
+
+    /* Modal */
+    .modal {
+      background: var(--card);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-xl);
+      width: 100%;
+      max-width: 1200px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: modalIn 0.25s ease-out;
+    }
+
+    @keyframes modalIn {
+      from {
+        opacity: 0;
+        transform: scale(0.95) translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    /* Modal Header */
+    .modal-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: linear-gradient(135deg, var(--primary) 0%, #4a3d9e 100%);
+      color: white;
+    }
+
+    .modal-header h2 {
+      font-size: 20px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .modal-header h2 svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    .modal-close {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255,255,255,0.15);
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--transition);
+    }
+
+    .modal-close:hover {
+      background: rgba(255,255,255,0.25);
+    }
+
+    .modal-close svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* Modal Body */
+    .modal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      background: var(--bg);
+    }
+
+    /* Tab Navigation */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--border-light);
+      padding: 4px;
+      border-radius: var(--radius);
+      margin-bottom: 20px;
+      width: fit-content;
+    }
+
+    .tab {
+      padding: 10px 20px;
+      border: none;
+      background: transparent;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all var(--transition);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tab:hover {
+      color: var(--text);
+      background: rgba(255,255,255,0.5);
+    }
+
+    .tab.active {
+      background: white;
+      color: var(--primary);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .tab svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* Filter Bar */
+    .filter-bar {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+
+    .filter-row {
+      display: flex;
+      gap: 16px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .filter-group.grow {
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .filter-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .filter-input,
+    .filter-select {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 14px;
+      color: var(--text);
+      background: white;
+      transition: all var(--transition);
+      min-width: 140px;
+    }
+
+    .filter-input:focus,
+    .filter-select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-light);
+    }
+
+    .filter-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .filter-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--border-light);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+
+    .filter-checkbox:hover {
+      background: var(--primary-light);
+    }
+
+    .filter-checkbox input {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--primary);
+    }
+
+    .filter-checkbox span {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    /* Action Bar */
+    .action-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .action-group {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 16px;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition);
+      border: none;
+      white-space: nowrap;
+    }
+
+    .btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
+
+    .btn-secondary {
+      background: white;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: var(--border-light);
+      border-color: #cbd5e1;
+    }
+
+    .btn-success {
+      background: var(--success);
+      color: white;
+    }
+
+    .btn-success:hover:not(:disabled) {
+      background: #047857;
+    }
+
+    /* Stats Cards */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .stat-card.success .stat-value { color: var(--success); }
+    .stat-card.warning .stat-value { color: var(--warning); }
+    .stat-card.info .stat-value { color: var(--info); }
+
+    /* Progress Indicator */
+    .progress-indicator {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--info-light);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      color: var(--info);
+      font-weight: 500;
+    }
+
+    .progress-indicator .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(2, 132, 199, 0.2);
+      border-top-color: var(--info);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Table */
+    .table-container {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .table-scroll {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 900px;
+    }
+
+    th, td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    th {
+      background: var(--border-light);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      position: sticky;
+      top: 0;
+    }
+
+    tbody tr {
+      transition: background var(--transition);
+    }
+
+    tbody tr:hover {
+      background: var(--border-light);
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    td {
+      font-size: 14px;
+    }
+
+    .student-name {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .student-email {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .cell-muted {
+      color: var(--text-muted);
+    }
+
+    /* Status Badges */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .status-badge svg {
+      width: 12px;
+      height: 12px;
+    }
+
+    .status-badge.success {
+      background: var(--success-light);
+      color: var(--success);
+    }
+
+    .status-badge.warning {
+      background: var(--warning-light);
+      color: var(--warning);
+    }
+
+    .status-badge.muted {
+      background: var(--border-light);
+      color: var(--text-muted);
+    }
+
+    .status-badge.info {
+      background: var(--info-light);
+      color: var(--info);
+    }
+
+    .status-badge.danger {
+      background: var(--danger-light);
+      color: var(--danger);
+    }
+
+    /* Reference Status - More detailed */
+    .reference-status {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .reference-main {
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .reference-detail {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    /* Action Button in Table */
+    .btn-table {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-secondary);
+    }
+
+    .empty-state svg {
+      width: 48px;
+      height: 48px;
+      margin-bottom: 16px;
+      opacity: 0.3;
+    }
+
+    .empty-state h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .empty-state p {
+      font-size: 14px;
+    }
+
+    /* Centre Template Tab */
+    .template-section {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .template-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .template-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .template-subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    .template-body {
+      padding: 20px;
+    }
+
+    .template-textarea {
+      width: 100%;
+      min-height: 300px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--text);
+      resize: vertical;
+      transition: all var(--transition);
+    }
+
+    .template-textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-light);
+    }
+
+    .template-footer {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      background: var(--border-light);
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .char-count {
+      float: right;
+      font-weight: 600;
+    }
+
+    /* Table Footer */
+    .table-footer {
+      padding: 12px 16px;
+      background: var(--border-light);
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Demo Banner */
+    .demo-banner {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 12px 18px;
+      border-radius: var(--radius);
+      margin-bottom: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .demo-banner svg {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .modal {
+        max-height: 100vh;
+        border-radius: 0;
+      }
+
+      .modal-body {
+        padding: 16px;
+      }
+
+      .filter-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .filter-group {
+        width: 100%;
+      }
+
+      .filter-group.grow {
+        min-width: auto;
+      }
+
+      .action-bar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .action-group {
+        justify-content: center;
+      }
+
+      .stats-row {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="modal-overlay">
+    <div class="modal">
+      <!-- Header -->
+      <div class="modal-header">
+        <h2>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+            <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+          </svg>
+          UCAS Management
+        </h2>
+        <button class="modal-close" onclick="alert('Close modal')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="modal-body">
+        <!-- Demo Banner -->
+        <div class="demo-banner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          <span><strong>Demo Mode</strong> — Interactive preview with sample data. Try the filters and buttons.</span>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+          <button class="tab active" id="tabStatus" onclick="switchTab('status')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+              <rect x="9" y="3" width="6" height="4" rx="1"/>
+              <path d="M9 14l2 2 4-4"/>
+            </svg>
+            Student Status
+          </button>
+          <button class="tab" id="tabTemplate" onclick="switchTab('template')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+            Centre Template
+          </button>
+        </div>
+
+        <!-- Status Tab Content -->
+        <div id="statusContent">
+          <!-- Filter Bar -->
+          <div class="filter-bar">
+            <div class="filter-row">
+              <div class="filter-group">
+                <span class="filter-label">Academic Year</span>
+                <input type="text" class="filter-input" value="2025-2026" placeholder="e.g. 2025-2026" style="width: 130px;">
+              </div>
+              <div class="filter-group">
+                <span class="filter-label">Tutor Group</span>
+                <input type="text" class="filter-input" placeholder="e.g. 13A" style="width: 100px;" id="tutorGroupFilter">
+              </div>
+              <div class="filter-group">
+                <span class="filter-label">Status</span>
+                <select class="filter-select" id="statusFilter" onchange="filterTable()">
+                  <option value="all">All students</option>
+                  <option value="completed">Statement completed</option>
+                  <option value="in_progress">In progress</option>
+                  <option value="not_started">Not started</option>
+                </select>
+              </div>
+              <div class="filter-group grow">
+                <span class="filter-label">Search</span>
+                <input type="text" class="filter-input" placeholder="Search by name, email, or group..." style="width: 100%;" id="searchFilter" oninput="filterTable()">
+              </div>
+              <label class="filter-checkbox">
+                <input type="checkbox" checked>
+                <span>Year 12+ only</span>
+              </label>
+              <button class="btn btn-secondary" onclick="reloadStudents()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+                  <path d="M23 4v6h-6M1 20v-6h6"/>
+                  <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                </svg>
+                Reload
+              </button>
+            </div>
+          </div>
+
+          <!-- Stats Row -->
+          <div class="stats-row">
+            <div class="stat-card">
+              <div class="stat-value" id="statTotal">47</div>
+              <div class="stat-label">Total Students</div>
+            </div>
+            <div class="stat-card success">
+              <div class="stat-value" id="statCompleted">18</div>
+              <div class="stat-label">Completed</div>
+            </div>
+            <div class="stat-card warning">
+              <div class="stat-value" id="statProgress">21</div>
+              <div class="stat-label">In Progress</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="statNotStarted">8</div>
+              <div class="stat-label">Not Started</div>
+            </div>
+            <div class="stat-card info">
+              <div class="stat-value" id="statRefComplete">12</div>
+              <div class="stat-label">References Done</div>
+            </div>
+          </div>
+
+          <!-- Action Bar -->
+          <div class="action-bar">
+            <div class="action-group">
+              <button class="btn btn-primary" id="refreshBtn" onclick="refreshStatuses()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M23 4v6h-6M1 20v-6h6"/>
+                  <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                </svg>
+                Refresh UCAS Status
+              </button>
+              <button class="btn btn-secondary" onclick="downloadReport()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Export CSV
+              </button>
+            </div>
+            <div id="progressBox" style="display: none;">
+              <div class="progress-indicator">
+                <div class="spinner"></div>
+                <span id="progressText">Fetching status 0/47...</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Table -->
+          <div class="table-container">
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <th>Year</th>
+                    <th>Tutor Group</th>
+                    <th>Application</th>
+                    <th>Personal Statement</th>
+                    <th>Reference</th>
+                    <th style="text-align: right;">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="studentTableBody">
+                  <!-- Rows populated by JS -->
+                </tbody>
+              </table>
+            </div>
+            <div class="table-footer">
+              <span id="tableCount">Showing 47 students</span>
+              <span>Click "Refresh UCAS Status" to fetch latest data from applications</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Template Tab Content -->
+        <div id="templateContent" style="display: none;">
+          <div class="template-section">
+            <div class="template-header">
+              <div>
+                <div class="template-title">Centre Template (Section 1)</div>
+                <div class="template-subtitle">This reusable statement about your centre is used across all applicants. Only staff admins should edit this.</div>
+              </div>
+              <div class="action-group">
+                <button class="btn btn-secondary" onclick="loadTemplate()">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+                    <path d="M23 4v6h-6M1 20v-6h6"/>
+                    <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                  </svg>
+                  Reload
+                </button>
+                <button class="btn btn-success" onclick="saveTemplate()">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+                    <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
+                    <polyline points="17 21 17 13 7 13 7 21"/>
+                    <polyline points="7 3 7 8 15 8"/>
+                  </svg>
+                  Save Template
+                </button>
+              </div>
+            </div>
+            <div class="template-body">
+              <textarea class="template-textarea" id="templateText" oninput="updateCharCount()">Westfield Academy is a comprehensive sixth form college in the heart of Manchester, serving approximately 1,200 students across Years 12 and 13. Our institution has consistently achieved excellent results, with 85% of students achieving grades A*-C at A-Level.
+
+We pride ourselves on our supportive learning environment and extensive enrichment programme. Students benefit from dedicated pastoral support, university preparation workshops, and a wide range of extracurricular activities including Duke of Edinburgh, Model United Nations, and various sports teams.
+
+Our careers guidance team works closely with students from the start of Year 12, offering one-to-one university application support, mock interviews, and connections with alumni currently studying at Russell Group universities.
+
+We have strong partnerships with local employers and universities, providing work experience opportunities and guest lectures that help students make informed decisions about their futures.</textarea>
+            </div>
+            <div class="template-footer">
+              <span>This template will appear in Section 1 of all UCAS references for your centre.</span>
+              <span class="char-count" id="charCount">847 characters</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Sample student data
+    const students = [
+      { name: 'Emily Bennett', email: 'emily.bennett@westfield.ac.uk', year: '13', group: '13A', appStatus: 'started', statement: 'completed', statementDate: '2025-10-15', reference: 'complete', refSections: '3/3' },
+      { name: 'James Wilson', email: 'james.wilson@westfield.ac.uk', year: '13', group: '13A', appStatus: 'started', statement: 'in_progress', statementDate: null, reference: 'in_progress', refSections: '2/3' },
+      { name: 'Sophie Taylor', email: 'sophie.taylor@westfield.ac.uk', year: '13', group: '13B', appStatus: 'started', statement: 'completed', statementDate: '2025-10-18', reference: 'complete', refSections: '3/3' },
+      { name: 'Oliver Brown', email: 'oliver.brown@westfield.ac.uk', year: '13', group: '13B', appStatus: 'started', statement: 'in_progress', statementDate: null, reference: 'pending', refSections: '0/3' },
+      { name: 'Charlotte Davies', email: 'charlotte.davies@westfield.ac.uk', year: '13', group: '13C', appStatus: 'not_started', statement: 'not_started', statementDate: null, reference: 'pending', refSections: '0/3' },
+      { name: 'Harry Thompson', email: 'harry.thompson@westfield.ac.uk', year: '13', group: '13C', appStatus: 'started', statement: 'completed', statementDate: '2025-10-12', reference: 'in_progress', refSections: '1/3' },
+      { name: 'Amelia Roberts', email: 'amelia.roberts@westfield.ac.uk', year: '13', group: '13A', appStatus: 'started', statement: 'completed', statementDate: '2025-10-20', reference: 'complete', refSections: '3/3' },
+      { name: 'George Evans', email: 'george.evans@westfield.ac.uk', year: '13', group: '13D', appStatus: 'started', statement: 'in_progress', statementDate: null, reference: 'pending', refSections: '0/3' },
+      { name: 'Isla Walker', email: 'isla.walker@westfield.ac.uk', year: '12', group: '12A', appStatus: 'not_started', statement: 'not_started', statementDate: null, reference: 'pending', refSections: '0/3' },
+      { name: 'Jack Harris', email: 'jack.harris@westfield.ac.uk', year: '13', group: '13B', appStatus: 'started', statement: 'completed', statementDate: '2025-10-08', reference: 'complete', refSections: '3/3' },
+      { name: 'Mia Clark', email: 'mia.clark@westfield.ac.uk', year: '13', group: '13C', appStatus: 'started', statement: 'in_progress', statementDate: null, reference: 'in_progress', refSections: '2/3' },
+      { name: 'Noah Lewis', email: 'noah.lewis@westfield.ac.uk', year: '13', group: '13A', appStatus: 'started', statement: 'completed', statementDate: '2025-10-22', reference: 'complete', refSections: '3/3' },
+    ];
+
+    function renderTable(data) {
+      const tbody = document.getElementById('studentTableBody');
+      
+      if (data.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7">
+              <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M8 15h8M9 9h.01M15 9h.01"/>
+                </svg>
+                <h3>No students found</h3>
+                <p>Try adjusting your filters or search query</p>
+              </div>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = data.map(s => `
+        <tr>
+          <td>
+            <div class="student-name">${s.name}</div>
+            <div class="student-email">${s.email}</div>
+          </td>
+          <td>${s.year}</td>
+          <td>${s.group}</td>
+          <td>
+            ${s.appStatus === 'started' 
+              ? '<span class="status-badge info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Started</span>'
+              : '<span class="status-badge muted">Not started</span>'}
+          </td>
+          <td>
+            ${s.statement === 'completed' 
+              ? `<span class="status-badge success"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Completed</span>`
+              : s.statement === 'in_progress'
+              ? '<span class="status-badge warning">In progress</span>'
+              : '<span class="status-badge muted">Not started</span>'}
+          </td>
+          <td>
+            <div class="reference-status">
+              ${s.reference === 'complete' 
+                ? `<span class="reference-main" style="color: var(--success);">✓ Complete</span>`
+                : s.reference === 'in_progress'
+                ? `<span class="reference-main" style="color: var(--warning);">In progress</span>`
+                : `<span class="reference-main" style="color: var(--text-muted);">Pending</span>`}
+              <span class="reference-detail">${s.refSections} sections</span>
+            </div>
+          </td>
+          <td style="text-align: right;">
+            <button class="btn btn-secondary btn-table" onclick="openStudent('${s.email}')">
+              Open UCAS
+            </button>
+          </td>
+        </tr>
+      `).join('');
+
+      document.getElementById('tableCount').textContent = `Showing ${data.length} students`;
+    }
+
+    function filterTable() {
+      const search = document.getElementById('searchFilter').value.toLowerCase();
+      const status = document.getElementById('statusFilter').value;
+      const tutorGroup = document.getElementById('tutorGroupFilter').value.toLowerCase();
+
+      let filtered = students.filter(s => {
+        // Search filter
+        if (search) {
+          const haystack = `${s.name} ${s.email} ${s.group}`.toLowerCase();
+          if (!haystack.includes(search)) return false;
+        }
+
+        // Tutor group filter
+        if (tutorGroup && s.group.toLowerCase() !== tutorGroup) return false;
+
+        // Status filter
+        if (status === 'completed' && s.statement !== 'completed') return false;
+        if (status === 'in_progress' && s.statement !== 'in_progress') return false;
+        if (status === 'not_started' && s.statement !== 'not_started') return false;
+
+        return true;
+      });
+
+      renderTable(filtered);
+      updateStats(filtered);
+    }
+
+    function updateStats(data) {
+      const total = data.length;
+      const completed = data.filter(s => s.statement === 'completed').length;
+      const inProgress = data.filter(s => s.statement === 'in_progress').length;
+      const notStarted = data.filter(s => s.statement === 'not_started').length;
+      const refComplete = data.filter(s => s.reference === 'complete').length;
+
+      document.getElementById('statTotal').textContent = total;
+      document.getElementById('statCompleted').textContent = completed;
+      document.getElementById('statProgress').textContent = inProgress;
+      document.getElementById('statNotStarted').textContent = notStarted;
+      document.getElementById('statRefComplete').textContent = refComplete;
+    }
+
+    function switchTab(tab) {
+      document.getElementById('tabStatus').classList.toggle('active', tab === 'status');
+      document.getElementById('tabTemplate').classList.toggle('active', tab === 'template');
+      document.getElementById('statusContent').style.display = tab === 'status' ? 'block' : 'none';
+      document.getElementById('templateContent').style.display = tab === 'template' ? 'block' : 'none';
+    }
+
+    function refreshStatuses() {
+      const btn = document.getElementById('refreshBtn');
+      const progressBox = document.getElementById('progressBox');
+      const progressText = document.getElementById('progressText');
+      
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> Refreshing...';
+      progressBox.style.display = 'block';
+
+      let current = 0;
+      const total = students.length;
+
+      const interval = setInterval(() => {
+        current++;
+        progressText.textContent = `Fetching status ${current}/${total}...`;
+        
+        if (current >= total) {
+          clearInterval(interval);
+          btn.disabled = false;
+          btn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6M1 20v-6h6"/>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+            Refresh UCAS Status
+          `;
+          progressBox.style.display = 'none';
+          alert('UCAS statuses refreshed successfully!');
+        }
+      }, 150);
+    }
+
+    function reloadStudents() {
+      alert('Reloading student list...');
+      filterTable();
+    }
+
+    function downloadReport() {
+      alert('Generating CSV report for download...');
+    }
+
+    function openStudent(email) {
+      alert(`Opening UCAS application for: ${email}`);
+    }
+
+    function loadTemplate() {
+      alert('Reloading centre template from server...');
+    }
+
+    function saveTemplate() {
+      alert('Centre template saved successfully!');
+    }
+
+    function updateCharCount() {
+      const text = document.getElementById('templateText').value;
+      document.getElementById('charCount').textContent = `${text.length.toLocaleString()} characters`;
+    }
+
+    // Initial render
+    renderTable(students);
+    updateStats(students);
+  </script>
+</body>
+</html>
