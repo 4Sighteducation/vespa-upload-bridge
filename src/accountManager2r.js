@@ -233,6 +233,7 @@
             activityFilterBook: '',
             activityFilterLevel: '',
             activityFilterTheme: '',
+            activityShowInactive: false,
             activityBookOptions: [],
             activityLevelOptions: [],
             activityThemeOptions: [],
@@ -280,8 +281,11 @@
               vespa_category: '',
               knack_activity_id: '',
               knack_id: '',
+              slides_url_en: '',
+              pdf_url_en: '',
               slides_url_cy: '',
-              slides_embed_cy: ''
+              slides_embed_cy: '',
+              pdf_url_cy: ''
             },
             
             // Connection management
@@ -1174,6 +1178,7 @@
               if (this.activityFilterBook) params.append('book', this.activityFilterBook);
               if (this.activityFilterLevel) params.append('level', this.activityFilterLevel);
               if (this.activityFilterTheme) params.append('theme', this.activityFilterTheme);
+              if (this.activityShowInactive) params.append('includeInactive', 'true');
               const data = await fetchWithRetry(
                 `${this.apiUrl}/api/v3/accounts/activities?${params.toString()}`,
                 {
@@ -1256,8 +1261,11 @@
               vespa_category: activity.vespa_category || '',
               knack_activity_id: activity.knack_activity_id || '',
               knack_id: activity.knack_id || '',
+              slides_url_en: activity.slides_url_en || '',
+              pdf_url_en: activity.pdf_url_en || '',
               slides_url_cy: activity.slides_url_cy || '',
-              slides_embed_cy: activity.slides_embed_cy || ''
+              slides_embed_cy: activity.slides_embed_cy || '',
+              pdf_url_cy: activity.pdf_url_cy || ''
             };
           },
 
@@ -1285,8 +1293,11 @@
                 vespa_category: this.activityEditForm.vespa_category,
                 knack_activity_id: this.activityEditForm.knack_activity_id,
                 knack_id: this.activityEditForm.knack_id,
+                slides_url_en: this.activityEditForm.slides_url_en,
+                pdf_url_en: this.activityEditForm.pdf_url_en,
                 slides_url_cy: this.activityEditForm.slides_url_cy,
-                slides_embed_cy: this.activityEditForm.slides_embed_cy
+                slides_embed_cy: this.activityEditForm.slides_embed_cy,
+                pdf_url_cy: this.activityEditForm.pdf_url_cy
               };
               const response = await fetch(
                 `${this.apiUrl}/api/v3/accounts/activities/${encodeURIComponent(activity.id)}`,
@@ -1337,8 +1348,11 @@
               vespa_category: '',
               knack_activity_id: '',
               knack_id: '',
+              slides_url_en: '',
+              pdf_url_en: '',
               slides_url_cy: '',
-              slides_embed_cy: ''
+              slides_embed_cy: '',
+              pdf_url_cy: ''
             };
           },
 
@@ -1384,35 +1398,36 @@
 
           async deleteActivity(activity) {
             if (!activity || !activity.id) return;
-            const ok = confirm(`Delete activity "${activity.name || activity.id}"? This cannot be undone.`);
+            const ok = confirm(`Deactivate activity "${activity.name || activity.id}"? This will hide it from the main table.`);
             if (!ok) return;
             if (!this.userEmail || !this.userId) {
               this.showMessage('Authentication context missing (userEmail/userId). Please refresh.', 'error');
               return;
             }
             this.loading = true;
-            this.loadingText = 'Deleting activity...';
+            this.loadingText = 'Deactivating activity...';
             try {
               const response = await fetch(
                 `${this.apiUrl}/api/v3/accounts/activities/${encodeURIComponent(activity.id)}`,
                 {
-                  method: 'DELETE',
+                  method: 'PATCH',
                   headers: {
                     'Content-Type': 'application/json',
                     'X-User-Email': this.userEmail,
                     'X-User-Id': String(this.userId)
-                  }
+                  },
+                  body: JSON.stringify({ is_active: false })
                 }
               );
-              const data = await safeJsonParse(response, 'Delete activity');
+              const data = await safeJsonParse(response, 'Deactivate activity');
               if (!data.success) {
-                throw new Error(data.message || 'Delete failed');
+                throw new Error(data.message || 'Deactivate failed');
               }
-              this.showMessage('Activity deleted.', 'success');
+              this.showMessage('Activity deactivated.', 'success');
               await this.loadActivities();
             } catch (error) {
-              console.error('Delete activity error:', error);
-              this.showMessage('Failed to delete activity: ' + error.message, 'error');
+              console.error('Deactivate activity error:', error);
+              this.showMessage('Failed to deactivate activity: ' + error.message, 'error');
             } finally {
               this.loading = false;
             }
@@ -6630,6 +6645,10 @@
                     <option value="welsh">Welsh Only</option>
                     <option value="english">English Only</option>
                   </select>
+                  <label class="am-checkbox-inline">
+                    <input type="checkbox" v-model="activityShowInactive" @change="loadActivities" />
+                    Show inactive
+                  </label>
                   <select v-model="activityFilterBook" @change="loadActivities" class="am-select">
                     <option value="">All Books</option>
                     <option v-for="book in activityBookOptions" :key="book" :value="book">{{ book }}</option>
@@ -6865,14 +6884,17 @@
                     <th>Theme</th>
                     <th>Month</th>
                     <th>Activity ID</th>
-                    <th>Welsh URL</th>
+                    <th>English Slides URL</th>
+                    <th>English PDF URL</th>
+                    <th>Welsh Slides URL</th>
                     <th>Welsh Embed</th>
+                    <th>Welsh PDF URL</th>
                     <th class="am-th-actions">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-if="activities.length === 0 && !loading">
-                    <td colspan="10" class="am-td-empty">
+                    <td colspan="13" class="am-td-empty">
                       No activities found. Try a different search.
                     </td>
                   </tr>
@@ -6906,12 +6928,24 @@
                       <input v-else v-model="activityEditForm.knack_activity_id" class="am-input-inline" />
                     </td>
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.slides_url_en || '-' }}</span>
+                      <input v-else v-model="activityEditForm.slides_url_en" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.pdf_url_en || '-' }}</span>
+                      <input v-else v-model="activityEditForm.pdf_url_en" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
                       <span v-if="editingActivityId !== activity.id">{{ activity.slides_url_cy || '-' }}</span>
                       <input v-else v-model="activityEditForm.slides_url_cy" class="am-input-inline" />
                     </td>
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
                       <span v-if="editingActivityId !== activity.id">{{ activity.slides_embed_cy ? 'Embed HTML set' : '-' }}</span>
                       <textarea v-else v-model="activityEditForm.slides_embed_cy" class="am-textarea-inline"></textarea>
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.pdf_url_cy || '-' }}</span>
+                      <input v-else v-model="activityEditForm.pdf_url_cy" class="am-input-inline" />
                     </td>
                     <td class="am-td-actions">
                       <div v-if="editingActivityId === activity.id" class="am-action-group">
@@ -6926,8 +6960,8 @@
                         <button @click="startEditActivity(activity)" class="am-button-icon" title="Edit">
                           ✏️
                         </button>
-                        <button @click="deleteActivity(activity)" class="am-button-icon danger" title="Delete">
-                          🗑️
+                        <button @click="deleteActivity(activity)" class="am-button-icon danger" title="Deactivate">
+                          📴
                         </button>
                       </div>
                     </td>
@@ -7258,8 +7292,20 @@
                       <input v-model="addActivityForm.knack_id" class="am-input" />
                     </div>
                     <div class="am-form-group am-form-wide">
+                      <label>English Slides URL</label>
+                      <input v-model="addActivityForm.slides_url_en" class="am-input" />
+                    </div>
+                    <div class="am-form-group am-form-wide">
+                      <label>English PDF URL</label>
+                      <input v-model="addActivityForm.pdf_url_en" class="am-input" />
+                    </div>
+                    <div class="am-form-group am-form-wide">
                       <label>Welsh Slides URL</label>
                       <input v-model="addActivityForm.slides_url_cy" class="am-input" />
+                    </div>
+                    <div class="am-form-group am-form-wide">
+                      <label>Welsh PDF URL</label>
+                      <input v-model="addActivityForm.pdf_url_cy" class="am-input" />
                     </div>
                     <div class="am-form-group am-form-wide">
                       <label>Welsh Slides Embed HTML</label>
