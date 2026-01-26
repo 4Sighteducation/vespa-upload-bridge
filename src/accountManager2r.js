@@ -227,6 +227,16 @@
             // Search & filters
             searchQuery: '',
             searchDebounceTimer: null, // For auto-search on typing
+            activitySearchQuery: '',
+            activitySearchDebounceTimer: null,
+            activityFilterLanguage: 'all', // all | welsh | english
+            activityFilterBook: '',
+            activityFilterLevel: '',
+            activityFilterTheme: '',
+            activityShowInactive: false,
+            activityBookOptions: [],
+            activityLevelOptions: [],
+            activityThemeOptions: [],
             selectedYearGroup: '',
             selectedGroup: '', // Tutor group filter (students)
             selectedStaffGroup: '', // Group filter for staff
@@ -246,6 +256,10 @@
             totalAccounts: 0,
             currentPage: 1,
             pageSize: 50,
+            activities: [],
+            totalActivities: 0,
+            activityPage: 1,
+            activityPageSize: 50,
             
             // Selection
             selectedAccounts: [],
@@ -254,6 +268,25 @@
             // Editing
             editingAccount: null,
             editForm: {},
+            editingActivityId: null,
+            activityEditForm: {},
+            showAddActivityModal: false,
+            addActivityForm: {
+              name: '',
+              name_cy: '',
+              book: '',
+              month: '',
+              level: '',
+              theme: '',
+              vespa_category: '',
+              knack_activity_id: '',
+              knack_id: '',
+              slides_url_en: '',
+              pdf_url_en: '',
+              slides_url_cy: '',
+              slides_embed_cy: '',
+              pdf_url_cy: ''
+            },
             
             // Connection management
             showConnectionModal: false,
@@ -854,6 +887,15 @@
               this.loadAccounts();
             }, 300); // 300ms delay
           },
+          
+          debouncedActivitySearch() {
+            if (this.activitySearchDebounceTimer) {
+              clearTimeout(this.activitySearchDebounceTimer);
+            }
+            this.activitySearchDebounceTimer = setTimeout(() => {
+              this.loadActivities();
+            }, 300);
+          },
 
           // ========== CONNECTED STAFF FILTER (STUDENTS) ==========
           
@@ -973,6 +1015,10 @@
             this.loadingText = 'Loading accounts...';
             
             try {
+              if (this.currentTab === 'activities') {
+                this.loading = false;
+                return;
+              }
               // Determine which school UUID to use for RLS
               let schoolUuidForRls = null;
               
@@ -1106,6 +1152,77 @@
               this.loading = false;
             }
           },
+
+          async loadActivities() {
+            if (!this.isSuperUser) {
+              this.showMessage('Activities manager is super user only.', 'error');
+              return;
+            }
+            if (!this.userEmail || !this.userId) {
+              this.showMessage('Authentication context missing (userEmail/userId). Please refresh.', 'error');
+              return;
+            }
+            this.loading = true;
+            this.loadingText = 'Loading activities...';
+            try {
+              const params = new URLSearchParams({
+                search: this.activitySearchQuery || '',
+                page: this.activityPage,
+                limit: this.activityPageSize
+              });
+              if (this.activityFilterLanguage) {
+                params.append('lang', this.activityFilterLanguage);
+              } else {
+                params.append('lang', 'all');
+              }
+              if (this.activityFilterBook) params.append('book', this.activityFilterBook);
+              if (this.activityFilterLevel) params.append('level', this.activityFilterLevel);
+              if (this.activityFilterTheme) params.append('theme', this.activityFilterTheme);
+              if (this.activityShowInactive) params.append('includeInactive', 'true');
+              const data = await fetchWithRetry(
+                `${this.apiUrl}/api/v3/accounts/activities?${params.toString()}`,
+                {
+                  method: 'GET',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Email': this.userEmail,
+                    'X-User-Id': String(this.userId)
+                  }
+                },
+                'Load activities',
+                3
+              );
+              if (data.success) {
+                this.activities = data.activities || [];
+                this.totalActivities = data.total || 0;
+                this.updateActivityFilterOptions();
+              } else {
+                throw new Error(data.message || 'Failed to load activities');
+              }
+            } catch (error) {
+              console.error('Load activities error:', error);
+              this.showMessage('Failed to load activities: ' + error.message, 'error');
+            } finally {
+              this.loading = false;
+            }
+          },
+
+          updateActivityFilterOptions() {
+            const books = new Set();
+            const levels = new Set();
+            const themes = new Set();
+            (this.activities || []).forEach(activity => {
+              const book = (activity.book || '').trim();
+              const level = (activity.level || '').trim();
+              const theme = (activity.theme || '').trim();
+              if (book) books.add(book);
+              if (level) levels.add(level);
+              if (theme) themes.add(theme);
+            });
+            this.activityBookOptions = Array.from(books).sort();
+            this.activityLevelOptions = Array.from(levels).sort();
+            this.activityThemeOptions = Array.from(themes).sort();
+          },
           
           // ========== INLINE EDITING ==========
           
@@ -1130,6 +1247,190 @@
             }
             
             debugLog('Started editing', account);
+          },
+
+          startEditActivity(activity) {
+            this.editingActivityId = activity.id;
+            this.activityEditForm = {
+              name: activity.name || '',
+              name_cy: activity.name_cy || '',
+              book: activity.book || '',
+              month: activity.month || '',
+              level: activity.level || '',
+              theme: activity.theme || '',
+              vespa_category: activity.vespa_category || '',
+              knack_activity_id: activity.knack_activity_id || '',
+              knack_id: activity.knack_id || '',
+              slides_url_en: activity.slides_url_en || '',
+              pdf_url_en: activity.pdf_url_en || '',
+              slides_url_cy: activity.slides_url_cy || '',
+              slides_embed_cy: activity.slides_embed_cy || '',
+              pdf_url_cy: activity.pdf_url_cy || ''
+            };
+          },
+
+          cancelEditActivity() {
+            this.editingActivityId = null;
+            this.activityEditForm = {};
+          },
+
+          async saveActivity(activity) {
+            if (!activity || !this.editingActivityId) return;
+            if (!this.userEmail || !this.userId) {
+              this.showMessage('Authentication context missing (userEmail/userId). Please refresh.', 'error');
+              return;
+            }
+            this.loading = true;
+            this.loadingText = 'Saving activity...';
+            try {
+              const payload = {
+                name: this.activityEditForm.name,
+                name_cy: this.activityEditForm.name_cy,
+                book: this.activityEditForm.book,
+                month: this.activityEditForm.month,
+                level: this.activityEditForm.level,
+                theme: this.activityEditForm.theme,
+                vespa_category: this.activityEditForm.vespa_category,
+                knack_activity_id: this.activityEditForm.knack_activity_id,
+                knack_id: this.activityEditForm.knack_id,
+                slides_url_en: this.activityEditForm.slides_url_en,
+                pdf_url_en: this.activityEditForm.pdf_url_en,
+                slides_url_cy: this.activityEditForm.slides_url_cy,
+                slides_embed_cy: this.activityEditForm.slides_embed_cy,
+                pdf_url_cy: this.activityEditForm.pdf_url_cy
+              };
+              const response = await fetch(
+                `${this.apiUrl}/api/v3/accounts/activities/${encodeURIComponent(activity.id)}`,
+                {
+                  method: 'PATCH',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Email': this.userEmail,
+                    'X-User-Id': String(this.userId)
+                  },
+                  body: JSON.stringify(payload)
+                }
+              );
+              const data = await safeJsonParse(response, 'Save activity');
+              if (!data.success) {
+                throw new Error(data.message || 'Save failed');
+              }
+              const updated = data.activity || payload;
+              this.activities = this.activities.map(item => (item.id === activity.id ? { ...item, ...updated } : item));
+              this.cancelEditActivity();
+              this.showMessage('Activity updated.', 'success');
+            } catch (error) {
+              console.error('Save activity error:', error);
+              this.showMessage('Failed to save activity: ' + error.message, 'error');
+            } finally {
+              this.loading = false;
+            }
+          },
+
+          openAddActivityModal() {
+            if (!this.isSuperUser) return;
+            this.showAddActivityModal = true;
+            this.resetAddActivityForm();
+          },
+
+          closeAddActivityModal() {
+            this.showAddActivityModal = false;
+          },
+
+          resetAddActivityForm() {
+            this.addActivityForm = {
+              name: '',
+              name_cy: '',
+              book: '',
+              month: '',
+              level: '',
+              theme: '',
+              vespa_category: '',
+              knack_activity_id: '',
+              knack_id: '',
+              slides_url_en: '',
+              pdf_url_en: '',
+              slides_url_cy: '',
+              slides_embed_cy: '',
+              pdf_url_cy: ''
+            };
+          },
+
+          async createActivity() {
+            if (!this.userEmail || !this.userId) {
+              this.showMessage('Authentication context missing (userEmail/userId). Please refresh.', 'error');
+              return;
+            }
+            if (!this.addActivityForm.name) {
+              this.showMessage('Activity name is required.', 'error');
+              return;
+            }
+            this.loading = true;
+            this.loadingText = 'Creating activity...';
+            try {
+              const response = await fetch(
+                `${this.apiUrl}/api/v3/accounts/activities`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Email': this.userEmail,
+                    'X-User-Id': String(this.userId)
+                  },
+                  body: JSON.stringify(this.addActivityForm)
+                }
+              );
+              const data = await safeJsonParse(response, 'Create activity');
+              if (!data.success) {
+                throw new Error(data.message || 'Create failed');
+              }
+              this.showMessage('Activity created.', 'success');
+              this.closeAddActivityModal();
+              this.activityPage = 1;
+              await this.loadActivities();
+            } catch (error) {
+              console.error('Create activity error:', error);
+              this.showMessage('Failed to create activity: ' + error.message, 'error');
+            } finally {
+              this.loading = false;
+            }
+          },
+
+          async deleteActivity(activity) {
+            if (!activity || !activity.id) return;
+            const ok = confirm(`Deactivate activity "${activity.name || activity.id}"? This will hide it from the main table.`);
+            if (!ok) return;
+            if (!this.userEmail || !this.userId) {
+              this.showMessage('Authentication context missing (userEmail/userId). Please refresh.', 'error');
+              return;
+            }
+            this.loading = true;
+            this.loadingText = 'Deactivating activity...';
+            try {
+              const response = await fetch(
+                `${this.apiUrl}/api/v3/accounts/activities/${encodeURIComponent(activity.id)}`,
+                {
+                  method: 'PATCH',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Email': this.userEmail,
+                    'X-User-Id': String(this.userId)
+                  },
+                  body: JSON.stringify({ is_active: false })
+                }
+              );
+              const data = await safeJsonParse(response, 'Deactivate activity');
+              if (!data.success) {
+                throw new Error(data.message || 'Deactivate failed');
+              }
+              this.showMessage('Activity deactivated.', 'success');
+              await this.loadActivities();
+            } catch (error) {
+              console.error('Deactivate activity error:', error);
+              this.showMessage('Failed to deactivate activity: ' + error.message, 'error');
+            } finally {
+              this.loading = false;
+            }
           },
           
           async loadAllDepartments() {
@@ -5415,6 +5716,7 @@
             this.allSelected = false;
             this.editingAccount = null;
             this.currentPage = 1;
+            this.editingActivityId = null;
             // Clear search and filters when switching tabs
             this.searchQuery = '';
             this.selectedYearGroup = '';
@@ -5423,6 +5725,16 @@
             this.selectedConnectedStaffType = '';
             this.selectedConnectedStaffEmail = '';
             debugLog('Tab switched, filters cleared', { newTab: tab });
+            if (tab === 'activities') {
+              this.activitySearchQuery = '';
+              this.activityPage = 1;
+              this.activityFilterLanguage = 'all';
+              this.activityFilterBook = '';
+              this.activityFilterLevel = '';
+              this.activityFilterTheme = '';
+              this.loadActivities();
+              return;
+            }
             this.loadAccounts();
           },
           
@@ -5582,6 +5894,8 @@
               const section1Text = reference && (reference.section1Text || reference.section1_text) ? (reference.section1Text || reference.section1_text) : '';
               const section2 = reference && Array.isArray(reference.section2) ? reference.section2 : [];
               const section3 = reference && Array.isArray(reference.section3) ? reference.section3 : [];
+              const tutorCompiledSection3 = reference && (reference.tutorCompiledSection3 || reference.tutor_compiled_section3) ? (reference.tutorCompiledSection3 || reference.tutor_compiled_section3) : '';
+              const tutorCompiledCompletedAt = reference && (reference.tutorCompiledCompletedAt || reference.tutor_compiled_completed_at) ? (reference.tutorCompiledCompletedAt || reference.tutor_compiled_completed_at) : null;
 
               this.ucasStudentReport = {
                 student: {
@@ -5598,6 +5912,8 @@
                 reference: {
                   section1Text: String(section1Text || '').trim(),
                   section2,
+                  tutorCompiledSection3: String(tutorCompiledSection3 || '').trim(),
+                  tutorCompiledCompletedAt,
                   section3Grouped: this._ucasReportGroupSection3(section3, subjects)
                 }
               };
@@ -5947,15 +6263,22 @@
             if (!r) return { cls: 'ucas-status-badge muted', label: '—', detail: '' };
             const status = String(r.status || '').toLowerCase();
             const finalisedAt = r.finalisedAt || r.finalised_at;
+            const tutorCompletedAt = r.tutorCompiledCompletedAt || r.tutor_compiled_completed_at;
+            const tutorText = String(r.tutorCompiledSection3 || r.tutor_compiled_section3 || '').trim();
+            const tutorHasDraft = tutorText.length > 0;
             if (finalisedAt || status === 'finalised' || status === 'complete' || status === 'completed') {
               return { cls: 'ucas-status-badge success', label: 'Complete', detail: `${Math.max(1, doneCount)}/3 sections` };
             }
+            if (tutorCompletedAt) {
+              return { cls: 'ucas-status-badge success', label: 'Ready', detail: `${doneCount}/3 sections · tutor complete` };
+            }
             if (status === 'in_progress') {
-              return { cls: 'ucas-status-badge warning', label: 'In progress', detail: `${doneCount}/3 sections` };
+              const extra = tutorHasDraft ? ' · tutor drafting' : '';
+              return { cls: 'ucas-status-badge warning', label: 'In progress', detail: `${doneCount}/3 sections${extra}` };
             }
             if (status === 'not_started') {
               // If centre template exists, this is still "in progress" from a workflow perspective (1/3 already done)
-              if (templateDone) return { cls: 'ucas-status-badge warning', label: 'In progress', detail: `${doneCount}/3 sections` };
+              if (templateDone || tutorHasDraft) return { cls: 'ucas-status-badge warning', label: 'In progress', detail: `${doneCount}/3 sections${tutorHasDraft ? ' · tutor drafting' : ''}` };
               return { cls: 'ucas-status-badge muted', label: 'Pending', detail: `${doneCount}/3 sections` };
             }
             return { cls: 'ucas-status-badge muted', label: status ? status.replace(/_/g, ' ') : '—', detail: `${doneCount}/3 sections` };
@@ -6292,6 +6615,15 @@
                   Staff
                   <span v-if="currentTab === 'staff'" class="am-tab-count">{{ totalAccounts }}</span>
                 </button>
+                <button 
+                  v-if="isSuperUser"
+                  class="am-tab" 
+                  :class="{ active: currentTab === 'activities' }"
+                  @click="switchTab('activities')">
+                  <span class="am-icon">🧩</span>
+                  Activities
+                  <span v-if="currentTab === 'activities'" class="am-tab-count">{{ totalActivities }}</span>
+                </button>
               </div>
               <div class="am-tabs-right">
                 <button
@@ -6307,6 +6639,46 @@
             <!-- Toolbar -->
             <div class="am-toolbar">
               <div class="am-toolbar-left">
+                <template v-if="currentTab === 'activities'">
+                  <select v-model="activityFilterLanguage" @change="loadActivities" class="am-select">
+                    <option value="all">All Languages</option>
+                    <option value="welsh">Welsh Only</option>
+                    <option value="english">English Only</option>
+                  </select>
+                  <label class="am-checkbox-inline">
+                    <input type="checkbox" v-model="activityShowInactive" @change="loadActivities" />
+                    Show inactive
+                  </label>
+                  <select v-model="activityFilterBook" @change="loadActivities" class="am-select">
+                    <option value="">All Books</option>
+                    <option v-for="book in activityBookOptions" :key="book" :value="book">{{ book }}</option>
+                  </select>
+                  <select v-model="activityFilterLevel" @change="loadActivities" class="am-select">
+                    <option value="">All Levels</option>
+                    <option v-for="level in activityLevelOptions" :key="level" :value="level">{{ level }}</option>
+                  </select>
+                  <select v-model="activityFilterTheme" @change="loadActivities" class="am-select">
+                    <option value="">All Themes</option>
+                    <option v-for="theme in activityThemeOptions" :key="theme" :value="theme">{{ theme }}</option>
+                  </select>
+                  <div class="am-search-box">
+                    <input 
+                      type="text" 
+                      v-model="activitySearchQuery"
+                      @input="debouncedActivitySearch"
+                      @keyup.enter="loadActivities"
+                      placeholder="Search activities (name, Welsh, ID)..."
+                      class="am-search-input"
+                    />
+                    <button @click="loadActivities" class="am-search-btn">
+                      🔍
+                    </button>
+                  </div>
+                  <button @click="openAddActivityModal" class="am-button primary">
+                    ➕ Add Activity
+                  </button>
+                </template>
+                <template v-else>
                 <!-- School selector (super user only) -->
                 <select 
                   v-if="isSuperUser" 
@@ -6493,12 +6865,113 @@
                     🔍
                   </button>
                 </div>
+                </template>
               </div>
             </div>
             
             <!-- Data Table -->
-            <div class="am-table-container">
-              <table class="am-table am-table-activities">
+            <div v-if="currentTab === 'activities'" class="am-table-container">
+              <div class="am-activities-note">
+                Super user access to Supabase activities. Changes save immediately.
+              </div>
+              <table class="am-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Welsh Name</th>
+                    <th>Book</th>
+                    <th>Level</th>
+                    <th>Theme</th>
+                    <th>Month</th>
+                    <th>Activity ID</th>
+                    <th>English Slides URL</th>
+                    <th>English PDF URL</th>
+                    <th>Welsh Slides URL</th>
+                    <th>Welsh Embed</th>
+                    <th>Welsh PDF URL</th>
+                    <th class="am-th-actions">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="activities.length === 0 && !loading">
+                    <td colspan="13" class="am-td-empty">
+                      No activities found. Try a different search.
+                    </td>
+                  </tr>
+                  <tr v-for="activity in activities" :key="activity.id" class="am-tr">
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.name || '-' }}</span>
+                      <input v-else v-model="activityEditForm.name" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.name_cy || '-' }}</span>
+                      <input v-else v-model="activityEditForm.name_cy" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.book || '-' }}</span>
+                      <input v-else v-model="activityEditForm.book" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.level || '-' }}</span>
+                      <input v-else v-model="activityEditForm.level" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.theme || '-' }}</span>
+                      <input v-else v-model="activityEditForm.theme" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.month || '-' }}</span>
+                      <input v-else v-model="activityEditForm.month" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.knack_activity_id || '-' }}</span>
+                      <input v-else v-model="activityEditForm.knack_activity_id" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.slides_url_en || '-' }}</span>
+                      <input v-else v-model="activityEditForm.slides_url_en" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.pdf_url_en || '-' }}</span>
+                      <input v-else v-model="activityEditForm.pdf_url_en" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.slides_url_cy || '-' }}</span>
+                      <input v-else v-model="activityEditForm.slides_url_cy" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.slides_embed_cy ? 'Embed HTML set' : '-' }}</span>
+                      <textarea v-else v-model="activityEditForm.slides_embed_cy" class="am-textarea-inline"></textarea>
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span v-if="editingActivityId !== activity.id">{{ activity.pdf_url_cy || '-' }}</span>
+                      <input v-else v-model="activityEditForm.pdf_url_cy" class="am-input-inline" />
+                    </td>
+                    <td class="am-td-actions">
+                      <div v-if="editingActivityId === activity.id" class="am-action-group">
+                        <button @click="saveActivity(activity)" class="am-button-icon success" title="Save">
+                          ✓
+                        </button>
+                        <button @click="cancelEditActivity" class="am-button-icon danger" title="Cancel">
+                          ✖
+                        </button>
+                      </div>
+                      <div v-else class="am-action-group">
+                        <button @click="startEditActivity(activity)" class="am-button-icon" title="Edit">
+                          ✏️
+                        </button>
+                        <button @click="deleteActivity(activity)" class="am-button-icon danger" title="Deactivate">
+                          📴
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div v-else class="am-table-container">
+              <table class="am-table">
                 <thead>
                   <tr>
                     <th class="am-th-checkbox">
@@ -6738,7 +7211,24 @@
             </div>
             
             <!-- Pagination -->
-            <div v-if="totalAccounts > pageSize" class="am-pagination">
+            <div v-if="currentTab === 'activities' && totalActivities > activityPageSize" class="am-pagination">
+              <button 
+                @click="activityPage--; loadActivities();"
+                :disabled="activityPage === 1"
+                class="am-button secondary">
+                ← Previous
+              </button>
+              <span class="am-page-info">
+                Page {{ activityPage }} of {{ Math.ceil(totalActivities / activityPageSize) }}
+              </span>
+              <button 
+                @click="activityPage++; loadActivities();"
+                :disabled="activityPage >= Math.ceil(totalActivities / activityPageSize)"
+                class="am-button secondary">
+                Next →
+              </button>
+            </div>
+            <div v-if="currentTab !== 'activities' && totalAccounts > pageSize" class="am-pagination">
               <button 
                 @click="currentPage--; loadAccounts();"
                 :disabled="currentPage === 1"
@@ -6756,6 +7246,80 @@
               </button>
             </div>
             
+            <!-- Add Activity Modal (Super User) -->
+            <div v-if="showAddActivityModal" class="am-modal-overlay" @click.self="closeAddActivityModal">
+              <div class="am-modal">
+                <div class="am-modal-header">
+                  <h3>➕ Add Activity</h3>
+                  <button @click="closeAddActivityModal" class="am-modal-close">✖</button>
+                </div>
+                <div class="am-modal-body">
+                  <div class="am-form-grid">
+                    <div class="am-form-group">
+                      <label>Activity Name *</label>
+                      <input v-model="addActivityForm.name" class="am-input" placeholder="e.g. 6 Types of Goal" />
+                    </div>
+                    <div class="am-form-group">
+                      <label>Welsh Name</label>
+                      <input v-model="addActivityForm.name_cy" class="am-input" />
+                    </div>
+                    <div class="am-form-group">
+                      <label>Book</label>
+                      <input v-model="addActivityForm.book" class="am-input" />
+                    </div>
+                    <div class="am-form-group">
+                      <label>Level</label>
+                      <input v-model="addActivityForm.level" class="am-input" />
+                    </div>
+                    <div class="am-form-group">
+                      <label>Theme</label>
+                      <input v-model="addActivityForm.theme" class="am-input" />
+                    </div>
+                    <div class="am-form-group">
+                      <label>Month</label>
+                      <input v-model="addActivityForm.month" class="am-input" />
+                    </div>
+                    <div class="am-form-group">
+                      <label>VESPA Category</label>
+                      <input v-model="addActivityForm.vespa_category" class="am-input" placeholder="Vision / Effort / Systems / Practice / Attitude" />
+                    </div>
+                    <div class="am-form-group">
+                      <label>Knack Activity ID</label>
+                      <input v-model="addActivityForm.knack_activity_id" class="am-input" />
+                    </div>
+                    <div class="am-form-group">
+                      <label>Knack Record ID</label>
+                      <input v-model="addActivityForm.knack_id" class="am-input" />
+                    </div>
+                    <div class="am-form-group am-form-wide">
+                      <label>English Slides URL</label>
+                      <input v-model="addActivityForm.slides_url_en" class="am-input" />
+                    </div>
+                    <div class="am-form-group am-form-wide">
+                      <label>English PDF URL</label>
+                      <input v-model="addActivityForm.pdf_url_en" class="am-input" />
+                    </div>
+                    <div class="am-form-group am-form-wide">
+                      <label>Welsh Slides URL</label>
+                      <input v-model="addActivityForm.slides_url_cy" class="am-input" />
+                    </div>
+                    <div class="am-form-group am-form-wide">
+                      <label>Welsh PDF URL</label>
+                      <input v-model="addActivityForm.pdf_url_cy" class="am-input" />
+                    </div>
+                    <div class="am-form-group am-form-wide">
+                      <label>Welsh Slides Embed HTML</label>
+                      <textarea v-model="addActivityForm.slides_embed_cy" class="am-textarea-inline"></textarea>
+                    </div>
+                  </div>
+                </div>
+                <div class="am-modal-footer">
+                  <button @click="closeAddActivityModal" class="am-button secondary">Cancel</button>
+                  <button @click="createActivity" class="am-button primary">Create</button>
+                </div>
+              </div>
+            </div>
+
             <!-- Connection Management Modal -->
             <div v-if="showConnectionModal" class="am-modal-overlay" @click.self="closeConnectionModal">
               <div class="am-modal">
@@ -8304,6 +8868,13 @@
 
                       <div class="ucas-report-section">
                         <div class="ucas-report-section-title">Subject teacher references</div>
+                        <div v-if="(ucasStudentReport.reference.tutorCompiledSection3 || '').trim()" style="margin-bottom: 12px;">
+                          <div class="ucas-report-section-title" style="margin-top: 0;">Tutor compiled reference (final narrative)</div>
+                          <div class="ucas-report-box">{{ (ucasStudentReport.reference.tutorCompiledSection3 || '').trim() }}</div>
+                          <div class="ucas-report-muted" v-if="ucasStudentReport.reference.tutorCompiledCompletedAt" style="margin-top:6px;">
+                            Marked complete: {{ ucasStudentReport.reference.tutorCompiledCompletedAt }}
+                          </div>
+                        </div>
                         <div v-if="ucasStudentReport.reference.section3Grouped && ucasStudentReport.reference.section3Grouped.length">
                           <div v-for="g in ucasStudentReport.reference.section3Grouped" :key="g.subject" class="ucas-report-subject">
                             <div class="ucas-report-subject-title">{{ g.subject }}</div>
@@ -10361,10 +10932,6 @@
           width: 100%;
           border-collapse: collapse;
         }
-
-        .am-table-activities {
-          table-layout: fixed;
-        }
         
         .am-table thead {
           background: linear-gradient(135deg, #2a3c7a, #3a4c8a);
@@ -10380,23 +10947,6 @@
           color: #ffffff !important; /* CRITICAL: Force white text for contrast */
           text-shadow: 0 1px 2px rgba(0,0,0,0.3); /* Add shadow for extra readability */
         }
-
-        .am-table-activities th,
-        .am-table-activities td {
-          padding: 8px 6px;
-          font-size: 12px;
-        }
-
-        .am-table-activities th {
-          font-size: 11px;
-          letter-spacing: 0.4px;
-        }
-
-        .am-table-activities td {
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
         
         .am-th-checkbox {
           width: 50px;
@@ -10406,14 +10956,6 @@
         .am-th-actions {
           width: 200px;
           text-align: center;
-        }
-
-        .am-table-activities .am-th-checkbox {
-          width: 32px;
-        }
-
-        .am-table-activities .am-th-actions {
-          width: 90px;
         }
         
         .am-tr {
@@ -10438,13 +10980,6 @@
           padding: 14px 16px;
           font-size: 14px;
           color: #333;
-        }
-
-        .am-table-activities .am-input-inline,
-        .am-table-activities .am-textarea-inline {
-          width: 100%;
-          min-width: 0;
-          box-sizing: border-box;
         }
         
         .am-td-checkbox {
@@ -10688,6 +11223,16 @@
         .am-form-group .am-select {
           width: 100%;
         }
+
+        .am-form-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          gap: 16px;
+        }
+
+        .am-form-wide {
+          grid-column: 1 / -1;
+        }
         
         @keyframes am-slideUp {
           from {
@@ -10834,6 +11379,28 @@
         .am-page-info {
           font-weight: 600;
           color: #666;
+        }
+
+        /* ========== Activities Admin ========== */
+        .am-activities-note {
+          background: #f5f7fa;
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+          padding: 12px 16px;
+          margin-bottom: 12px;
+          font-size: 13px;
+          color: #334155;
+        }
+
+        .am-textarea-inline {
+          width: 100%;
+          min-height: 80px;
+          padding: 8px 10px;
+          border: 1px solid #e0e0e0;
+          border-radius: 6px;
+          font-size: 12px;
+          font-family: inherit;
+          resize: vertical;
         }
         
         /* ========== Empty State ========== */
