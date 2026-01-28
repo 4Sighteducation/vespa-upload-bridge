@@ -50,7 +50,12 @@
         if (contentType.includes('application/json') && text) {
           try { parsedJson = JSON.parse(text); } catch (_) { /* ignore */ }
         }
-        const apiMessage = parsedJson?.message || parsedJson?.error || (text ? text.substring(0, 200) : '');
+        // Prefer the server's detailed `error` field if present, but keep the high-level `message` too.
+        const apiMessage = parsedJson?.error
+          ? (parsedJson?.message && parsedJson.message !== parsedJson.error
+              ? `${parsedJson.message}: ${parsedJson.error}`
+              : String(parsedJson.error))
+          : (parsedJson?.message || parsedJson?.error || (text ? text.substring(0, 200) : ''));
         const url = response.url || '(unknown url)';
         
         // Check for rate limiting
@@ -1313,7 +1318,8 @@
               );
               const data = await safeJsonParse(response, 'Save activity');
               if (!data.success) {
-                throw new Error(data.message || 'Save failed');
+                const msg = [data.message, data.error, data.details, data.hint].filter(Boolean).join(' | ');
+                throw new Error(msg || 'Save failed');
               }
               const updated = data.activity || payload;
               this.activities = this.activities.map(item => (item.id === activity.id ? { ...item, ...updated } : item));
@@ -6870,10 +6876,11 @@
             </div>
             
             <!-- Data Table -->
-            <div v-if="currentTab === 'activities'" class="am-table-container">
+            <div v-if="currentTab === 'activities'" class="am-table-container am-table-container-activities">
               <div class="am-activities-note">
                 Super user access to Supabase activities. Changes save immediately.
               </div>
+              <div class="am-table-scroll">
               <table class="am-table">
                 <thead>
                   <tr>
@@ -6900,11 +6907,11 @@
                   </tr>
                   <tr v-for="activity in activities" :key="activity.id" class="am-tr">
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
-                      <span v-if="editingActivityId !== activity.id">{{ activity.name || '-' }}</span>
+                      <span v-if="editingActivityId !== activity.id" class="am-cell-truncate" :title="activity.name || ''">{{ activity.name || '-' }}</span>
                       <input v-else v-model="activityEditForm.name" class="am-input-inline" />
                     </td>
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
-                      <span v-if="editingActivityId !== activity.id">{{ activity.name_cy || '-' }}</span>
+                      <span v-if="editingActivityId !== activity.id" class="am-cell-truncate" :title="activity.name_cy || ''">{{ activity.name_cy || '-' }}</span>
                       <input v-else v-model="activityEditForm.name_cy" class="am-input-inline" />
                     </td>
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
@@ -6924,28 +6931,28 @@
                       <input v-else v-model="activityEditForm.month" class="am-input-inline" />
                     </td>
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
-                      <span v-if="editingActivityId !== activity.id">{{ activity.knack_activity_id || '-' }}</span>
+                      <span v-if="editingActivityId !== activity.id" class="am-cell-mono am-cell-truncate" :title="String(activity.knack_activity_id || '')">{{ activity.knack_activity_id || '-' }}</span>
                       <input v-else v-model="activityEditForm.knack_activity_id" class="am-input-inline" />
                     </td>
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
-                      <span v-if="editingActivityId !== activity.id">{{ activity.slides_url_en || '-' }}</span>
-                      <input v-else v-model="activityEditForm.slides_url_en" class="am-input-inline" />
+                      <span v-if="editingActivityId !== activity.id" class="am-cell-truncate am-cell-url" :title="activity.slides_url_en || ''">{{ activity.slides_url_en || '-' }}</span>
+                      <input v-else v-model="activityEditForm.slides_url_en" class="am-input-inline am-input-url" />
                     </td>
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
-                      <span v-if="editingActivityId !== activity.id">{{ activity.pdf_url_en || '-' }}</span>
-                      <input v-else v-model="activityEditForm.pdf_url_en" class="am-input-inline" />
+                      <span v-if="editingActivityId !== activity.id" class="am-cell-truncate am-cell-url" :title="activity.pdf_url_en || ''">{{ activity.pdf_url_en || '-' }}</span>
+                      <input v-else v-model="activityEditForm.pdf_url_en" class="am-input-inline am-input-url" />
                     </td>
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
-                      <span v-if="editingActivityId !== activity.id">{{ activity.slides_url_cy || '-' }}</span>
-                      <input v-else v-model="activityEditForm.slides_url_cy" class="am-input-inline" />
+                      <span v-if="editingActivityId !== activity.id" class="am-cell-truncate am-cell-url" :title="activity.slides_url_cy || ''">{{ activity.slides_url_cy || '-' }}</span>
+                      <input v-else v-model="activityEditForm.slides_url_cy" class="am-input-inline am-input-url" />
                     </td>
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
                       <span v-if="editingActivityId !== activity.id">{{ activity.slides_embed_cy ? 'Embed HTML set' : '-' }}</span>
                       <textarea v-else v-model="activityEditForm.slides_embed_cy" class="am-textarea-inline"></textarea>
                     </td>
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
-                      <span v-if="editingActivityId !== activity.id">{{ activity.pdf_url_cy || '-' }}</span>
-                      <input v-else v-model="activityEditForm.pdf_url_cy" class="am-input-inline" />
+                      <span v-if="editingActivityId !== activity.id" class="am-cell-truncate am-cell-url" :title="activity.pdf_url_cy || ''">{{ activity.pdf_url_cy || '-' }}</span>
+                      <input v-else v-model="activityEditForm.pdf_url_cy" class="am-input-inline am-input-url" />
                     </td>
                     <td class="am-td-actions">
                       <div v-if="editingActivityId === activity.id" class="am-action-group">
@@ -6968,6 +6975,7 @@
                   </tr>
                 </tbody>
               </table>
+              </div>
             </div>
 
             <div v-else class="am-table-container">
@@ -10924,13 +10932,20 @@
           background: white;
           border-radius: 10px;
           box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-          overflow: hidden;
+          overflow-x: auto; /* critical for wide tables (e.g. Activities) */
+          overflow-y: hidden;
+          -webkit-overflow-scrolling: touch;
           margin-bottom: 20px;
+        }
+
+        .am-table-scroll {
+          min-width: 100%;
         }
         
         .am-table {
           width: 100%;
           border-collapse: collapse;
+          min-width: 900px; /* allow horizontal scroll when needed */
         }
         
         .am-table thead {
@@ -10954,7 +10969,7 @@
         }
         
         .am-th-actions {
-          width: 200px;
+          width: 120px;
           text-align: center;
         }
         
@@ -10980,6 +10995,43 @@
           padding: 14px 16px;
           font-size: 14px;
           color: #333;
+        }
+
+        /* ========== Activities table UX ========== */
+        .am-table-container-activities .am-table {
+          min-width: 1600px;
+        }
+
+        .am-cell-truncate {
+          display: block;
+          max-width: 260px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .am-cell-mono {
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+          font-size: 12px;
+        }
+
+        .am-input-url {
+          min-width: 320px;
+        }
+
+        /* Sticky actions column so Save/Cancel is always visible */
+        .am-table-container-activities .am-th-actions,
+        .am-table-container-activities .am-td-actions {
+          position: sticky;
+          right: 0;
+          background: #fff;
+          z-index: 3;
+          box-shadow: -6px 0 10px rgba(0,0,0,0.06);
+        }
+
+        .am-table-container-activities .am-table thead .am-th-actions {
+          background: linear-gradient(135deg, #2a3c7a, #3a4c8a);
+          z-index: 4;
         }
         
         .am-td-checkbox {
