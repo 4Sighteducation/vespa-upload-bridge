@@ -6898,7 +6898,7 @@
             <!-- Data Table -->
             <div v-if="currentTab === 'activities'" class="am-table-container am-table-container-activities">
               <div class="am-activities-note">
-                Super user access to Supabase activities. “Tutor resources (worksheets)” are what the staff resources page renders (via `think_section_html` / `pdf_embed`).
+                Super user access to Supabase activities. “Tutor resources (worksheets)” are what the staff resources page renders (via think_section_html / pdf_embed).
               </div>
               <div class="am-table-scroll">
               <table class="am-table">
