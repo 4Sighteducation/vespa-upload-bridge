@@ -234,6 +234,11 @@
             searchDebounceTimer: null, // For auto-search on typing
             activitySearchQuery: '',
             activitySearchDebounceTimer: null,
+            // Controls which "activities" you are looking at:
+            // - worksheet: tutor/staff resources used by curriculum resources SPA
+            // - activity: student activities
+            // - all: everything (can be a lot)
+            activityFilterResourceType: 'worksheet', // worksheet | activity | all
             activityFilterLanguage: 'all', // all | welsh | english
             activityFilterBook: '',
             activityFilterLevel: '',
@@ -1175,6 +1180,9 @@
                 page: this.activityPage,
                 limit: this.activityPageSize
               });
+              if (this.activityFilterResourceType) {
+                params.append('resourceType', this.activityFilterResourceType);
+              }
               if (this.activityFilterLanguage) {
                 params.append('lang', this.activityFilterLanguage);
               } else {
@@ -1270,7 +1278,11 @@
               pdf_url_en: activity.pdf_url_en || '',
               slides_url_cy: activity.slides_url_cy || '',
               slides_embed_cy: activity.slides_embed_cy || '',
-              pdf_url_cy: activity.pdf_url_cy || ''
+              pdf_url_cy: activity.pdf_url_cy || '',
+              // Tutor resources fields (used by staff resources SPA)
+              think_section_html: activity.think_section_html || '',
+              pdf_embed: activity.pdf_embed || '',
+              pdf_download_html: activity.pdf_download_html || ''
             };
           },
 
@@ -1302,7 +1314,10 @@
                 pdf_url_en: this.activityEditForm.pdf_url_en,
                 slides_url_cy: this.activityEditForm.slides_url_cy,
                 slides_embed_cy: this.activityEditForm.slides_embed_cy,
-                pdf_url_cy: this.activityEditForm.pdf_url_cy
+                pdf_url_cy: this.activityEditForm.pdf_url_cy,
+                think_section_html: this.activityEditForm.think_section_html,
+                pdf_embed: this.activityEditForm.pdf_embed,
+                pdf_download_html: this.activityEditForm.pdf_download_html
               };
               const response = await fetch(
                 `${this.apiUrl}/api/v3/accounts/activities/${encodeURIComponent(activity.id)}`,
@@ -6646,6 +6661,11 @@
             <div class="am-toolbar">
               <div class="am-toolbar-left">
                 <template v-if="currentTab === 'activities'">
+                  <select v-model="activityFilterResourceType" @change="activityPage = 1; loadActivities();" class="am-select">
+                    <option value="worksheet">Tutor resources (worksheets)</option>
+                    <option value="activity">Student activities</option>
+                    <option value="all">All types</option>
+                  </select>
                   <select v-model="activityFilterLanguage" @change="loadActivities" class="am-select">
                     <option value="all">All Languages</option>
                     <option value="welsh">Welsh Only</option>
@@ -6878,7 +6898,7 @@
             <!-- Data Table -->
             <div v-if="currentTab === 'activities'" class="am-table-container am-table-container-activities">
               <div class="am-activities-note">
-                Super user access to Supabase activities. Changes save immediately.
+                Super user access to Supabase activities. “Tutor resources (worksheets)” are what the staff resources page renders (via `think_section_html` / `pdf_embed`).
               </div>
               <div class="am-table-scroll">
               <table class="am-table">
@@ -6891,8 +6911,12 @@
                     <th>Theme</th>
                     <th>Month</th>
                     <th>Activity ID</th>
+                    <th>Type</th>
                     <th>English Slides URL</th>
                     <th>English PDF URL</th>
+                    <th>Think HTML</th>
+                    <th>PDF Embed</th>
+                    <th>PDF Download HTML</th>
                     <th>Welsh Slides URL</th>
                     <th>Welsh Embed</th>
                     <th>Welsh PDF URL</th>
@@ -6901,7 +6925,7 @@
                 </thead>
                 <tbody>
                   <tr v-if="activities.length === 0 && !loading">
-                    <td colspan="13" class="am-td-empty">
+                    <td colspan="17" class="am-td-empty">
                       No activities found. Try a different search.
                     </td>
                   </tr>
@@ -6943,6 +6967,9 @@
                       <span v-if="editingActivityId !== activity.id" class="am-cell-mono am-cell-truncate" :title="String(activity.knack_activity_id || '')">{{ activity.knack_activity_id || '-' }}</span>
                       <input v-else v-model="activityEditForm.knack_activity_id" class="am-input-inline" />
                     </td>
+                    <td>
+                      <span class="am-cell-mono am-cell-truncate" :title="String(activity.resource_type || '')">{{ activity.resource_type || '-' }}</span>
+                    </td>
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
                       <span v-if="editingActivityId !== activity.id" class="am-cell-truncate am-cell-url" :title="activity.slides_url_en || ''">{{ activity.slides_url_en || '-' }}</span>
                       <input v-else v-model="activityEditForm.slides_url_en" class="am-input-inline am-input-url" />
@@ -6950,6 +6977,27 @@
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
                       <span v-if="editingActivityId !== activity.id" class="am-cell-truncate am-cell-url" :title="activity.pdf_url_en || ''">{{ activity.pdf_url_en || '-' }}</span>
                       <input v-else v-model="activityEditForm.pdf_url_en" class="am-input-inline am-input-url" />
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span
+                        v-if="editingActivityId !== activity.id"
+                        class="am-cell-truncate"
+                        :title="activity.think_section_html || ''">{{ activity.think_section_html ? 'HTML set' : '-' }}</span>
+                      <textarea v-else v-model="activityEditForm.think_section_html" class="am-textarea-inline" placeholder="Paste embed HTML (e.g. iframe) used by staff resources page"></textarea>
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span
+                        v-if="editingActivityId !== activity.id"
+                        class="am-cell-truncate"
+                        :title="activity.pdf_embed || ''">{{ activity.pdf_embed ? 'Embed set' : '-' }}</span>
+                      <textarea v-else v-model="activityEditForm.pdf_embed" class="am-textarea-inline" placeholder="Optional: PDF embed HTML (iframe/object)"></textarea>
+                    </td>
+                    <td class="am-td-editable" @dblclick="startEditActivity(activity)">
+                      <span
+                        v-if="editingActivityId !== activity.id"
+                        class="am-cell-truncate"
+                        :title="activity.pdf_download_html || ''">{{ activity.pdf_download_html ? 'HTML set' : '-' }}</span>
+                      <textarea v-else v-model="activityEditForm.pdf_download_html" class="am-textarea-inline" placeholder="Optional: PDF download link HTML"></textarea>
                     </td>
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
                       <span v-if="editingActivityId !== activity.id" class="am-cell-truncate am-cell-url" :title="activity.slides_url_cy || ''">{{ activity.slides_url_cy || '-' }}</span>
@@ -11462,6 +11510,12 @@
           font-size: 12px;
           font-family: inherit;
           resize: vertical;
+        }
+
+        /* Wider + monospace for HTML editing in Activities table */
+        .am-table-container-activities .am-textarea-inline {
+          min-width: 360px;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
         }
         
         /* ========== Empty State ========== */
