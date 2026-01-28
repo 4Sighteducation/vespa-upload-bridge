@@ -6916,15 +6916,24 @@
                     </td>
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
                       <span v-if="editingActivityId !== activity.id">{{ activity.book || '-' }}</span>
-                      <input v-else v-model="activityEditForm.book" class="am-input-inline" />
+                      <select v-else v-model="activityEditForm.book" class="am-select-inline">
+                        <option value="">-</option>
+                        <option v-for="opt in activityBookOptions" :key="opt" :value="opt">{{ opt }}</option>
+                      </select>
                     </td>
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
                       <span v-if="editingActivityId !== activity.id">{{ activity.level || '-' }}</span>
-                      <input v-else v-model="activityEditForm.level" class="am-input-inline" />
+                      <select v-else v-model="activityEditForm.level" class="am-select-inline">
+                        <option value="">-</option>
+                        <option v-for="opt in activityLevelOptions" :key="opt" :value="opt">{{ opt }}</option>
+                      </select>
                     </td>
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
                       <span v-if="editingActivityId !== activity.id">{{ activity.theme || '-' }}</span>
-                      <input v-else v-model="activityEditForm.theme" class="am-input-inline" />
+                      <select v-else v-model="activityEditForm.theme" class="am-select-inline">
+                        <option value="">-</option>
+                        <option v-for="opt in activityThemeOptions" :key="opt" :value="opt">{{ opt }}</option>
+                      </select>
                     </td>
                     <td class="am-td-editable" @dblclick="startEditActivity(activity)">
                       <span v-if="editingActivityId !== activity.id">{{ activity.month || '-' }}</span>
