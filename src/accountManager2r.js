@@ -23,7 +23,7 @@
 (function() {
   'use strict';
   
-  const VERSION = '2q';
+  const VERSION = '2r';
   const DEBUG_MODE = false;
   
   function debugLog(message, data) {
