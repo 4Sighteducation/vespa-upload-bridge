@@ -4222,6 +4222,17 @@
             this.showSchoolManagementModal = true;
             await this.loadKnackSchoolsForSync();
           },
+
+          openStaffCSVUploadFromSchoolManagement() {
+            if (this.isSuperUser && !this.selectedSchool) {
+              this.showMessage('Select a school in the main dropdown first.', 'warning');
+              return;
+            }
+            this.currentTab = 'staff';
+            this.closeSchoolManagementModal();
+            this.openCSVUploadModal();
+            this.csvUploadType = 'staff';
+          },
           
           closeSchoolManagementModal() {
             this.showSchoolManagementModal = false;
@@ -9542,6 +9553,13 @@
                         style="display: flex; align-items: center; gap: 8px; font-size: 16px; padding: 14px 24px; background: linear-gradient(135deg, #4caf50, #66bb6a);">
                         <span style="font-size: 20px;">➕</span>
                         <span style="font-weight: 700;">Add New School</span>
+                      </button>
+                      <button
+                        @click="openStaffCSVUploadFromSchoolManagement"
+                        class="am-button secondary"
+                        style="display: flex; align-items: center; gap: 8px; font-size: 16px; padding: 14px 20px;">
+                        <span style="font-size: 20px;">📤</span>
+                        <span style="font-weight: 700;">Upload Staff CSV</span>
                       </button>
                     </div>
                     
