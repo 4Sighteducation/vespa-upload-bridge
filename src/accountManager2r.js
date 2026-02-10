@@ -258,6 +258,7 @@
             loadingConnectedStaffOptions: false,
             selectedSchool: null,
             allSchools: [], // For super user dropdown
+            schoolTypeFilter: 'all', // all | coaching | resource
             availableGroups: [], // For group dropdown (students)
             availableStaffGroups: [], // For staff group dropdown
             
@@ -565,6 +566,22 @@
             return this.selectedAccounts.length > 0;
           },
 
+          filteredSchools() {
+            const schools = Array.isArray(this.allSchools) ? this.allSchools : [];
+            if (this.schoolTypeFilter === 'resource') {
+              return schools.filter(s => this.isResourcePortalAccountType(s?.accountType));
+            }
+            if (this.schoolTypeFilter === 'coaching') {
+              return schools.filter(s => !this.isResourcePortalAccountType(s?.accountType));
+            }
+            return schools;
+          },
+
+          isResourcePortalSelected() {
+            if (!this.isSuperUser || !this.selectedSchool) return false;
+            return this.isResourcePortalAccountType(this.selectedSchool.accountType);
+          },
+
           // UCAS Management helpers
           ucasMgmtHasAnyStatus() {
             try {
@@ -827,7 +844,10 @@
               );
               
               if (data.success && data.schools) {
-                this.allSchools = data.schools;
+                this.allSchools = (data.schools || []).map(school => ({
+                  ...school,
+                  accountType: school.accountType || school.account_type || null
+                }));
                 debugLog('Schools loaded', { count: this.allSchools.length });
               }
               
@@ -841,6 +861,7 @@
           async selectSchool(school) {
             this.selectedSchool = school;
             debugLog('School selected', school);
+            const isResourcePortal = this.isResourcePortalAccountType(school?.accountType);
             // Reload groups for the new school
             if (school) {
               // Clear connected staff filter when changing school context
@@ -850,6 +871,11 @@
               await this.loadAllStudentGroups();
               await this.loadAllDepartments(); // Load staff groups too
               await this.loadConnectedStaffOptions(); // NEW
+            }
+            if (isResourcePortal && this.currentTab === 'students') {
+              this.showMessage('Resource Portal accounts are staff-only. Switching to Staff tab.', 'info');
+              this.switchTab('staff');
+              return;
             }
             this.loadAccounts();
           },
@@ -4000,7 +4026,9 @@
           
           async openManualAddModal() {
             this.showManualAddModal = true;
-            this.manualAddType = this.currentTab === 'students' ? 'students' : 'staff';
+            this.manualAddType = this.isResourcePortalSelected
+              ? 'staff'
+              : (this.currentTab === 'students' ? 'students' : 'staff');
             this.resetManualAddForm();
             
             // Load dropdown options
@@ -4093,12 +4121,13 @@
               let csvData = {};
               
               if (this.manualAddType === 'staff') {
+                const staffTypes = this.isResourcePortalSelected ? ['tut'] : form.staffTypes;
                 csvData = {
                   'Title': form.title,
                   'First Name': form.firstName,
                   'Last Name': form.lastName,
                   'Email Address': form.email,
-                  'Staff Type': form.staffTypes.join(','),
+                  'Staff Type': staffTypes.join(','),
                   'Year Group': form.yearGroup,
                   'Group': form.group,
                   'Subject': form.subject
@@ -4173,7 +4202,7 @@
               firstName: '',
               lastName: '',
               email: '',
-              staffTypes: [],
+              staffTypes: this.isResourcePortalSelected ? ['tut'] : [],
               yearGroup: '',
               group: '',
               subject: '',
@@ -5730,8 +5759,38 @@
           
           // ========== UI HELPERS ==========
           
+          isResourcePortalAccountType(accountType) {
+            if (!accountType) return false;
+            return String(accountType).toUpperCase().includes('RESOURCE');
+          },
+
+          schoolDisplayLabel(school) {
+            if (!school) return '';
+            return this.isResourcePortalAccountType(school.accountType)
+              ? `📘 ${school.name}`
+              : school.name;
+          },
+
+          onSchoolTypeFilterChange() {
+            if (!this.isSuperUser) return;
+            if (this.selectedSchool) {
+              const isResource = this.isResourcePortalAccountType(this.selectedSchool.accountType);
+              if (this.schoolTypeFilter === 'resource' && !isResource) {
+                this.selectedSchool = null;
+              }
+              if (this.schoolTypeFilter === 'coaching' && isResource) {
+                this.selectedSchool = null;
+              }
+            }
+            this.loadAccounts();
+          },
+          
           switchTab(tab) {
             if (this.currentTab === tab) return;
+            if (tab === 'students' && this.isResourcePortalSelected) {
+              this.showMessage('Resource Portal accounts are staff-only.', 'info');
+              return;
+            }
             this.currentTab = tab;
             this.selectedAccounts = [];
             this.allSelected = false;
@@ -6622,7 +6681,8 @@
               <div class="am-tabs-left">
                 <button 
                   class="am-tab" 
-                  :class="{ active: currentTab === 'students' }"
+                  :class="{ active: currentTab === 'students', disabled: isResourcePortalSelected }"
+                  :disabled="isResourcePortalSelected"
                   @click="switchTab('students')">
                   <span class="am-icon">🎓</span>
                   Students
@@ -6706,19 +6766,29 @@
                 </template>
                 <template v-else>
                 <!-- School selector (super user only) -->
+                <select
+                  v-if="isSuperUser"
+                  v-model="schoolTypeFilter"
+                  @change="onSchoolTypeFilterChange"
+                  class="am-select am-school-type-select">
+                  <option value="all">All account types</option>
+                  <option value="coaching">Coaching Portal</option>
+                  <option value="resource">Resource Portal</option>
+                </select>
                 <select 
                   v-if="isSuperUser" 
                   v-model="selectedSchool" 
-                  @change="loadAccounts"
+                  @change="selectSchool(selectedSchool)"
                   class="am-select am-school-select">
                   <option :value="null">🌍 All Schools</option>
                   <option 
-                    v-for="school in allSchools" 
+                    v-for="school in filteredSchools" 
                     :key="school.id"
                     :value="school">
-                    {{ school.name }}
+                    {{ schoolDisplayLabel(school) }}
                   </option>
                 </select>
+                <span v-if="isSuperUser && isResourcePortalSelected" class="am-school-type-badge">Resource Portal</span>
                 
                 <!-- Message for super user when no school selected -->
                 <div v-if="!hasSelectedAccounts && isSuperUser && !selectedSchool" style="padding: 10px 16px; background: #fff3cd; border-radius: 8px; color: #856404; font-size: 14px; font-weight: 500;">
@@ -9174,7 +9244,7 @@
                       <h4 style="margin: 0 0 16px 0; color: #2a3c7a; font-size: 16px; border-bottom: 2px solid #079baa; padding-bottom: 8px;">👔 Role & Assignment</h4>
                       <div style="margin-bottom: 16px;">
                         <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; color: #333;">Staff Type(s) *</label>
-                        <select v-model="manualAddForm.staffTypes" multiple class="am-select-inline" style="height: 140px; padding: 10px; font-size: 14px;">
+                        <select v-model="manualAddForm.staffTypes" multiple class="am-select-inline" :disabled="isResourcePortalSelected" style="height: 140px; padding: 10px; font-size: 14px;">
                           <option value="admin">👑 Staff Admin</option>
                           <option value="tut">👨‍🏫 Tutor</option>
                           <option value="hoy">🎓 Head of Year</option>
@@ -9182,7 +9252,8 @@
                           <option value="sub">📖 Subject Teacher</option>
                           <option value="gen">👤 General Staff</option>
                         </select>
-                        <small style="color: #666; display: block; margin-top: 6px;">💡 Hold Ctrl/Cmd to select multiple roles</small>
+                        <small v-if="isResourcePortalSelected" style="color: #0b5ed7; display: block; margin-top: 6px;">📘 Resource Portal accounts are tutor-only.</small>
+                        <small v-else style="color: #666; display: block; margin-top: 6px;">💡 Hold Ctrl/Cmd to select multiple roles</small>
                       </div>
                       
                       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
@@ -10797,6 +10868,19 @@
           border-color: #2a3c7a;
           box-shadow: 0 4px 12px rgba(42, 60, 122, 0.3);
         }
+
+        .am-tab.disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          transform: none;
+          box-shadow: none;
+        }
+
+        .am-tab.disabled:hover {
+          border-color: #e0e0e0;
+          transform: none;
+          box-shadow: none;
+        }
         
         .am-tab-count {
           background: rgba(255, 255, 255, 0.3);
@@ -10807,6 +10891,18 @@
         
         .am-tab.active .am-tab-count {
           background: rgba(255, 255, 255, 0.2);
+        }
+
+        .am-school-type-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 12px;
+          border-radius: 999px;
+          background: #e8f2ff;
+          color: #0b5ed7;
+          font-weight: 600;
+          font-size: 12px;
         }
         
         /* ========== Toolbar ========== */
