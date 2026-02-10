@@ -4570,6 +4570,80 @@
               this.loading = false;
             }
           },
+
+          // Cancel establishment in Supabase (delete accounts/data, keep metadata)
+          async cancelSchoolInSupabase(school) {
+            if (!school || !school.supabaseUuid) {
+              this.showMessage('School must exist in Supabase to cancel.', 'warning');
+              return;
+            }
+
+            if (this.schoolSyncStatus[school.knackId]) {
+              this.schoolSyncStatus[school.knackId].syncing = true;
+            }
+            this.loading = true;
+            this.loadingText = `Cancelling ${school.name}...`;
+
+            try {
+              const previewRes = await fetch(
+                `${this.apiUrl}/api/v3/schools/${school.supabaseUuid}/cancel`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ confirm: false })
+                }
+              );
+
+              const previewData = await safeJsonParse(previewRes, 'Cancel preview');
+              const preview = previewData?.preview || {};
+
+              const confirmMsg = `Cancel ${school.name}?\n\n` +
+                `This will delete all staff/student accounts and academic profiles, but keep the establishment record + metadata.\n\n` +
+                `• Staff accounts: ${preview.staffAccountCount ?? 'n/a'}\n` +
+                `• Student accounts: ${preview.studentAccountCount ?? 'n/a'}\n` +
+                `• Academic profiles: ${preview.profileCount ?? 'n/a'}\n\n` +
+                `Proceed?`;
+
+              if (!confirm(confirmMsg)) {
+                return;
+              }
+
+              const res = await fetch(
+                `${this.apiUrl}/api/v3/schools/${school.supabaseUuid}/cancel`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ confirm: true })
+                }
+              );
+
+              const data = await safeJsonParse(res, 'Cancel school');
+
+              if (data.success) {
+                this.showMessage(`✅ ${school.name} cancelled. Accounts removed; metadata preserved.`, 'success');
+
+                await this.loadKnackSchoolsForSync();
+
+                if (this.isSuperUser) {
+                  await this.loadAllSchools();
+                }
+
+                if (this.selectedSchool && this.selectedSchool.id === school.knackId) {
+                  await this.loadAccounts();
+                }
+              } else {
+                throw new Error(data.message || 'Cancel failed');
+              }
+            } catch (error) {
+              console.error('Cancel school error:', error);
+              this.showMessage(`Failed to cancel ${school.name}: ${error.message}`, 'error');
+            } finally {
+              if (this.schoolSyncStatus[school.knackId]) {
+                this.schoolSyncStatus[school.knackId].syncing = false;
+              }
+              this.loading = false;
+            }
+          },
           
           async bulkMigrateSchools() {
             const missingSchools = this.knackSchools.filter(s => !s.inSupabase);
@@ -9572,6 +9646,15 @@
                             style="background: #4caf50; color: white; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; white-space: nowrap;">
                             ✅ In Supabase
                           </div>
+
+                          <button
+                            v-if="school.inSupabase"
+                            @click="cancelSchoolInSupabase(school)"
+                            class="am-button danger"
+                            style="padding: 8px 12px; font-size: 12px; white-space: nowrap;"
+                            title="Cancel establishment (keeps metadata, deletes accounts)">
+                            🛑 Cancel
+                          </button>
                         </div>
                       </div>
                       
