@@ -4226,12 +4226,15 @@
           openStaffCSVUploadFromSchoolManagement() {
             if (this.isSuperUser && !this.selectedSchool) {
               this.showMessage('Select a school in the main dropdown first.', 'warning');
+              alert('Please select a school in the main dropdown (top bar) before uploading staff CSV.');
               return;
             }
             this.currentTab = 'staff';
             this.closeSchoolManagementModal();
-            this.openCSVUploadModal();
-            this.csvUploadType = 'staff';
+            setTimeout(() => {
+              this.openCSVUploadModal();
+              this.csvUploadType = 'staff';
+            }, 50);
           },
           
           closeSchoolManagementModal() {
