@@ -391,6 +391,8 @@
             // Academic Profile: manage existing subjects (delete)
             apManageSubjectsLoading: false,
             apManageSubjects: [], // from Dashboard API (has subject id)
+            apDeleteProgress: { pending: 0, total: 0 },
+            apDeleteInFlight: {}, // subjectId -> true
             
             // Role management
             showRoleModal: false,
@@ -3035,20 +3037,42 @@
               const email = (this.studentAcademicProfileEmail || '').trim().toLowerCase();
               if (!email) return;
               const academicYear = (this.apAddSubjectAcademicYear || this.apAcademicYear || this.apSnapAcademicYear || '').trim();
+              if (!academicYear) {
+                this.apManageSubjects = [];
+                return;
+              }
               this.apManageSubjectsLoading = true;
-              const url = academicYear
-                ? `${this.dashboardApiUrl}/api/academic-profile/${encodeURIComponent(email)}?academic_year=${encodeURIComponent(academicYear)}`
-                : `${this.dashboardApiUrl}/api/academic-profile/${encodeURIComponent(email)}`;
-              const resp = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
-              const data = await safeJsonParse(resp, 'Academic Profile (manage subjects) fetch');
+              // Prefer Supabase list endpoint for immediate consistency
+              const url = `${this.apiUrl}/api/v3/academic-profile/subjects/list?studentEmail=${encodeURIComponent(email)}&academicYear=${encodeURIComponent(academicYear)}`;
+              const resp = await fetch(url, {
+                method: 'GET',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-user-email': this.userEmail,
+                  'x-user-id': this.userId
+                }
+              });
+              const data = await safeJsonParse(resp, 'Academic Profile (manage subjects) list');
               if (data && data.success && Array.isArray(data.subjects)) {
                 this.apManageSubjects = data.subjects.map(s => ({
                   id: s.id,
-                  subjectName: s.subjectName || s.subject_name || '',
-                  position: s.position || s.subject_position || null
+                  subjectName: s.subject_name || '',
+                  position: s.subject_position || null
                 }));
               } else {
-                this.apManageSubjects = [];
+                // Fallback to dashboard API (older cache layer)
+                const fallbackUrl = `${this.dashboardApiUrl}/api/academic-profile/${encodeURIComponent(email)}?academic_year=${encodeURIComponent(academicYear)}`;
+                const fallbackResp = await fetch(fallbackUrl, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+                const fallbackData = await safeJsonParse(fallbackResp, 'Academic Profile (manage subjects) fetch');
+                if (fallbackData && fallbackData.success && Array.isArray(fallbackData.subjects)) {
+                  this.apManageSubjects = fallbackData.subjects.map(s => ({
+                    id: s.id,
+                    subjectName: s.subjectName || s.subject_name || '',
+                    position: s.position || s.subject_position || null
+                  }));
+                } else {
+                  this.apManageSubjects = [];
+                }
               }
             } catch (e) {
               console.warn('refreshApManageSubjects failed (non-fatal):', e);
@@ -3063,6 +3087,16 @@
               if (!subject || !subject.id) return;
               const ok = confirm(`Delete subject "${subject.subjectName || 'Subject'}"?\n\nThis cannot be undone.`);
               if (!ok) return;
+              // Optimistic UI: remove immediately and show progress
+              const removedIndex = this.apManageSubjects.findIndex(s => s.id === subject.id);
+              const removedItem = removedIndex >= 0 ? this.apManageSubjects.splice(removedIndex, 1)[0] : null;
+              this.apDeleteInFlight = { ...this.apDeleteInFlight, [subject.id]: true };
+              if (this.apDeleteProgress.pending === 0) {
+                this.apDeleteProgress.total = 0;
+              }
+              this.apDeleteProgress.pending += 1;
+              this.apDeleteProgress.total += 1;
+
               const resp = await fetch(`${this.apiUrl}/api/v3/academic-profile/subjects/remove`, {
                 method: 'POST',
                 headers: {
@@ -3085,7 +3119,27 @@
               this.refreshApManageSubjects().catch(() => {});
             } catch (e) {
               console.error('deleteApSubject failed:', e);
+              // Rollback optimistic removal on failure
+              if (subject && subject.id && !this.apManageSubjects.some(s => s.id === subject.id)) {
+                this.apManageSubjects.unshift({
+                  id: subject.id,
+                  subjectName: subject.subjectName || '',
+                  position: subject.position || null
+                });
+              }
               this.showMessage('Delete subject failed: ' + (e.message || String(e)), 'error');
+            } finally {
+              if (subject && subject.id) {
+                const { [subject.id]: _, ...rest } = this.apDeleteInFlight || {};
+                this.apDeleteInFlight = rest;
+              }
+              if (this.apDeleteProgress.pending > 0) {
+                this.apDeleteProgress.pending -= 1;
+              }
+              if (this.apDeleteProgress.pending <= 0) {
+                this.apDeleteProgress.pending = 0;
+                this.apDeleteProgress.total = 0;
+              }
             }
           },
 
@@ -9154,7 +9208,17 @@
                         🔄 Refresh
                       </button>
                     </div>
-                    <div v-if="apManageSubjectsLoading" style="margin-top:8px; color:#666; font-size:12px;">Loading subjects...</div>
+                      <div v-if="apManageSubjectsLoading" style="margin-top:8px; color:#666; font-size:12px;">Loading subjects...</div>
+                      <div v-if="apDeleteProgress.pending > 0" style="margin-top:8px;">
+                        <div style="font-size:12px; color:#666; margin-bottom:4px;">
+                          Deleting subjects... ({{ apDeleteProgress.total - apDeleteProgress.pending }}/{{ apDeleteProgress.total }})
+                        </div>
+                        <div style="height:6px; background:#e0e0e0; border-radius:4px; overflow:hidden;">
+                          <div
+                            :style="{ width: (apDeleteProgress.total ? ((apDeleteProgress.total - apDeleteProgress.pending) / apDeleteProgress.total * 100) : 0) + '%', height: '100%', background: '#4caf50' }">
+                          </div>
+                        </div>
+                      </div>
                     <div v-else style="margin-top:8px; display:flex; flex-wrap:wrap; gap:8px;">
                       <div
                         v-for="s in apManageSubjects"
