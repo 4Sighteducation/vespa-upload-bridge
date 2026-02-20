@@ -10499,12 +10499,19 @@
         .am-header {
           display: flex;
           justify-content: space-between;
-          align-items: center;
+          align-items: flex-start;
+          flex-wrap: wrap;
+          gap: 16px;
           margin-bottom: 30px;
           padding: 30px;
           background: linear-gradient(135deg, #2a3c7a, #3a4c8a);
           border-radius: 12px;
           box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .am-header-left {
+          flex: 1 1 320px;
+          min-width: 260px;
         }
         
         .am-header h1 {
@@ -11112,15 +11119,23 @@
           display: flex;
           gap: 12px;
           align-items: center;
+          justify-content: flex-end;
+          flex: 999 1 520px;
+          min-width: 280px;
+          flex-wrap: wrap;
         }
         
         .am-button-header {
-          padding: 12px 20px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 10px 14px;
           background: rgba(255, 255, 255, 0.15);
           border: 2px solid rgba(255, 255, 255, 0.3);
           border-radius: 8px;
           color: white;
-          font-size: 14px;
+          font-size: 13px;
           font-weight: 600;
           cursor: pointer;
           transition: all 0.3s ease;
