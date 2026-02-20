@@ -391,6 +391,8 @@
             // Academic Profile: manage existing subjects (delete)
             apManageSubjectsLoading: false,
             apManageSubjects: [], // from Dashboard API (has subject id)
+            apManageSubjectsYears: [],
+            apManageSubjectsYear: '',
             apDeleteProgress: { pending: 0, total: 0 },
             apDeleteInFlight: {}, // subjectId -> true
             
@@ -2700,8 +2702,10 @@
             this.showStudentAcademicProfileModal = true;
             // Default academic year for subject add (can be edited in modal)
             this.apAddSubjectAcademicYear = this.deriveAcademicYear();
+            this.apManageSubjectsYear = this.apAddSubjectAcademicYear;
 
-            // Load subject list for delete controls
+            // Load available academic years for this student, then subjects
+            this.loadApManageAcademicYears().catch(() => {});
             this.refreshApManageSubjects().catch(() => {});
 
             // Mount Academic Profile V2 in the modal
@@ -2764,6 +2768,8 @@
             this.studentAcademicProfileName = '';
             this.studentAcademicProfileYearGroup = '';
             this.studentAcademicProfileTutorGroup = '';
+            this.apManageSubjectsYears = [];
+            this.apManageSubjectsYear = '';
             const container = document.querySelector('#student-academic-profile-container');
             if (container) container.innerHTML = '';
           },
@@ -2772,13 +2778,15 @@
             const schoolId = this.getSelectedSchoolUuidForRls();
             if (!schoolId) {
               this.showMessage('Select a school first (top-right) to add subjects.', 'warning');
+              alert('Please select a school in the top-right dropdown before adding a subject.');
               return;
             }
             if (!this.studentAcademicProfileEmail) {
               this.showMessage('Open a student Academic Profile first.', 'warning');
+              alert('Open a student Academic Profile first, then try Add Subject again.');
               return;
             }
-            this.apAddSubjectAcademicYear = this.deriveAcademicYear();
+            this.apAddSubjectAcademicYear = (this.apManageSubjectsYear || '').trim() || this.deriveAcademicYear();
             this.apAddSubjectQuery = '';
             this.apAddSubjectResults = [];
             this.apAddSubjectSelectedKey = '';
@@ -3050,11 +3058,53 @@
             }
           },
 
+          async loadApManageAcademicYears() {
+            try {
+              const email = (this.studentAcademicProfileEmail || '').trim().toLowerCase();
+              if (!email) return;
+              const resp = await fetch(
+                `${this.apiUrl}/api/v3/academic-profile/years?studentEmail=${encodeURIComponent(email)}`,
+                {
+                  method: 'GET',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-user-email': this.userEmail,
+                    'x-user-id': this.userId
+                  }
+                }
+              );
+              const data = await safeJsonParse(resp, 'Academic Profile years');
+              const years = (data && data.success && Array.isArray(data.academicYears)) ? data.academicYears : [];
+              this.apManageSubjectsYears = years;
+              const preferred = (years && years.length) ? years[0] : this.deriveAcademicYear();
+              if (!this.apManageSubjectsYear || !years.includes(this.apManageSubjectsYear)) {
+                this.apManageSubjectsYear = preferred;
+              }
+              if (!this.apAddSubjectAcademicYear || this.apAddSubjectAcademicYear !== this.apManageSubjectsYear) {
+                this.apAddSubjectAcademicYear = this.apManageSubjectsYear;
+              }
+              if (this.apManageSubjectsYear) {
+                this.refreshApManageSubjects().catch(() => {});
+              }
+            } catch (e) {
+              console.warn('loadApManageAcademicYears failed (non-fatal):', e);
+              if (!this.apManageSubjectsYear) {
+                this.apManageSubjectsYear = this.deriveAcademicYear();
+                this.apAddSubjectAcademicYear = this.apManageSubjectsYear;
+              }
+            }
+          },
+
+          handleApManageYearChange() {
+            this.apAddSubjectAcademicYear = (this.apManageSubjectsYear || '').trim();
+            this.refreshApManageSubjects().catch(() => {});
+          },
+
           async refreshApManageSubjects() {
             try {
               const email = (this.studentAcademicProfileEmail || '').trim().toLowerCase();
               if (!email) return;
-              const academicYear = (this.apAddSubjectAcademicYear || this.apAcademicYear || this.apSnapAcademicYear || '').trim();
+              const academicYear = (this.apManageSubjectsYear || this.apAddSubjectAcademicYear || this.apAcademicYear || this.apSnapAcademicYear || '').trim();
               if (!academicYear) {
                 this.apManageSubjects = [];
                 return;
@@ -9226,7 +9276,27 @@
                   <!-- Manage subjects (delete) -->
                   <div v-if="isSuperUser" style="margin-top: 10px; padding: 10px; border: 1px solid #ffe2e2; border-radius: 10px; background: #fff8f8;">
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-                      <div style="font-weight:800; color:#a11;">Manage subjects</div>
+                      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                        <div style="font-weight:800; color:#a11;">Manage subjects</div>
+                        <div style="display:flex; align-items:center; gap:6px; font-size:12px;">
+                          <span style="color:#666;">Academic year</span>
+                          <select
+                            v-if="apManageSubjectsYears && apManageSubjectsYears.length"
+                            v-model="apManageSubjectsYear"
+                            @change="handleApManageYearChange"
+                            class="am-input"
+                            style="padding:4px 6px; height:28px;">
+                            <option v-for="y in apManageSubjectsYears" :key="y" :value="y">{{ y }}</option>
+                          </select>
+                          <input
+                            v-else
+                            v-model="apManageSubjectsYear"
+                            @change="handleApManageYearChange"
+                            class="am-input"
+                            style="padding:4px 6px; height:28px; width:120px;"
+                            placeholder="YYYY/YYYY" />
+                        </div>
+                      </div>
                       <button @click="refreshApManageSubjects" class="am-button secondary" style="padding:6px 10px;">
                         🔄 Refresh
                       </button>
