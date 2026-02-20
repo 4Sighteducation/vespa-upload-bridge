@@ -4448,7 +4448,7 @@
 
               // Use the WORKING schools endpoint that already exists
               const response = await fetch(
-                `${this.apiUrl}/api/v3/accounts/schools?userEmail=${encodeURIComponent(this.userEmail)}&userId=${encodeURIComponent(this.userId)}`,
+                `${this.apiUrl}/api/v3/accounts/schools?userEmail=${encodeURIComponent(this.userEmail)}&userId=${encodeURIComponent(this.userId)}&includeCounts=true`,
                 {
                   method: 'GET',
                   headers: { 'Content-Type': 'application/json' }
@@ -4464,7 +4464,11 @@
                   name: school.name,
                   inSupabase: !!school.supabaseUuid, // Has UUID = in Supabase
                   supabaseUuid: school.supabaseUuid || null,
-                  accounts: { staff: 0, students: 0 } // TODO: Could add counts if needed
+                  status: school.status || null,
+                  accounts: {
+                    staff: school.staffCount === undefined ? null : Number(school.staffCount || 0),
+                    students: school.studentCount === undefined ? null : Number(school.studentCount || 0)
+                  }
                 }));
                 
                 // Build status map
@@ -4473,6 +4477,7 @@
                   this.schoolSyncStatus[school.knackId] = {
                     inSupabase: school.inSupabase,
                     supabaseUuid: school.supabaseUuid,
+                    status: school.status || null,
                     syncing: false,
                     accounts: school.accounts
                   };
@@ -4707,7 +4712,7 @@
             }
           },
 
-          // Cancel establishment in Supabase (delete accounts/data, keep metadata)
+          // Delete accounts/data in Supabase, but keep the establishment record/metadata
           async cancelSchoolInSupabase(school) {
             if (!school || !school.supabaseUuid) {
               this.showMessage('School must exist in Supabase to cancel.', 'warning');
@@ -4738,8 +4743,8 @@
               const previewData = await safeJsonParse(previewRes, 'Cancel preview');
               const preview = previewData?.preview || {};
 
-              const confirmMsg = `Cancel ${school.name}?\n\n` +
-                `This will delete all staff/student accounts and academic profiles, but keep the establishment record + metadata.\n\n` +
+              const confirmMsg = `Delete data for ${school.name}?\n\n` +
+                `This will delete all staff/student accounts and academic profiles, but KEEP the establishment record + metadata.\n\n` +
                 `• Staff accounts: ${preview.staffAccountCount ?? 'n/a'}\n` +
                 `• Student accounts: ${preview.studentAccountCount ?? 'n/a'}\n` +
                 `• Academic profiles: ${preview.profileCount ?? 'n/a'}\n\n` +
@@ -4761,7 +4766,7 @@
               const data = await safeJsonParse(res, 'Cancel school');
 
               if (data.success) {
-                this.showMessage(`✅ ${school.name} cancelled. Accounts removed; metadata preserved.`, 'success');
+                this.showMessage(`✅ Data deleted for ${school.name}. Establishment kept.`, 'success');
 
                 await this.loadKnackSchoolsForSync();
 
@@ -4777,7 +4782,84 @@
               }
             } catch (error) {
               console.error('Cancel school error:', error);
-              this.showMessage(`Failed to cancel ${school.name}: ${error.message}`, 'error');
+              this.showMessage(`Failed to delete data for ${school.name}: ${error.message}`, 'error');
+            } finally {
+              if (this.schoolSyncStatus[school.knackId]) {
+                this.schoolSyncStatus[school.knackId].syncing = false;
+              }
+              this.loading = false;
+            }
+          },
+
+          // Fully delete the establishment from Supabase (and all related data)
+          async purgeSchoolInSupabase(school) {
+            if (!school || !school.supabaseUuid) {
+              this.showMessage('School must exist in Supabase to delete.', 'warning');
+              return;
+            }
+            if (!this.userEmail || !this.userId) {
+              this.showMessage('Cannot delete: missing Account Manager authentication (userEmail/userId). Please refresh.', 'error');
+              return;
+            }
+
+            if (this.schoolSyncStatus[school.knackId]) {
+              this.schoolSyncStatus[school.knackId].syncing = true;
+            }
+            this.loading = true;
+            this.loadingText = `Deleting ${school.name}...`;
+
+            try {
+              const authQs = `userEmail=${encodeURIComponent(this.userEmail)}&userId=${encodeURIComponent(this.userId)}`;
+              const previewRes = await fetch(
+                `${this.apiUrl}/api/v3/accounts/schools/${school.supabaseUuid}/purge?${authQs}`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ confirm: false })
+                }
+              );
+
+              const previewData = await safeJsonParse(previewRes, 'Delete preview');
+              const preview = previewData?.preview || {};
+
+              const confirmMsg = `Delete ${school.name} completely?\n\n` +
+                `This will PERMANENTLY delete the establishment record from Supabase AND delete all staff/student accounts and academic profiles.\n\n` +
+                `• Staff accounts: ${preview.staffAccountCount ?? 'n/a'}\n` +
+                `• Student accounts: ${preview.studentAccountCount ?? 'n/a'}\n` +
+                `• Academic profiles: ${preview.profileCount ?? 'n/a'}\n\n` +
+                `Proceed?`;
+
+              if (!confirm(confirmMsg)) {
+                return;
+              }
+
+              const res = await fetch(
+                `${this.apiUrl}/api/v3/accounts/schools/${school.supabaseUuid}/purge?${authQs}`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ confirm: true })
+                }
+              );
+
+              const data = await safeJsonParse(res, 'Delete school');
+              if (data.success) {
+                this.showMessage(`🗑️ ${school.name} deleted completely.`, 'success');
+                await this.loadKnackSchoolsForSync();
+
+                if (this.isSuperUser) {
+                  await this.loadAllSchools();
+                }
+
+                if (this.selectedSchool && this.selectedSchool.id === school.knackId) {
+                  this.selectedSchool = null;
+                }
+              } else {
+                throw new Error(data.message || 'Delete failed');
+              }
+            } catch (error) {
+              console.error('Delete school error:', error);
+              this.showMessage(`Failed to delete ${school.name}: ${error.message}`, 'error');
             } finally {
               if (this.schoolSyncStatus[school.knackId]) {
                 this.schoolSyncStatus[school.knackId].syncing = false;
@@ -9767,11 +9849,11 @@
                     </div>
 
                     <!-- List Header -->
-                    <div style="background: linear-gradient(135deg, #f5f7fa 0%, #e8eaf0 100%); padding: 16px 20px; border-bottom: 2px solid #e0e0e0; display: grid; grid-template-columns: 40px 1fr 120px 100px 150px; gap: 16px; align-items: center; font-weight: 700; font-size: 13px; color: #2a3c7a; text-transform: uppercase; letter-spacing: 0.5px;">
+                    <div style="background: linear-gradient(135deg, #f5f7fa 0%, #e8eaf0 100%); padding: 12px 16px; border-bottom: 2px solid #e0e0e0; display: grid; grid-template-columns: 40px 1fr 90px 90px 220px; gap: 12px; align-items: center; font-weight: 700; font-size: 12px; color: #2a3c7a; text-transform: uppercase; letter-spacing: 0.5px;">
                       <div style="text-align: center;">Status</div>
                       <div>School Name</div>
-                      <div style="text-align: center;">Accounts</div>
-                      <div style="text-align: center;">Knack ID</div>
+                      <div style="text-align: center;">Staff</div>
+                      <div style="text-align: center;">Students</div>
                       <div style="text-align: center;">Actions</div>
                     </div>
                     
@@ -9780,7 +9862,7 @@
                       <div 
                         v-for="school in filteredKnackSchools" 
                         :key="school.knackId"
-                        style="padding: 16px 20px; border-bottom: 1px solid #e0e0e0; display: grid; grid-template-columns: 40px 1fr 120px 100px 150px; gap: 16px; align-items: center; transition: all 0.2s;"
+                        style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0; display: grid; grid-template-columns: 40px 1fr 90px 90px 220px; gap: 12px; align-items: center; transition: all 0.2s;"
                         :style="{ background: school.inSupabase ? 'rgba(76, 175, 80, 0.05)' : 'rgba(255, 152, 0, 0.05)' }">
                         
                         <!-- Status Icon -->
@@ -9792,28 +9874,38 @@
                         
                         <!-- School Name -->
                         <div>
-                          <div style="font-weight: 600; font-size: 15px; color: #2a3c7a; margin-bottom: 4px;">
+                          <div style="font-weight: 700; font-size: 14px; color: #2a3c7a; margin-bottom: 2px; line-height: 1.2;">
                             {{ school.name }}
+                          </div>
+                          <div v-if="school.status" style="margin-bottom: 4px;">
+                            <span
+                              :style="{
+                                display: 'inline-block',
+                                padding: '2px 8px',
+                                borderRadius: '999px',
+                                fontSize: '11px',
+                                fontWeight: '700',
+                                letterSpacing: '0.2px',
+                                background: school.status === 'Cancelled' ? 'rgba(244, 67, 54, 0.12)' : 'rgba(33, 150, 243, 0.10)',
+                                color: school.status === 'Cancelled' ? '#c62828' : '#1565c0'
+                              }"
+                            >
+                              {{ school.status }}
+                            </span>
                           </div>
                           <div v-if="school.supabaseUuid" style="font-family: monospace; font-size: 11px; color: #666;">
                             UUID: {{ school.supabaseUuid.substring(0, 8) }}...
                           </div>
                         </div>
                         
-                        <!-- Account Counts -->
-                        <div style="text-align: center;">
-                          <div v-if="school.accounts && (school.accounts.staff > 0 || school.accounts.students > 0)" style="font-size: 13px;">
-                            <div style="color: #1976d2; font-weight: 600;">👥 {{ school.accounts.staff || 0 }}</div>
-                            <div style="color: #2e7d32; font-weight: 600;">🎓 {{ school.accounts.students || 0 }}</div>
-                          </div>
-                          <div v-else style="color: #999; font-size: 12px; font-style: italic;">
-                            No accounts
-                          </div>
+                        <!-- Staff Count -->
+                        <div style="text-align: center; font-size: 13px; font-weight: 700; color: #1976d2;">
+                          {{ (school.accounts && school.accounts.staff !== undefined && school.accounts.staff !== null) ? school.accounts.staff : '—' }}
                         </div>
-                        
-                        <!-- Knack ID -->
-                        <div style="text-align: center; font-family: monospace; font-size: 12px; color: #666;">
-                          {{ school.knackId }}
+
+                        <!-- Student Count -->
+                        <div style="text-align: center; font-size: 13px; font-weight: 700; color: #2e7d32;">
+                          {{ (school.accounts && school.accounts.students !== undefined && school.accounts.students !== null) ? school.accounts.students : '—' }}
                         </div>
                         
                         <!-- Actions -->
@@ -9839,21 +9931,24 @@
                             📦 + Accounts
                           </button>
                           
-                          <!-- Already in Supabase Badge -->
-                          <div 
-                            v-if="school.inSupabase"
-                            style="background: #4caf50; color: white; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; white-space: nowrap;">
-                            ✅ In Supabase
-                          </div>
+                          <template v-if="school.inSupabase">
+                            <button
+                              v-if="school.status !== 'Cancelled'"
+                              @click="cancelSchoolInSupabase(school)"
+                              class="am-button danger"
+                              style="padding: 8px 10px; font-size: 12px; white-space: nowrap;"
+                              title="Delete accounts/data but keep the establishment record">
+                              🧹 Data
+                            </button>
 
-                          <button
-                            v-if="school.inSupabase"
-                            @click="cancelSchoolInSupabase(school)"
-                            class="am-button danger"
-                            style="padding: 8px 12px; font-size: 12px; white-space: nowrap;"
-                            title="Cancel establishment (keeps metadata, deletes accounts)">
-                            🛑 Cancel
-                          </button>
+                            <button
+                              @click="purgeSchoolInSupabase(school)"
+                              class="am-button danger"
+                              style="padding: 8px 10px; font-size: 12px; white-space: nowrap; background: #b71c1c;"
+                              title="Delete the establishment completely from Supabase">
+                              🗑️ Delete
+                            </button>
+                          </template>
                         </div>
                       </div>
                       
@@ -9861,7 +9956,7 @@
                       <div v-if="knackSchools.length === 0" style="padding: 60px 20px; text-align: center; color: #999;">
                         <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;">🏫</div>
                         <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">No schools loaded</div>
-                        <div style="font-size: 14px;">Click "Refresh List" to load schools from Knack</div>
+                        <div style="font-size: 14px;">Click "Refresh List" to load schools from Supabase</div>
                       </div>
                       <div v-else-if="filteredKnackSchools.length === 0" style="padding: 60px 20px; text-align: center; color: #999;">
                         <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;">🔎</div>
@@ -9875,11 +9970,12 @@
                   <div style="margin-top: 24px; padding: 16px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 6px; font-size: 13px; color: #856404;">
                     <div style="font-weight: 700; margin-bottom: 8px;">💡 How This Works:</div>
                     <ul style="margin: 8px 0 0 20px; padding: 0; line-height: 1.8;">
-                      <li><strong>➕ Add New School:</strong> Creates school in BOTH Knack and Supabase simultaneously (dual write)</li>
-                      <li><strong>🔄 Migrate:</strong> Copies existing school from Knack to Supabase (for crossover period schools)</li>
-                      <li><strong>📦 + Accounts:</strong> Also migrates all existing staff/student accounts from Knack</li>
-                      <li><strong>⚡ Migrate All:</strong> Batch migrates all schools not yet in Supabase</li>
-                      <li><strong>Future:</strong> Once in Supabase, all uploads automatically write to both systems</li>
+                      <li><strong>🔄 Refresh List:</strong> Loads establishments from Supabase (super user only)</li>
+                      <li><strong>➕ Add New School:</strong> Creates the establishment in BOTH Knack and Supabase (dual write)</li>
+                      <li><strong>🔄 Migrate:</strong> Copies an existing Knack establishment into Supabase (crossover period only)</li>
+                      <li><strong>📦 + Accounts:</strong> Also migrates existing staff/student accounts from Knack</li>
+                      <li><strong>🧹 Data:</strong> Deletes accounts/data but keeps the establishment record on file (status becomes <strong>Cancelled</strong>)</li>
+                      <li><strong>🗑️ Delete:</strong> Permanently deletes the establishment completely from Supabase (and all related data)</li>
                     </ul>
                   </div>
                 </div>
