@@ -513,6 +513,7 @@
             knackSchools: [], // All schools from Knack
             schoolSyncStatus: {}, // { knackId: { inSupabase: bool, syncing: bool, accounts: { staff: X, students: Y } } }
             syncingSchools: [], // IDs currently being synced
+            schoolManagementSearch: '',
             
             // Add New School Form
             newSchoolForm: {
@@ -577,6 +578,23 @@
               return schools.filter(s => !this.isResourcePortalAccountType(s?.accountType));
             }
             return schools;
+          },
+
+          filteredKnackSchools() {
+            const schools = Array.isArray(this.knackSchools) ? this.knackSchools : [];
+            const q = String(this.schoolManagementSearch || '').trim().toLowerCase();
+            const filtered = !q
+              ? schools
+              : schools.filter(s => {
+                  const name = String(s?.name || '').toLowerCase();
+                  const knackId = String(s?.knackId || '').toLowerCase();
+                  const uuid = String(s?.supabaseUuid || '').toLowerCase();
+                  return name.includes(q) || knackId.includes(q) || uuid.includes(q);
+                });
+
+            return filtered
+              .slice()
+              .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')));
           },
 
           isResourcePortalSelected() {
@@ -4645,6 +4663,10 @@
               this.showMessage('School must exist in Supabase to cancel.', 'warning');
               return;
             }
+            if (!this.userEmail || !this.userId) {
+              this.showMessage('Cannot cancel: missing Account Manager authentication (userEmail/userId). Please refresh.', 'error');
+              return;
+            }
 
             if (this.schoolSyncStatus[school.knackId]) {
               this.schoolSyncStatus[school.knackId].syncing = true;
@@ -4653,8 +4675,9 @@
             this.loadingText = `Cancelling ${school.name}...`;
 
             try {
+              const authQs = `userEmail=${encodeURIComponent(this.userEmail)}&userId=${encodeURIComponent(this.userId)}`;
               const previewRes = await fetch(
-                `${this.apiUrl}/api/v3/schools/${school.supabaseUuid}/cancel`,
+                `${this.apiUrl}/api/v3/accounts/schools/${school.supabaseUuid}/cancel?${authQs}`,
                 {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -4677,7 +4700,7 @@
               }
 
               const res = await fetch(
-                `${this.apiUrl}/api/v3/schools/${school.supabaseUuid}/cancel`,
+                `${this.apiUrl}/api/v3/accounts/schools/${school.supabaseUuid}/cancel?${authQs}`,
                 {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -9652,6 +9675,27 @@
                   
                   <!-- Schools List -->
                   <div style="background: white; border-radius: 12px; border: 2px solid #e0e0e0; overflow: hidden;">
+                    <!-- Search (fast find by name/Knack ID/UUID) -->
+                    <div style="padding: 14px 20px; border-bottom: 1px solid #e0e0e0; background: #fff;">
+                      <div style="display: flex; gap: 12px; align-items: center;">
+                        <input
+                          v-model="schoolManagementSearch"
+                          placeholder="Search schools (name, Knack ID, or UUID)..."
+                          class="am-input-inline"
+                          style="flex: 1; padding: 10px 12px; font-size: 14px;" />
+                        <button
+                          v-if="schoolManagementSearch"
+                          @click="schoolManagementSearch=''"
+                          class="am-button secondary"
+                          style="padding: 10px 14px; font-size: 13px;">
+                          Clear
+                        </button>
+                        <div style="font-size: 12px; color: #666; white-space: nowrap;">
+                          Showing {{ filteredKnackSchools.length }} / {{ knackSchools.length }}
+                        </div>
+                      </div>
+                    </div>
+
                     <!-- List Header -->
                     <div style="background: linear-gradient(135deg, #f5f7fa 0%, #e8eaf0 100%); padding: 16px 20px; border-bottom: 2px solid #e0e0e0; display: grid; grid-template-columns: 40px 1fr 120px 100px 150px; gap: 16px; align-items: center; font-weight: 700; font-size: 13px; color: #2a3c7a; text-transform: uppercase; letter-spacing: 0.5px;">
                       <div style="text-align: center;">Status</div>
@@ -9664,7 +9708,7 @@
                     <!-- Schools -->
                     <div style="max-height: 500px; overflow-y: auto;">
                       <div 
-                        v-for="school in knackSchools" 
+                        v-for="school in filteredKnackSchools" 
                         :key="school.knackId"
                         style="padding: 16px 20px; border-bottom: 1px solid #e0e0e0; display: grid; grid-template-columns: 40px 1fr 120px 100px 150px; gap: 16px; align-items: center; transition: all 0.2s;"
                         :style="{ background: school.inSupabase ? 'rgba(76, 175, 80, 0.05)' : 'rgba(255, 152, 0, 0.05)' }">
@@ -9748,6 +9792,11 @@
                         <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;">🏫</div>
                         <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">No schools loaded</div>
                         <div style="font-size: 14px;">Click "Refresh List" to load schools from Knack</div>
+                      </div>
+                      <div v-else-if="filteredKnackSchools.length === 0" style="padding: 60px 20px; text-align: center; color: #999;">
+                        <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;">🔎</div>
+                        <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">No matching schools</div>
+                        <div style="font-size: 14px;">Try a different search, or click "Clear".</div>
                       </div>
                     </div>
                   </div>
