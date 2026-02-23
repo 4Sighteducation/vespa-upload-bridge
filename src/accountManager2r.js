@@ -331,6 +331,10 @@
             activeJobs: [], // { jobId, type, total, description }
             jobPollingInterval: null,
 
+            // Super user inline email edit (rare but required)
+            inlineEmailEdit: null, // { originalEmail, value, accountType }
+            inlineEmailEditBusy: false,
+
             // Academic Profile quick view (student table)
             dashboardApiUrl: config.dashboardApiUrl || 'https://vespa-dashboard-9a1f84ee5341.herokuapp.com',
             academicProfileExists: {}, // email -> boolean
@@ -5210,6 +5214,93 @@
               this.loading = false;
             }
           },
+
+          // ========== SUPER USER INLINE EMAIL EDIT ==========
+          startInlineEmailEdit(account) {
+            if (!this.isSuperUser || !account?.email) return;
+            this.inlineEmailEdit = {
+              originalEmail: String(account.email || '').trim(),
+              value: String(account.email || '').trim(),
+              accountType: this.currentTab === 'students' ? 'student' : 'staff'
+            };
+          },
+
+          cancelInlineEmailEdit() {
+            if (this.inlineEmailEditBusy) return;
+            this.inlineEmailEdit = null;
+          },
+
+          async saveInlineEmailEdit() {
+            if (!this.isSuperUser) return;
+            if (!this.inlineEmailEdit || !this.inlineEmailEdit.originalEmail) return;
+
+            const oldEmail = String(this.inlineEmailEdit.originalEmail || '').trim();
+            const newEmail = String(this.inlineEmailEdit.value || '').trim();
+            const accountType = this.inlineEmailEdit.accountType || (this.currentTab === 'students' ? 'student' : 'staff');
+
+            if (!newEmail || !newEmail.includes('@')) {
+              this.showMessage('Please enter a valid email address.', 'warning');
+              return;
+            }
+            if (oldEmail.toLowerCase() === newEmail.toLowerCase()) {
+              this.inlineEmailEdit = null;
+              return;
+            }
+
+            if (!this.userEmail || !this.userId) {
+              this.showMessage('Cannot change email: missing Account Manager authentication (userEmail/userId). Please refresh.', 'error');
+              return;
+            }
+
+            const confirmMsg =
+              `Change email?\n\n` +
+              `FROM: ${oldEmail}\n` +
+              `TO:   ${newEmail}\n\n` +
+              `This updates BOTH Knack (auth) and Supabase (email-linked connections). Proceed?`;
+            if (!confirm(confirmMsg)) return;
+
+            this.inlineEmailEditBusy = true;
+            this.loading = true;
+            this.loadingText = 'Updating email across Knack + Supabase...';
+
+            try {
+              const authQs = `userEmail=${encodeURIComponent(this.userEmail)}&userId=${encodeURIComponent(this.userId)}`;
+              const response = await fetch(
+                `${this.apiUrl}/api/v3/accounts/change-email?${authQs}`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    oldEmail,
+                    newEmail,
+                    accountType
+                  })
+                }
+              );
+
+              const data = await safeJsonParse(response, 'Change email');
+              if (!data.success) {
+                throw new Error(data.message || 'Change email failed');
+              }
+
+              this.showMessage(`✅ Email updated: ${oldEmail} → ${newEmail}`, 'success');
+
+              // Clear selection (emails are the IDs in the selection list)
+              this.selectedAccounts = [];
+              this.allSelected = false;
+
+              // Reload accounts so the row key/email refreshes cleanly
+              await this.loadAccounts();
+
+              this.inlineEmailEdit = null;
+            } catch (error) {
+              console.error('Change email error:', error);
+              this.showMessage('Failed to change email: ' + error.message, 'error');
+            } finally {
+              this.inlineEmailEditBusy = false;
+              this.loading = false;
+            }
+          },
           
           // ========== BULK OPERATIONS ==========
           
@@ -5295,60 +5386,72 @@
               : `Execute action on ${count} account(s)?`;
             
             if (!confirm(confirmMessage)) return;
-            
-            this.bulkOperationInProgress = true;
-            this.bulkProgress = { current: 0, total: count, status: 'Starting...' };
-            
-            let successCount = 0;
-            let failCount = 0;
-            
+
+            // Use background queue for bulk email actions to avoid per-account confirmations and long waits
+            if (action === 'reset-password' || action === 'resend-welcome') {
+              await this.submitBulkEmailAction(action);
+              return;
+            }
+
+            this.showMessage('Unsupported bulk action', 'warning');
+          },
+
+          // Bulk email actions (background job): reset-password | resend-welcome
+          async submitBulkEmailAction(action) {
+            const count = this.selectedAccounts.length;
+
             try {
-              for (let i = 0; i < this.selectedAccounts.length; i++) {
-                const email = this.selectedAccounts[i];
-                const account = this.accounts.find(a => a.email === email);
-                
-                this.bulkProgress.current = i + 1;
-                this.bulkProgress.status = `Processing ${email}...`;
-                
-                if (!account) continue;
-                
-                try {
-                  if (action === 'reset-password') {
-                    await this.resetPassword(account);
-                  } else if (action === 'resend-welcome') {
-                    await this.resendWelcome(account);
-                  }
-                  successCount++;
-                } catch (err) {
-                  failCount++;
-                  console.error(`Failed for ${email}:`, err);
+              const emulatedSchoolId = this.isSuperUser && this.selectedSchool?.supabaseUuid
+                ? this.selectedSchool.supabaseUuid
+                : this.schoolContext?.schoolId || null;
+
+              const response = await fetch(
+                `${this.apiUrl}/api/v3/bulk/submit`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    operationType: 'email-action',
+                    emails: this.selectedAccounts,
+                    connectionData: { action },
+                    userContext: {
+                      emulatedSchoolId: emulatedSchoolId,
+                      userEmail: this.userEmail
+                    }
+                  })
                 }
-                
-                // Small delay to prevent overwhelming server
-                if (i < this.selectedAccounts.length - 1) {
-                  await new Promise(resolve => setTimeout(resolve, 100));
-                }
-              }
-              
-              this.showMessage(
-                `Bulk action completed: ${successCount} success, ${failCount} failed`,
-                failCount === 0 ? 'success' : 'warning'
               );
-              
+
+              const data = await safeJsonParse(response, 'API request');
+              if (!data.success) {
+                throw new Error(data.message || 'Failed to submit bulk email action');
+              }
+
+              this.activeJobs.push({
+                jobId: data.jobId,
+                type: action,
+                action: action,
+                accountType: this.currentTab === 'students' ? 'Students' : 'Staff',
+                total: count,
+                current: 0,
+                status: 'Queued...',
+                startTime: Date.now()
+              });
+
+              const human = action === 'reset-password' ? 'password reset emails' : 'welcome emails';
+              this.showMessage(`✅ Bulk ${human} queued! Processing ${count} account(s) in background...`, 'success');
+
+              if (!this.jobPollingInterval) {
+                this.startJobPolling();
+              }
+
               // Clear selection
               this.selectedAccounts = [];
               this.allSelected = false;
-              
-              // Reload accounts
-              await this.loadAccounts();
-              
-            } catch (error) {
-              console.error('Bulk action error:', error);
-              this.showMessage('Bulk action failed: ' + error.message, 'error');
-            } finally {
-              this.bulkOperationInProgress = false;
-              this.bulkProgress = { current: 0, total: 0, status: '' };
               this.showBulkMenu = false;
+            } catch (error) {
+              console.error('Bulk email action submission error:', error);
+              this.showMessage('Failed to submit bulk email action: ' + error.message, 'error');
             }
           },
           
@@ -7478,7 +7581,41 @@
                       </td>
                       
                       <!-- Email -->
-                      <td class="am-td-email">{{ account.email }}</td>
+                      <td class="am-td-email">
+                        <div class="am-email-cell">
+                          <template v-if="isSuperUser && inlineEmailEdit && inlineEmailEdit.originalEmail === account.email">
+                            <input
+                              v-model="inlineEmailEdit.value"
+                              class="am-input-inline am-email-edit-input"
+                              :disabled="inlineEmailEditBusy"
+                            />
+                            <button
+                              class="am-button-icon"
+                              :disabled="inlineEmailEditBusy"
+                              @click="saveInlineEmailEdit"
+                              title="Save email change">
+                              💾
+                            </button>
+                            <button
+                              class="am-button-icon danger"
+                              :disabled="inlineEmailEditBusy"
+                              @click="cancelInlineEmailEdit"
+                              title="Cancel email edit">
+                              ✖
+                            </button>
+                          </template>
+                          <template v-else>
+                            <span>{{ account.email }}</span>
+                            <button
+                              v-if="isSuperUser"
+                              class="am-button-icon"
+                              @click="startInlineEmailEdit(account)"
+                              title="Edit email (super user only)">
+                              ✏️
+                            </button>
+                          </template>
+                        </div>
+                      </td>
                       
                       <!-- Year Group -->
                       <td class="am-td-editable" @dblclick="startEdit(account)">
@@ -7552,7 +7689,41 @@
                       </td>
                       
                       <!-- Email -->
-                      <td class="am-td-email">{{ account.email }}</td>
+                      <td class="am-td-email">
+                        <div class="am-email-cell">
+                          <template v-if="isSuperUser && inlineEmailEdit && inlineEmailEdit.originalEmail === account.email">
+                            <input
+                              v-model="inlineEmailEdit.value"
+                              class="am-input-inline am-email-edit-input"
+                              :disabled="inlineEmailEditBusy"
+                            />
+                            <button
+                              class="am-button-icon"
+                              :disabled="inlineEmailEditBusy"
+                              @click="saveInlineEmailEdit"
+                              title="Save email change">
+                              💾
+                            </button>
+                            <button
+                              class="am-button-icon danger"
+                              :disabled="inlineEmailEditBusy"
+                              @click="cancelInlineEmailEdit"
+                              title="Cancel email edit">
+                              ✖
+                            </button>
+                          </template>
+                          <template v-else>
+                            <span>{{ account.email }}</span>
+                            <button
+                              v-if="isSuperUser"
+                              class="am-button-icon"
+                              @click="startInlineEmailEdit(account)"
+                              title="Edit email (super user only)">
+                              ✏️
+                            </button>
+                          </template>
+                        </div>
+                      </td>
                       
                       <!-- Subject -->
                       <td class="am-td-editable" @dblclick="startEdit(account)">
@@ -11308,6 +11479,8 @@
           display: flex;
           justify-content: space-between;
           align-items: center;
+          flex-wrap: wrap;
+          gap: 12px;
           padding: 20px;
           background: white;
           border-radius: 10px;
@@ -11319,6 +11492,17 @@
           display: flex;
           align-items: center;
           gap: 12px;
+          flex-wrap: wrap;
+          min-width: 0;
+        }
+
+        .am-toolbar-left {
+          flex: 1 1 520px;
+        }
+
+        .am-toolbar-right {
+          flex: 1 1 360px;
+          justify-content: flex-end;
         }
         
         .am-selection-info {
@@ -11408,10 +11592,16 @@
         .am-search-box {
           display: flex;
           gap: 8px;
+          flex: 1 1 340px;
+          min-width: 220px;
+          max-width: 520px;
+          min-height: 40px;
         }
         
         .am-search-input {
-          width: 300px;
+          width: auto;
+          flex: 1 1 auto;
+          min-width: 160px;
           padding: 10px 16px;
           border: 2px solid #e0e0e0;
           border-radius: 8px;
@@ -11600,6 +11790,19 @@
         
         .am-td-email {
           color: #1976d2;
+          font-family: 'Courier New', monospace;
+          font-size: 13px;
+        }
+
+        .am-email-cell {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .am-email-edit-input {
+          min-width: 240px;
           font-family: 'Courier New', monospace;
           font-size: 13px;
         }
