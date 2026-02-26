@@ -5221,7 +5221,8 @@
             this.inlineEmailEdit = {
               originalEmail: String(account.email || '').trim(),
               value: String(account.email || '').trim(),
-              accountType: this.currentTab === 'students' ? 'student' : 'staff'
+              accountType: this.currentTab === 'students' ? 'student' : 'staff',
+              accountId: account.accountId || ''
             };
           },
 
@@ -5273,7 +5274,8 @@
                   body: JSON.stringify({
                     oldEmail,
                     newEmail,
-                    accountType
+                    accountType,
+                    accountId: this.inlineEmailEdit?.accountId || ''
                   })
                 }
               );
